@@ -23,7 +23,7 @@
             font-size: 0.75rem;
             padding: 0.4rem 0.75rem;
             border-radius: 4px;
-            background-color: hsla(28, 80%, 25%, 0.5); /* v0.6.0 Web MIDI Link Pipeline */
+            background-color: hsla(28, 80%, 25%, 0.5); /* v0.6.1 Syntax Fix */
             border: 1px solid hsl(28, 80%, 45%);
             color: hsl(28, 95%, 75%);
             text-align: right;
@@ -192,8 +192,8 @@
 <body>
 
     <div class="version-stamp">
-        <strong>BUILD v0.6.0-alpha</strong><br>
-        2026-06-23 @ 13:10 EDT
+        <strong>BUILD v0.6.1-alpha</strong><br>
+        2026-06-23
     </div>
 
     <h1>Electricity for Progress: Biodata Sonification</h1>
@@ -246,11 +246,7 @@
                 </select>
             </div>
         </div>
-    </div>
-
-    <div class="card">
-        <h2>2b. External System MIDI Routing (DAW / Hardware Out)</h2>
-        <div class="control-grid">
+        <div class="control-grid" style="margin-top: 1.5rem;">
             <div>
                 <label for="midi-output-selector">Target System MIDI Output Port</label>
                 <select id="midi-output-selector">
@@ -332,7 +328,7 @@
             audioEngineMuted: false,
             midiAccess: null,
             chosenMidiOutput: null,
-            midiRoutingMode: "quantized", // "quantized" or "raw"
+            midiRoutingMode: "quantized", 
             rootOffset: 0,
             customScaleMap: [true, true, true, true, true, true, true, true, true, true, true, true],
             wiggleStream: [],
@@ -340,7 +336,8 @@
             rawStream: [],
             currentRawValue: 64,
             activeNotes: [],
-            scalePresets = {
+            // FIX: Replaced syntax error '=' with ':'
+            scalePresets: {
                 chromatic: [true, true, true, true, true, true, true, true, true, true, true, true],
                 major:     [true, false, true, false, true, true, false, true, false, true, false, true],
                 minor:     [true, false, true, true, false, true, false, true, true, false, true, false],
@@ -431,7 +428,6 @@
             },
             play(midiNote, velocity) {
                 try {
-                    // Check local override toggle condition prior to waking components
                     if (SystemBus.audioEngineMuted) return;
 
                     this.initContext();
@@ -620,14 +616,11 @@
                 try {
                     if (!SystemBus.chosenMidiOutput) return;
                     
-                    // Construct binary status payloads [NoteOn status, Pitch, Vel]
                     const noteOnMessage = [0x90, note, velocity];
                     const noteOffMessage = [0x80, note, 0];
 
-                    // Fire raw arrays down the port instantly
                     SystemBus.chosenMidiOutput.send(noteOnMessage);
                     
-                    // Queue automation release message to avoid stuck notes in DAWs
                     setTimeout(() => {
                         if (SystemBus.chosenMidiOutput) SystemBus.chosenMidiOutput.send(noteOffMessage);
                     }, 350);
@@ -645,7 +638,6 @@
                     const nowTS = Date.now();
 
                     if (command === 0x90 && byte2 > 0) {
-                        // Router Level Branching Condition for RAW MIDI Mode selection
                         if (SystemBus.chosenMidiOutput && SystemBus.midiRoutingMode === "raw") {
                             MidiRouter.sendExternalMidiNote(byte1, byte2);
                         }
@@ -657,7 +649,6 @@
 
                         log(`Ingest [${byte1}] -> Quantized To [${finalNote}] (${SystemBus.noteNames[finalNote % 12]})`);
                         
-                        // Router Level Branching Condition for QUANTIZED MIDI Mode selection
                         if (SystemBus.chosenMidiOutput && SystemBus.midiRoutingMode === "quantized") {
                             MidiRouter.sendExternalMidiNote(finalNote, byte2);
                         }
@@ -701,7 +692,6 @@
                     SystemBus.midiAccess = await navigator.requestMIDIAccess();
                     log("Native Web MIDI browser subsystem linked successfully.");
                     
-                    // Parse available operating system ports
                     const outputSelector = document.getElementById('midi-output-selector');
                     if (!outputSelector) return;
 
@@ -798,10 +788,9 @@
             }
         };
 
-        // --- System Sequence Boot Instantiation ---
         ScaleEngine.initialize();
         UIModule.bindObservers();
-        UIModule.initNativeWebMidi(); // Request MIDI permissions and scan ports on boot load
+        UIModule.initNativeWebMidi(); 
         VisualEngine.renderLoop();
     </script>
 </body>
