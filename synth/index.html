@@ -3,49 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLE Connection Debugger</title>
+    <title>Biodata Sonification Dashboard</title>
     <style>
-        body { font-family: monospace; background: #111; color: #0f0; padding: 2rem; }
-        button { background: #d27b2d; color: white; padding: 1rem; font-size: 1.2rem; border: none; cursor: pointer; width: 100%; border-radius: 4px; }
-        #console { background: #000; border: 1px solid #333; padding: 1rem; margin-top: 1rem; min-height: 200px; white-space: pre-wrap; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #333;
+        }
+        h1, h2 { margin-top: 0; color: #fff; }
+        button {
+            background-color: #d27b2d;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #b36422; }
+        .slider-container { margin: 1rem 0; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        
+        #piano-roll-canvas {
+            background-color: #080808;
+            border: 1px solid #444;
+            border-radius: 4px;
+            display: block;
+            width: 100%;
+            height: 220px;
+        }
+
+        #status-log {
+            background-color: #000;
+            font-family: monospace;
+            padding: 1rem;
+            height: 120px;
+            overflow-y: auto;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #00ff00;
+            border: 1px solid #222;
+        }
     </style>
 </head>
 <body>
 
-    <h1>BLE-MIDI Handshake Debugger</h1>
-    <button id="scan-btn">1. Scan for ESP32-S3</button>
-    <div id="console">Awaiting click...</div>
+    <h1>Electricity for Progress: Biodata Sonification</h1>
+    <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
+
+    <div class="card">
+        <h2>1. Hardware Connection</h2>
+        <button id="connect-btn">Connect via Bluetooth (BLE-MIDI)</button>
+    </div>
+
+    <div class="card">
+        <h2>2. Note Density Probability Gate</h2>
+        <div class="slider-container">
+            <label for="density-slider">Pass-Through Rate: <span id="density-val">100%</span></label>
+            <input type="range" id="density-slider" min="0" max="100" value="100">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. Generative Piano Roll (Last 20 Notes)</h2>
+        <canvas id="piano-roll-canvas" width="800" height="220"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>4. Live Telemetry Log</h2>
+        <div id="status-log">System idling. Ready for Bluetooth handshake...</div>
+    </div>
 
     <script>
-        // Official Standard BLE-MIDI Service UUID
+        // --- Core Configuration Targets ---
         const MIDI_SERVICE_UUID = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
-        const output = document.getElementById('console');
+        const MIDI_CHARACTERISTIC_UUID = "7772e5db-3868-4112-a1a9-f2669d106bf3";
+        
+        let audioCtx = null;
+        let density = 1.0;
+        let activeNotes = []; // Stores our active rendering block layout
 
-        document.getElementById('scan-btn').addEventListener('click', async () => {
-            printLog("Opening Browser Bluetooth Scanner...");
+        const connectBtn = document.getElementById('connect-btn');
+        const densitySlider = document.getElementById('density-slider');
+        const densityVal = document.getElementById('density-val');
+        const statusLog = document.getElementById('status-log');
+        const canvas = document.getElementById('piano-roll-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- Web Audio Framework ("Vibes" Polyphonic Wave Synth) ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                log("Web Audio engine active.");
+            }
+        }
+
+        function playVibeNote(midiNote, velocity) {
+            if (!audioCtx) return;
+            
+            // Equal temperament conversion formula
+            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            const volume = (velocity / 127) * 0.25;
+
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'sine'; // Pure clean chime wave
+            osc.frequency.value = freq;
+
+            const now = audioCtx.currentTime;
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(volume, now + 0.015); // Fast, snappy strike
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4); // Deep lingering ring
+
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + 1.5);
+
+            // Pass metrics cleanly straight into canvas arrays
+            addNoteToPianoRoll(midiNote);
+        }
+
+        // --- HTML5 Canvas Piano Roll Animator ---
+        function addNoteToPianoRoll(midiNote) {
+            if (activeNotes.length >= 20) {
+                activeNotes.shift(); // Evict old notes beyond index length
+            }
+
+            // Map standard octaves (C3 to C6) to canvas pixel boundaries
+            const minNote = 48; 
+            const maxNote = 84; 
+            const clampedNote = Math.max(minNote, Math.min(maxNote, midiNote));
+            const yPos = canvas.height - ((clampedNote - minNote) / (maxNote - minNote) * canvas.height);
+
+            activeNotes.push({
+                note: midiNote,
+                x: canvas.width, // Spawn directly on the right edge
+                y: yPos - 5,
+                width: 45,       // Width of our streaming note blocks
+                color: `hsl(${(midiNote * 8) % 360}, 85%, 65%)` // Color signature tied to pitch register
+            });
+        }
+
+        function animate() {
+            // Draw dark background with trail preservation opacity
+            ctx.fillStyle = 'rgba(8, 8, 8, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw pitch matrix row guidelines
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            for(let i = 0; i < canvas.height; i += 25) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+
+            // Move blocks seamlessly right-to-left
+            activeNotes.forEach(note => {
+                ctx.fillStyle = note.color;
+                ctx.fillRect(note.x, note.y, note.width, 10);
+                note.x -= 1.8; // Grid advance velocity
+            });
+
+            requestAnimationFrame(animate);
+        }
+        
+        // Fire up frame execution immediately
+        animate();
+
+        // --- Interaction & Ingest Event Links ---
+        densitySlider.addEventListener('input', (e) => {
+            density = e.target.value / 100;
+            densityVal.textContent = e.target.value + "%";
+        });
+
+        connectBtn.addEventListener('click', async () => {
+            initAudio(); // Initialize audio safely following a explicit user tap
+            log("Opening BLE configuration portal...");
             
             try {
-                // SCANNING STRATEGY:
-                // We ask the browser to search for ANY device advertising the official MIDI service
+                // Using your verified connection format
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [MIDI_SERVICE_UUID] }],
                     optionalServices: [MIDI_SERVICE_UUID]
                 });
 
-                printLog(`SUCCESS: Found Device! Name: ${device.name} | ID: ${device.id}`);
-                printLog("Attempting to connect to the GATT server...");
-                
+                log(`Connected device footprint: ${device.name}`);
                 const server = await device.gatt.connect();
-                printLog("GATT Server Connected! Handshake complete. Your browser can talk to your ESP32.");
+
+                log("Verifying structural internal registers...");
+                const service = await server.getPrimaryService(MIDI_SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(MIDI_CHARACTERISTIC_UUID);
+
+                log("Subscribing to notification hooks...");
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', processIncomingTelemetry);
+                
+                log("Handshake complete! Live biodata stream running.");
+                connectBtn.style.backgroundColor = "#2b8a3e";
+                connectBtn.innerText = "System Connected & Online";
 
             } catch (error) {
-                printLog(`ERROR: ${error.message}`);
-                printLog("Troubleshooting tips below...");
+                log(`Handshake dropped: ${error.message}`);
             }
         });
 
-        function printLog(text) {
-            output.innerText += `\n[${new Date().toLocaleTimeString()}] ${text}`;
+        // --- Raw Binary Payload Parsing Matrix ---
+        function processIncomingTelemetry(event) {
+            const dataView = event.target.value;
+            if (dataView.byteLength < 3) return; // Drop unformed byte packets
+
+            // Strip away BLE header metadata layers ([0] & [1]) to access the core MIDI payload
+            const command = dataView.getUint8(2) & 0xF0;
+            const note = dataView.getUint8(3);
+            const velocity = dataView.getUint8(4);
+
+            if (command === 0x90 && velocity > 0) { // Valid Note On target detected
+                const roll = Math.random();
+                if (roll > density) {
+                    log(`Gate Dropped Note: ${note} (Density setting filtered)`);
+                    return; 
+                }
+
+                log(`Telemetry Pulse Match -> Note: ${note} | Velocity: ${velocity}`);
+                playVibeNote(note, velocity);
+            }
+        }
+
+        function log(text) {
+            const time = new Date().toLocaleTimeString();
+            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
+            statusLog.scrollTop = statusLog.scrollHeight;
         }
     </script>
 </body>
