@@ -12,7 +12,24 @@
             padding: 2rem;
             max-width: 900px;
             margin: 0 auto;
+            position: relative;
         }
+        
+        .version-stamp {
+            position: absolute;
+            top: 1rem;
+            right: 2rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+            padding: 0.4rem 0.75rem;
+            border-radius: 4px;
+            background-color: hsla(160, 75%, 20%, 0.4); /* Hue 160 = Mint/Teal for v0.4.1 */
+            border: 1px solid hsl(160, 75%, 40%);
+            color: hsl(160, 90%, 75%);
+            text-align: right;
+            line-height: 1.2;
+        }
+
         .card {
             background-color: #1e1e1e;
             border-radius: 8px;
@@ -34,15 +51,51 @@
             gap: 1rem;
             margin-bottom: 1.5rem;
         }
+        
+        /* Metric box layout optimized to cleanly frame the compact chart layout */
         .metric-box {
             background-color: #151515;
             border: 1px solid #444;
             border-radius: 6px;
             padding: 1rem;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
         }
-        .metric-label { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .metric-label { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 0.5rem; }
         .metric-value { font-size: 1.8rem; font-weight: bold; color: #d27b2d; font-family: monospace; }
+
+        /* Compact, relative container positioning for the numeric marker overlay */
+        .chart-container-mini {
+            position: relative;
+            width: 100%;
+            height: 90px;
+            margin-top: 0.25rem;
+        }
+        #wiggle-chart-mini {
+            background-color: #080808;
+            border: 1px solid #333;
+            border-radius: 4px;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .chart-value-overlay {
+            position: absolute;
+            bottom: 4px;
+            right: 8px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #e07a1d;
+            background: rgba(8, 8, 8, 0.75);
+            padding: 1px 4px;
+            border-radius: 2px;
+            pointer-events: none;
+        }
 
         button {
             background-color: #d27b2d;
@@ -70,15 +123,31 @@
         input[type="range"] { padding: 0; cursor: pointer; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         
-        canvas {
+        #piano-roll-canvas {
             background-color: #080808;
             border: 1px solid #444;
             border-radius: 4px;
             display: block;
             width: 100%;
-            margin-bottom: 1rem;
         }
 
+        .log-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .toggle-container {
+            font-size: 0.85rem;
+            color: #aaa;
+            cursor: pointer;
+            user-select: none;
+        }
+        .toggle-container input {
+            width: auto;
+            margin-right: 0.3rem;
+            cursor: pointer;
+        }
         #status-log {
             background-color: #000;
             font-family: monospace;
@@ -94,6 +163,11 @@
 </head>
 <body>
 
+    <div class="version-stamp">
+        <strong>BUILD v0.4.1-alpha</strong><br>
+        2026-06-23 @ 10:15 EDT
+    </div>
+
     <h1>Electricity for Progress: Biodata Sonification</h1>
     <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
 
@@ -105,11 +179,14 @@
     <div class="metrics-grid">
         <div class="metric-box">
             <div class="metric-label">Ambient Temperature (CC 85)</div>
-            <div id="temp-display" class="metric-value">--°C</div>
+            <div id="temp-display" class="metric-value" style="margin-auto: 0; padding: 1.5rem 0;">--°C</div>
         </div>
         <div class="metric-box">
-            <div class="metric-label">Latest Wiggle Value (CC 81)</div>
-            <div id="raw-display" class="metric-value">--</div>
+            <div class="metric-label">Wiggle Monitor (CC 81 Animation)</div>
+            <div class="chart-container-mini">
+                <canvas id="wiggle-chart-mini" width="400" height="90"></canvas>
+                <div id="chart-number-overlay" class="chart-value-overlay">--</div>
+            </div>
         </div>
     </div>
 
@@ -135,13 +212,15 @@
         <h2>3. Live Visualizer Arrays</h2>
         <label>Expanded Piano Roll (C2 - C7 Range)</label>
         <canvas id="piano-roll-canvas" width="850" height="240"></canvas>
-        
-        <label>Wiggle Oscilloscope (CC 81 Automation Line Chart)</label>
-        <canvas id="raw-chart-canvas" width="850" height="120"></canvas>
     </div>
 
     <div class="card">
-        <h2>4. Live System Output Log</h2>
+        <div class="log-header-row">
+            <h2 style="margin: 0;">4. Live System Output Log</h2>
+            <label class="toggle-container">
+                <input type="checkbox" id="log-visibility-checkbox" checked> Show Console Monitor
+            </label>
+        </div>
         <div id="status-log">Ready for Bluetooth handshake...</div>
     </div>
 
@@ -152,22 +231,27 @@
         let audioCtx = null;
         let density = 1.0;
         let activeNotes = [];
-        let rawDataHistory = new Array(100).fill(64); 
         let currentSound = "vibes";
+
+        // Time-scrolling wiggle data points { value: ccVal, time: timestamp }
+        let wiggleStream = [];
+        const viewDuration = 8000; // Keep 8 seconds of rolling timeline context visible
+        let currentWiggleValue = 64; // Fallback default baseline mid-point
 
         const connectBtn = document.getElementById('connect-btn');
         const soundSelector = document.getElementById('sound-selector');
         const densitySlider = document.getElementById('density-slider');
         const densityVal = document.getElementById('density-val');
         const statusLog = document.getElementById('status-log');
+        const logVisibilityCheckbox = document.getElementById('log-visibility-checkbox');
         
         const tempDisplay = document.getElementById('temp-display');
-        const rawDisplay = document.getElementById('raw-display');
+        const chartNumberOverlay = document.getElementById('chart-number-overlay');
 
         const canvasNotes = document.getElementById('piano-roll-canvas');
         const ctxNotes = canvasNotes.getContext('2d');
-        const canvasChart = document.getElementById('raw-chart-canvas');
-        const ctxChart = canvasChart.getContext('2d');
+        const canvasMiniChart = document.getElementById('wiggle-chart-mini');
+        const ctxMiniChart = canvasMiniChart.getContext('2d');
 
         function initAudio() {
             try {
@@ -247,8 +331,8 @@
         function addNoteToPianoRoll(midiNote) {
             if (activeNotes.length >= 25) activeNotes.shift();
 
-            const minNote = 36; // C2
-            const maxNote = 96; // C7
+            const minNote = 36; 
+            const maxNote = 96; 
             const clampedNote = Math.max(minNote, Math.min(maxNote, midiNote));
             const yPos = canvasNotes.height - ((clampedNote - minNote) / (maxNote - minNote) * canvasNotes.height);
 
@@ -261,7 +345,11 @@
             });
         }
 
+        // --- VISUALIZATION DRAW ENGINE MATRIX ---
         function animate() {
+            const nowTimestamp = Date.now();
+
+            // 1. Render Piano Roll
             ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)';
             ctxNotes.fillRect(0, 0, canvasNotes.width, canvasNotes.height);
 
@@ -276,30 +364,75 @@
                 note.x -= 2.0;
             });
 
-            ctxChart.fillStyle = '#080808';
-            ctxChart.fillRect(0, 0, canvasChart.width, canvasChart.height);
+            // 2. Render Compact Scrolling Rounded Wiggle Chart (CC 81)
+            ctxMiniChart.fillStyle = '#080808';
+            ctxMiniChart.fillRect(0, 0, canvasMiniChart.width, canvasMiniChart.height);
             
-            ctxChart.strokeStyle = '#1e293b';
-            for(let i = 0; i < canvasChart.height; i += 30) {
-                ctxChart.beginPath(); ctxChart.moveTo(0, i); ctxChart.lineTo(canvasChart.width, i); ctxChart.stroke();
+            ctxMiniChart.strokeStyle = '#1a1a1a';
+            ctxMiniChart.lineWidth = 1;
+            for(let i = 0; i < canvasMiniChart.height; i += 22) {
+                ctxMiniChart.beginPath(); ctxMiniChart.moveTo(0, i); ctxMiniChart.lineTo(canvasMiniChart.width, i); ctxMiniChart.stroke();
             }
 
-            ctxChart.strokeStyle = '#e07a1d';
-            ctxChart.lineWidth = 2;
-            ctxChart.beginPath();
+            // Clean up points outside the time visibility window
+            const cutoffTime = nowTimestamp - viewDuration;
+            wiggleStream = wiggleStream.filter(pt => pt.time >= cutoffTime);
+
+            // Construct rendering path arrays
+            let pointsToDraw = [];
             
-            const step = canvasChart.width / (rawDataHistory.length - 1);
-            for (let i = 0; i < rawDataHistory.length; i++) {
-                const y = canvasChart.height - (rawDataHistory[i] / 127 * canvasChart.height);
-                const x = i * step;
-                if (i === 0) ctxChart.moveTo(x, y); else ctxChart.lineTo(x, y);
+            // Add a virtual starting boundary marker if necessary
+            if (wiggleStream.length > 0 && wiggleStream[0].time > cutoffTime) {
+                pointsToDraw.push({ value: wiggleStream[0].value, time: cutoffTime });
             }
-            ctxChart.stroke();
+            
+            // Add actual packet timestamps
+            wiggleStream.forEach(pt => pointsToDraw.push(pt));
+            
+            // Anchor the current live tail directly to the modern frame moment
+            pointsToDraw.push({ value: currentWiggleValue, time: nowTimestamp });
+
+            if (pointsToDraw.length > 1) {
+                ctxMiniChart.strokeStyle = '#e07a1d';
+                ctxMiniChart.lineWidth = 2.5;
+                ctxMiniChart.lineCap = 'round';
+                ctxMiniChart.lineJoin = 'round';
+                ctxMiniChart.beginPath();
+
+                // Convert points to coordinate positions
+                const renderCoordinates = pointsToDraw.map(pt => {
+                    const elapsed = pt.time - cutoffTime;
+                    const x = (elapsed / viewDuration) * canvasMiniChart.width;
+                    const y = canvasMiniChart.height - (pt.value / 127 * canvasMiniChart.height);
+                    return { x, y };
+                });
+
+                // Implement smooth Bézier curve interpolation logic instead of sharp lines
+                ctxMiniChart.moveTo(renderCoordinates[0].x, renderCoordinates[0].y);
+                
+                for (let i = 0; i < renderCoordinates.length - 1; i++) {
+                    const currentPt = renderCoordinates[i];
+                    const nextPt = renderCoordinates[i + 1];
+                    
+                    // Locate control handles at the geometric midpoint
+                    const controlX = (currentPt.x + nextPt.x) / 2;
+                    const controlY = (currentPt.y + nextPt.y) / 2;
+                    
+                    // Generate quadratic rounded arcs
+                    ctxMiniChart.quadraticCurveTo(currentPt.x, currentPt.y, controlX, controlY);
+                }
+                
+                // Secure path line to final tracking boundary point
+                const lastPt = renderCoordinates[renderCoordinates.length - 1];
+                ctxMiniChart.lineTo(lastPt.x, lastPt.y);
+                ctxMiniChart.stroke();
+            }
 
             requestAnimationFrame(animate);
         }
         animate();
 
+        // --- INTERACTION HOOKS ---
         densitySlider.addEventListener('input', (e) => {
             density = e.target.value / 100;
             densityVal.textContent = e.target.value + "%";
@@ -310,14 +443,19 @@
             log(`Synth configuration voice: ${currentSound.toUpperCase()}`);
         });
 
-        // --- HARDENED CLICK EVENT TRIGGER ROUTINE ---
+        logVisibilityCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                statusLog.style.display = 'block';
+            } else {
+                statusLog.style.display = 'none';
+            }
+        });
+
         connectBtn.addEventListener('click', async () => {
-            // Step 1: Force audio activation immediately inside user context
             initAudio();
             log("Opening BLE scanning utility...");
             
             try {
-                // Step 2: Trigger hardware inquiry
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [MIDI_SERVICE_UUID] }],
                     optionalServices: [MIDI_SERVICE_UUID]
@@ -343,6 +481,7 @@
             }
         });
 
+        // --- MIDI ROUTING INTERPRETER ---
         function processIncomingTelemetry(event) {
             const dataView = event.target.value;
             if (dataView.byteLength < 3) return;
@@ -365,9 +504,15 @@
                     tempDisplay.textContent = ccValue + "°C";
                 } 
                 else if (ccNumber === 81) {
-                    rawDisplay.textContent = ccValue;
-                    rawDataHistory.push(ccValue);
-                    rawDataHistory.shift(); 
+                    // Update numerical elements overlay text matching CC 81 modifications
+                    chartNumberOverlay.textContent = ccValue;
+                    currentWiggleValue = ccValue;
+                    
+                    // Map real historical timestamps to track true time-scrolled metrics
+                    wiggleStream.push({
+                        value: ccValue,
+                        time: Date.now()
+                    });
                 }
             }
         }
