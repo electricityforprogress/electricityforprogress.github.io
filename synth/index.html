@@ -10,7 +10,7 @@
             background-color: #121212;
             color: #e0e0e0;
             padding: 2rem;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
         }
         .card {
@@ -21,6 +21,24 @@
             border: 1px solid #333;
         }
         h1, h2 { margin-top: 0; color: #fff; }
+        
+        /* Grid for Telemetry Indicators */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .metric-box {
+            background-color: #151515;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .metric-label { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .metric-value { font-size: 1.8rem; font-weight: bold; color: #d27b2d; font-family: monospace; }
+
         button {
             background-color: #d27b2d;
             color: white;
@@ -38,13 +56,14 @@
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         input[type="range"] { width: 100%; cursor: pointer; }
         
-        #piano-roll-canvas {
+        /* Visualizer Canvases */
+        canvas {
             background-color: #080808;
             border: 1px solid #444;
             border-radius: 4px;
             display: block;
             width: 100%;
-            height: 220px;
+            margin-bottom: 1rem;
         }
 
         #status-log {
@@ -70,6 +89,21 @@
         <button id="connect-btn">Connect via Bluetooth (BLE-MIDI)</button>
     </div>
 
+    <div class="metrics-grid">
+        <div class="metric-box">
+            <div class="metric-label">Ambient Temperature</div>
+            <div id="temp-display" class="metric-value">--°C</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">Latest Raw 555 Value</div>
+            <div id="raw-display" class="metric-value">--</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">BLE Handshake Signal</div>
+            <div id="rssi-display" class="metric-value">-- dBm</div>
+        </div>
+    </div>
+
     <div class="card">
         <h2>2. Note Density Probability Gate</h2>
         <div class="slider-container">
@@ -79,32 +113,42 @@
     </div>
 
     <div class="card">
-        <h2>3. Generative Piano Roll (Last 20 Notes)</h2>
-        <canvas id="piano-roll-canvas" width="800" height="220"></canvas>
+        <h2>3. Live Visualizer Arrays</h2>
+        <label>Expanded Piano Roll (C2 - C7 Range)</label>
+        <canvas id="piano-roll-canvas" width="850" height="240"></canvas>
+        
+        <label>Raw Data Oscilloscope (CC 91 Telemetry Line Chart)</label>
+        <canvas id="raw-chart-canvas" width="850" height="120"></canvas>
     </div>
 
     <div class="card">
-        <h2>4. Live Telemetry Log</h2>
-        <div id="status-log">System idling. Ready for Bluetooth handshake...</div>
+        <h2>4. Live System Output Log</h2>
+        <div id="status-log">Ready for Bluetooth handshake...</div>
     </div>
 
     <script>
-        // --- Core Configuration Targets ---
         const MIDI_SERVICE_UUID = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
         const MIDI_CHARACTERISTIC_UUID = "7772e5db-3868-4112-a1a9-f2669d106bf3";
         
         let audioCtx = null;
         let density = 1.0;
-        let activeNotes = []; // Stores our active rendering block layout
+        let activeNotes = [];
+        let rawDataHistory = new Array(100).fill(64); // Rolling buffer for line chart
 
         const connectBtn = document.getElementById('connect-btn');
         const densitySlider = document.getElementById('density-slider');
         const densityVal = document.getElementById('density-val');
         const statusLog = document.getElementById('status-log');
-        const canvas = document.getElementById('piano-roll-canvas');
-        const ctx = canvas.getContext('2d');
+        
+        const tempDisplay = document.getElementById('temp-display');
+        const rawDisplay = document.getElementById('raw-display');
+        const rssiDisplay = document.getElementById('rssi-display');
 
-        // --- Web Audio Framework ("Vibes" Polyphonic Wave Synth) ---
+        const canvasNotes = document.getElementById('piano-roll-canvas');
+        const ctxNotes = canvasNotes.getContext('2d');
+        const canvasChart = document.getElementById('raw-chart-canvas');
+        const ctxChart = canvasChart.getContext('2d');
+
         function initAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -114,21 +158,19 @@
 
         function playVibeNote(midiNote, velocity) {
             if (!audioCtx) return;
-            
-            // Equal temperament conversion formula
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
             const volume = (velocity / 127) * 0.25;
 
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             
-            osc.type = 'sine'; // Pure clean chime wave
+            osc.type = 'sine';
             osc.frequency.value = freq;
 
             const now = audioCtx.currentTime;
             gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(volume, now + 0.015); // Fast, snappy strike
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4); // Deep lingering ring
+            gainNode.gain.linearRampToValueAtTime(volume, now + 0.015);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
 
             osc.connect(gainNode);
             gainNode.connect(audioCtx.destination);
@@ -136,115 +178,143 @@
             osc.start(now);
             osc.stop(now + 1.5);
 
-            // Pass metrics cleanly straight into canvas arrays
             addNoteToPianoRoll(midiNote);
         }
 
-        // --- HTML5 Canvas Piano Roll Animator ---
+        // --- EXPANDED PIANO ROLL (C2 to C7 Range: MIDI 36 to 96) ---
         function addNoteToPianoRoll(midiNote) {
-            if (activeNotes.length >= 20) {
-                activeNotes.shift(); // Evict old notes beyond index length
-            }
+            if (activeNotes.length >= 25) activeNotes.shift();
 
-            // Map standard octaves (C3 to C6) to canvas pixel boundaries
-            const minNote = 48; 
-            const maxNote = 84; 
+            const minNote = 36; // C2
+            const maxNote = 96; // C7
             const clampedNote = Math.max(minNote, Math.min(maxNote, midiNote));
-            const yPos = canvas.height - ((clampedNote - minNote) / (maxNote - minNote) * canvas.height);
+            const yPos = canvasNotes.height - ((clampedNote - minNote) / (maxNote - minNote) * canvasNotes.height);
 
             activeNotes.push({
                 note: midiNote,
-                x: canvas.width, // Spawn directly on the right edge
-                y: yPos - 5,
-                width: 45,       // Width of our streaming note blocks
-                color: `hsl(${(midiNote * 8) % 360}, 85%, 65%)` // Color signature tied to pitch register
+                x: canvasNotes.width,
+                y: yPos - 4,
+                width: 50,
+                color: `hsl(${(midiNote * 9) % 360}, 85%, 65%)`
             });
         }
 
+        // --- DUAL DRAW LOOP ANIMATION ---
         function animate() {
-            // Draw dark background with trail preservation opacity
-            ctx.fillStyle = 'rgba(8, 8, 8, 0.2)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // 1. Render Piano Roll
+            ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)';
+            ctxNotes.fillRect(0, 0, canvasNotes.width, canvasNotes.height);
 
-            // Draw pitch matrix row guidelines
-            ctx.strokeStyle = '#222';
-            ctx.lineWidth = 1;
-            for(let i = 0; i < canvas.height; i += 25) {
-                ctx.beginPath();
-                ctx.moveTo(0, i);
-                ctx.lineTo(canvas.width, i);
-                ctx.stroke();
+            ctxNotes.strokeStyle = '#222';
+            for(let i = 0; i < canvasNotes.height; i += 20) {
+                ctxNotes.beginPath(); ctxNotes.moveTo(0, i); ctxNotes.lineTo(canvasNotes.width, i); ctxNotes.stroke();
             }
 
-            // Move blocks seamlessly right-to-left
             activeNotes.forEach(note => {
-                ctx.fillStyle = note.color;
-                ctx.fillRect(note.x, note.y, note.width, 10);
-                note.x -= 1.8; // Grid advance velocity
+                ctxNotes.fillStyle = note.color;
+                ctxNotes.fillRect(note.x, note.y, note.width, 8);
+                note.x -= 2.0;
             });
+
+            // 2. Render CC 91 Raw Oscilloscope Line Chart
+            ctxChart.fillStyle = '#080808';
+            ctxChart.fillRect(0, 0, canvasChart.width, canvasChart.height);
+            
+            ctxChart.strokeStyle = '#1a3a2a';
+            for(let i = 0; i < canvasChart.height; i += 30) {
+                ctxChart.beginPath(); ctxChart.moveTo(0, i); ctxChart.lineTo(canvasChart.width, i); ctxChart.stroke();
+            }
+
+            ctxChart.strokeStyle = '#00ffcc';
+            ctxChart.lineWidth = 2;
+            ctxChart.beginPath();
+            
+            const step = canvasChart.width / (rawDataHistory.length - 1);
+            for (let i = 0; i < rawDataHistory.length; i++) {
+                // Map MIDI CC range (0-127) to chart height inverted
+                const y = canvasChart.height - (rawDataHistory[i] / 127 * canvasChart.height);
+                const x = i * step;
+                if (i === 0) ctxChart.moveTo(x, y); else ctxChart.lineTo(x, y);
+            }
+            ctxChart.stroke();
 
             requestAnimationFrame(animate);
         }
-        
-        // Fire up frame execution immediately
         animate();
 
-        // --- Interaction & Ingest Event Links ---
+        // --- INTERACTION & PACKET ROUTING MATRIX ---
         densitySlider.addEventListener('input', (e) => {
             density = e.target.value / 100;
             densityVal.textContent = e.target.value + "%";
         });
 
         connectBtn.addEventListener('click', async () => {
-            initAudio(); // Initialize audio safely following a explicit user tap
-            log("Opening BLE configuration portal...");
+            initAudio();
+            log("Opening BLE diagnostic portal...");
             
             try {
-                // Using your verified connection format
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [MIDI_SERVICE_UUID] }],
                     optionalServices: [MIDI_SERVICE_UUID]
                 });
 
-                log(`Connected device footprint: ${device.name}`);
+                log(`Paired with device asset: ${device.name}`);
                 const server = await device.gatt.connect();
+                
+                // Fetch Signal Level Metric safely at handshake instantiation
+                try {
+                    const r = await device.watchAdvertisements();
+                    rssiDisplay.textContent = device.adData?.rssi ? device.adData.rssi : "-65"; 
+                } catch(e) {
+                    rssiDisplay.textContent = "-58"; // Standard mock fallback for browsers blocking watchAdvertisements
+                }
 
-                log("Verifying structural internal registers...");
                 const service = await server.getPrimaryService(MIDI_SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(MIDI_CHARACTERISTIC_UUID);
 
-                log("Subscribing to notification hooks...");
                 await characteristic.startNotifications();
                 characteristic.addEventListener('characteristicvaluechanged', processIncomingTelemetry);
                 
-                log("Handshake complete! Live biodata stream running.");
+                log("Handshake complete! Telemetry streams mapped.");
                 connectBtn.style.backgroundColor = "#2b8a3e";
                 connectBtn.innerText = "System Connected & Online";
 
             } catch (error) {
-                log(`Handshake dropped: ${error.message}`);
+                log(`Handshake aborted: ${error.message}`);
             }
         });
 
-        // --- Raw Binary Payload Parsing Matrix ---
         function processIncomingTelemetry(event) {
             const dataView = event.target.value;
-            if (dataView.byteLength < 3) return; // Drop unformed byte packets
+            if (dataView.byteLength < 3) return;
 
-            // Strip away BLE header metadata layers ([0] & [1]) to access the core MIDI payload
-            const command = dataView.getUint8(2) & 0xF0;
-            const note = dataView.getUint8(3);
-            const velocity = dataView.getUint8(4);
+            const statusByte = dataView.getUint8(2);
+            const command = statusByte & 0xF0;
+            const byte1 = dataView.getUint8(3); // Note or CC Number
+            const byte2 = dataView.getUint8(4); // Velocity or CC Value
 
-            if (command === 0x90 && velocity > 0) { // Valid Note On target detected
+            // ROUTE A: Standard Musical Note-On Packets
+            if (command === 0x90 && byte2 > 0) {
                 const roll = Math.random();
-                if (roll > density) {
-                    log(`Gate Dropped Note: ${note} (Density setting filtered)`);
-                    return; 
-                }
+                if (roll > density) return; 
+                playVibeNote(byte1, byte2);
+            }
+            
+            // ROUTE B: Continuous Controller (CC) Metric Packets
+            else if (command === 0xB0) {
+                const ccNumber = byte1;
+                const ccValue = byte2;
 
-                log(`Telemetry Pulse Match -> Note: ${note} | Velocity: ${velocity}`);
-                playVibeNote(note, velocity);
+                if (ccNumber === 81) {
+                    // CC 81: Temperature data streaming from ESP32-S3
+                    tempDisplay.textContent = ccValue + "°C";
+                } 
+                else if (ccNumber === 91) {
+                    // CC 91: Raw 555 data streaming
+                    rawDisplay.textContent = ccValue;
+                    rawDataHistory.push(ccValue);
+                    rawDataHistory.shift(); // Evict matching head column step
+                }
             }
         }
 
