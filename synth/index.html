@@ -3,137 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biodata Sonification Dashboard</title>
+    <title>BLE Connection Debugger</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #121212;
-            color: #e0e0e0;
-            padding: 2rem;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        .card {
-            background-color: #1e1e1e;
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid #333;
-        }
-        h1, h2 { margin-top: 0; color: #fff; }
-        button {
-            background-color: #d27b2d;
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
-        button:hover { background-color: #b36422; }
-        .slider-container { margin: 1rem 0; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="range"] { width: 100%; cursor: pointer; }
-        
-        /* Piano Roll Canvas Container */
-        #piano-roll-canvas {
-            background-color: #080808;
-            border: 1px solid #444;
-            border-radius: 4px;
-            display: block;
-            width: 100%;
-            height: 200px;
-        }
-
-        #status-log {
-            background-color: #000;
-            font-family: monospace;
-            padding: 1rem;
-            height: 120px;
-            overflow-y: auto;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color: #00ff00;
-            border: 1px solid #222;
-        }
+        body { font-family: monospace; background: #111; color: #0f0; padding: 2rem; }
+        button { background: #d27b2d; color: white; padding: 1rem; font-size: 1.2rem; border: none; cursor: pointer; width: 100%; border-radius: 4px; }
+        #console { background: #000; border: 1px solid #333; padding: 1rem; margin-top: 1rem; min-height: 200px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
 
-    <h1>Electricity for Progress: Biodata Sonification</h1>
-    <p>Direct BLE-MIDI connection with integrated audio synthesis and telemetry visualization.</p>
-
-    <div class="card">
-        <h2>1. Wireless Hardware Connection</h2>
-        <button id="connect-btn">Connect via Bluetooth (BLE-MIDI)</button>
-    </div>
-
-    <div class="card">
-        <h2>2. Note Density Probability Gate</h2>
-        <div class="slider-container">
-            <label for="density-slider">Pass-Through Rate: <span id="density-val">100%</span></label>
-            <input type="range" id="density-slider" min="0" max="100" value="100">
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>3. Generative Piano Roll (Last 20 Notes)</h2>
-        <canvas id="piano-roll-canvas" width="800" height="200"></canvas>
-    </div>
-
-    <div class="card">
-        <h2>4. Live Telemetry Log</h2>
-        <div id="status-log">System idling. Ready to connect...</div>
-    </div>
+    <h1>BLE-MIDI Handshake Debugger</h1>
+    <button id="scan-btn">1. Scan for ESP32-S3</button>
+    <div id="console">Awaiting click...</div>
 
     <script>
-        // --- Configuration & Constants ---
+        // Official Standard BLE-MIDI Service UUID
         const MIDI_SERVICE_UUID = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
-        const MIDI_CHARACTERISTIC_UUID = "7772e5db-3868-4112-a1a9-f2669d106bf3";
-        
-        let audioCtx = null;
-        let density = 1.0;
-        let activeNotes = []; // Holds arrays of { midiNote, startTime, x, y, width }
+        const output = document.getElementById('console');
 
-        const connectBtn = document.getElementById('connect-btn');
-        const densitySlider = document.getElementById('density-slider');
-        const densityVal = document.getElementById('density-val');
-        const statusLog = document.getElementById('status-log');
-        const canvas = document.getElementById('piano-roll-canvas');
-        const ctx = canvas.getContext('2d');
+        document.getElementById('scan-btn').addEventListener('click', async () => {
+            printLog("Opening Browser Bluetooth Scanner...");
+            
+            try {
+                // SCANNING STRATEGY:
+                // We ask the browser to search for ANY device advertising the official MIDI service
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [MIDI_SERVICE_UUID] }],
+                    optionalServices: [MIDI_SERVICE_UUID]
+                });
 
-        // --- Web Audio Setup ("Vibes" Sine Engine) ---
-        function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                log("Audio environment initialized.");
+                printLog(`SUCCESS: Found Device! Name: ${device.name} | ID: ${device.id}`);
+                printLog("Attempting to connect to the GATT server...");
+                
+                const server = await device.gatt.connect();
+                printLog("GATT Server Connected! Handshake complete. Your browser can talk to your ESP32.");
+
+            } catch (error) {
+                printLog(`ERROR: ${error.message}`);
+                printLog("Troubleshooting tips below...");
             }
+        });
+
+        function printLog(text) {
+            output.innerText += `\n[${new Date().toLocaleTimeString()}] ${text}`;
         }
-
-        function playVibeNote(midiNote, velocity) {
-            if (!audioCtx) return;
-            
-            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-            const volume = (velocity / 127) * 0.25;
-
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            
-            osc.type = 'sine'; // Clean vibe tone
-            osc.frequency.value = freq;
-
-            const now = audioCtx.currentTime;
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(volume, now + 0.01); // Quick strike
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.2); // Smooth trailing decay
-
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-
-            osc.start(now);
-            osc.stop(now + 1.3);
-
-            // Record to the local
+    </script>
+</body>
+</html>
