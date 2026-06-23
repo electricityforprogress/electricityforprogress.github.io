@@ -12,7 +12,6 @@
             padding: 2rem;
             max-width: 1000px;
             margin: 0 auto;
-            position: relative;
         }
         
         .version-stamp {
@@ -23,11 +22,20 @@
             font-size: 0.75rem;
             padding: 0.4rem 0.75rem;
             border-radius: 4px;
-            background-color: hsla(280, 75%, 25%, 0.5); /* v0.4.6 Scale Mapping Prep */
-            border: 1px solid hsl(280, 75%, 45%);
-            color: hsl(280, 90%, 75%);
+            background-color: hsla(120, 75%, 20%, 0.5); /* Deep Emerald Green for locked core v0.4.7 */
+            border: 1px solid hsl(120, 75%, 45%);
+            color: hsl(120, 90%, 75%);
             text-align: right;
             line-height: 1.2;
+        }
+
+        /* HARDENED SEPARATED BUTTON STYLING */
+        .hardware-gate-box {
+            background-color: #1e1e1e;
+            border: 2px solid #d27b2d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
         }
 
         .card {
@@ -63,7 +71,6 @@
             flex-direction: column;
             justify-content: space-between;
             align-items: center;
-            position: relative;
         }
         .metric-label { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 0.5rem; }
         .metric-value { font-size: 1.8rem; font-weight: bold; color: #d27b2d; font-family: monospace; }
@@ -97,21 +104,22 @@
         #chart-number-overlay { color: #e07a1d; }
         #raw-number-overlay { color: #00ffcc; }
 
-        button {
+        /* Dedicated connection trigger appearance settings */
+        #connect-btn {
             background-color: #d27b2d;
             color: white;
             border: none;
-            padding: 0.75rem 1.5rem;
-            font-size: 1.1rem;
+            padding: 1rem 1.5rem;
+            font-size: 1.2rem;
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
             font-weight: bold;
             transition: background 0.2s;
         }
-        button:hover { background-color: #b36422; }
+        #connect-btn:hover { background-color: #b36422; }
         
-        select, input[type="range"] {
+        select, input[type="range"], input[type="number"] {
             width: 100%;
             padding: 0.5rem;
             background: #252525;
@@ -123,12 +131,8 @@
         input[type="range"] { padding: 0; cursor: pointer; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         
-        .range-inputs {
-            display: flex;
-            gap: 0.5rem;
-        }
+        .range-inputs { display: flex; gap: 0.5rem; }
 
-        /* Interactive 12-Note Matrix Map Layout */
         .piano-matrix {
             display: flex;
             justify-content: space-between;
@@ -152,17 +156,9 @@
             cursor: pointer;
             user-select: none;
         }
-        .key-toggle.active {
-            background: #d27b2d;
-            color: #fff;
-            border-color: #fff;
-        }
-        .key-toggle.black-key {
-            background: #000;
-        }
-        .key-toggle.black-key.active {
-            background: #b36422;
-        }
+        .key-toggle.active { background: #d27b2d; color: #fff; border-color: #fff; }
+        .key-toggle.black-key { background: #000; }
+        .key-toggle.black-key.active { background: #b36422; }
 
         #piano-roll-canvas {
             background-color: #080808;
@@ -197,15 +193,15 @@
 <body>
 
     <div class="version-stamp">
-        <strong>BUILD v0.4.6-alpha</strong><br>
-        2026-06-23 @ 11:35 EDT
+        <strong>BUILD v0.4.7-core-locked</strong><br>
+        2026-06-23 @ 11:45 EDT
     </div>
 
     <h1>Electricity for Progress: Biodata Sonification</h1>
     <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
 
-    <div class="card" style="position: relative; z-index: 9999;">
-        <h2>1. Hardware Connection</h2>
+    <div class="hardware-gate-box">
+        <h2 style="margin-top: 0;">1. Hardware Connection</h2>
         <button id="connect-btn">Connect via Bluetooth (BLE-MIDI)</button>
     </div>
 
@@ -252,8 +248,8 @@
             <div>
                 <label>Input Note Constraints (Min / Max Boundaries)</label>
                 <div class="range-inputs">
-                    <input type="number" id="note-min-input" min="0" max="127" value="36" title="Lowest permissible note input">
-                    <input type="number" id="note-max-input" min="0" max="127" value="96" title="Highest permissible note input">
+                    <input type="number" id="note-min-input" min="0" max="127" value="36">
+                    <input type="number" id="note-max-input" min="0" max="127" value="96">
                 </div>
             </div>
             <div>
@@ -277,8 +273,7 @@
             </div>
         </div>
         <label>Active Scale Tone Intercepts (Toggle custom steps below)</label>
-        <div class="piano-matrix" id="piano-chroma-row">
-            </div>
+        <div class="piano-matrix" id="piano-chroma-row"></div>
     </div>
 
     <div class="card">
@@ -312,10 +307,9 @@
         let rawStream = [];
         let currentRawValue = 64;
 
-        // Scale Engine variables
-        let rootOffset = 0; // 0 = C, 1 = C#, etc.
+        let rootOffset = 0; 
         const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-        let customScaleMap = new Array(12).fill(true); // Chroma register configuration maps
+        let customScaleMap = new Array(12).fill(true); 
 
         const scalePresets = {
             chromatic: [true, true, true, true, true, true, true, true, true, true, true, true],
@@ -324,7 +318,6 @@
             pentatonic:[true, false, true, false, true, false, false, true, false, true, false, false]
         };
 
-        // --- DOM Elements Cache ---
         const connectBtn = document.getElementById('connect-btn');
         const soundSelector = document.getElementById('sound-selector');
         const densitySlider = document.getElementById('density-slider');
@@ -348,7 +341,6 @@
         const canvasRaw = document.getElementById('raw-chart-mini');
         const ctxRaw = canvasRaw.getContext('2d');
 
-        // --- Generate Interactive Scale Key Matrix Toggles ---
         function initializePianoMatrix() {
             pianoChromaRow.innerHTML = "";
             noteNames.forEach((name, index) => {
@@ -361,31 +353,18 @@
                     customScaleMap[index] = !customScaleMap[index];
                     key.classList.toggle('active');
                     scaleSelector.value = "custom";
-                    log(`Custom Scale step modified -> ${name}: ${customScaleMap[index] ? 'ON' : 'OFF'}`);
+                    log(`Scale step changed -> ${name}: ${customScaleMap[index] ? 'ON' : 'OFF'}`);
                 });
                 pianoChromaRow.appendChild(key);
             });
         }
         initializePianoMatrix();
 
-        function initAudio() {
-            try {
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    log("Web Audio engine context mounted successfully.");
-                }
-            } catch(e) {
-                log("Audio Init Error: " + e.message);
-            }
-        }
-
-        // --- Modularized Sound Generator Engine ---
         function playPolysynthNote(midiNote, velocity) {
             if (!audioCtx) return;
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
             const volume = (velocity / 127) * 0.2;
             const now = audioCtx.currentTime;
-
             const gainNode = audioCtx.createGain();
             gainNode.connect(audioCtx.destination);
 
@@ -423,33 +402,24 @@
                 });
             }
             else if (currentSound === "flute") {
-                const oscBase = audioCtx.createOscillator();
-                const oscBreath = audioCtx.createOscillator();
+                const oscBase = audioCtx.createOscillator(); const oscBreath = audioCtx.createOscillator();
                 oscBase.type = 'sine'; oscBase.frequency.value = freq;
                 oscBreath.type = 'triangle'; oscBreath.frequency.value = freq * 2;
-                
-                // Breath mod node
                 const breathGain = audioCtx.createGain();
                 breathGain.gain.value = 0.12; 
-                
-                // Long Ambient Ghostly Envelope (Sustain target holds out across longer timeline framework)
                 gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.25); // Breathy slow onset
+                gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.25); 
                 gainNode.gain.setValueAtTime(volume * 0.7, now + 0.5); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 3.8); // Haunted trailing legacy release
-
-                oscBase.connect(gainNode);
-                oscBreath.connect(breathGain); breathGain.connect(gainNode);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 3.8); 
+                oscBase.connect(gainNode); oscBreath.connect(breathGain); breathGain.connect(gainNode);
                 oscBase.start(now); oscBreath.start(now);
                 oscBase.stop(now + 4.0); oscBreath.stop(now + 4.0);
             }
             else if (currentSound === "tr808") {
-                // TR-808 Mapping Engine mapped cleanly down to structured sample ranges
                 const drumIndex = midiNote % 3;
                 if (drumIndex === 0) {
                     const kickOsc = audioCtx.createOscillator();
-                    kickOsc.type = 'sine';
-                    kickOsc.frequency.setValueAtTime(130, now);
+                    kickOsc.type = 'sine'; kickOsc.frequency.setValueAtTime(130, now);
                     kickOsc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
                     gainNode.gain.setValueAtTime(0, now);
                     gainNode.gain.linearRampToValueAtTime(volume * 1.6, now + 0.004);
@@ -457,4 +427,213 @@
                     kickOsc.connect(gainNode); kickOsc.start(now); kickOsc.stop(now + 0.45);
                 } else if (drumIndex === 1) {
                     if (audioCtx.createBuffer) {
-                        const bufferSize = audioCtx.sample
+                        const bufferSize = audioCtx.sampleRate * 0.15;
+                        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                        const data = buffer.getChannelData(0);
+                        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                        const noiseNode = audioCtx.createBufferSource();
+                        noiseNode.buffer = buffer;
+                        gainNode.gain.setValueAtTime(0, now);
+                        gainNode.gain.linearRampToValueAtTime(volume * 0.85, now + 0.002);
+                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+                        noiseNode.connect(gainNode); noiseNode.start(now); noiseNode.stop(now + 0.2);
+                    }
+                } else {
+                    const hatOsc = audioCtx.createOscillator();
+                    hatOsc.type = 'square'; hatOsc.frequency.value = 9000;
+                    gainNode.gain.setValueAtTime(0, now);
+                    gainNode.gain.linearRampToValueAtTime(volume * 0.5, now + 0.002);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+                    hatOsc.connect(gainNode); hatOsc.start(now); hatOsc.stop(now + 0.05);
+                }
+            }
+            addNoteToPianoRoll(midiNote);
+        }
+
+        function addNoteToPianoRoll(midiNote) {
+            if (activeNotes.length >= 25) activeNotes.shift();
+            const minNote = 36; const maxNote = 96; 
+            const clampedNote = Math.max(minNote, Math.min(maxNote, midiNote));
+            const yPos = canvasNotes.height - ((clampedNote - minNote) / (maxNote - minNote) * canvasNotes.height);
+            activeNotes.push({
+                note: midiNote, x: canvasNotes.width, y: yPos - 4, width: 50,
+                color: `hsl(${(midiNote * 9) % 360}, 85%, 65%)`
+            });
+        }
+
+        function drawRoundedTimelineChart(canvasNode, ctxNode, streamArray, liveCurrentVal, colorHex) {
+            const now = Date.now();
+            ctxNode.fillStyle = '#080808'; ctxNode.fillRect(0, 0, canvasNode.width, canvasNode.height);
+            ctxNode.strokeStyle = '#1a1a1a'; ctxNode.lineWidth = 1;
+            for(let i = 0; i < canvasNode.height; i += 22) {
+                ctxNode.beginPath(); ctxNode.moveTo(0, i); ctxNode.lineTo(canvasNode.width, i); ctxNode.stroke();
+            }
+
+            const cutoffTime = now - viewDuration;
+            let points = [];
+            if (streamArray.length > 0 && streamArray[0].time > cutoffTime) {
+                points.push({ value: streamArray[0].value, time: cutoffTime });
+            }
+            streamArray.forEach(pt => points.push(pt));
+            points.push({ value: liveCurrentVal, time: now });
+
+            if (points.length > 1) {
+                ctxNode.strokeStyle = colorHex; ctxNode.lineWidth = 2.5;
+                ctxNode.lineCap = 'round'; ctxNode.lineJoin = 'round';
+                ctxNode.beginPath();
+                const coords = points.map(pt => {
+                    const elapsed = pt.time - cutoffTime;
+                    return { x: (elapsed / viewDuration) * canvasNode.width, y: canvasNode.height - (pt.value / 127 * canvasNode.height) };
+                });
+                ctxNode.moveTo(coords[0].x, coords[0].y);
+                for (let i = 0; i < coords.length - 1; i++) {
+                    const controlX = (coords[i].x + coords[i+1].x) / 2;
+                    const controlY = (coords[i].y + coords[i+1].y) / 2;
+                    ctxNode.quadraticCurveTo(coords[i].x, coords[i].y, controlX, controlY);
+                }
+                ctxNode.lineTo(coords[coords.length - 1].x, coords[coords.length - 1].y);
+                ctxNode.stroke();
+            }
+        }
+
+        function animate() {
+            const cutoffTime = Date.now() - viewDuration;
+            ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)'; ctxNotes.fillRect(0, 0, canvasNotes.width, canvasNotes.height);
+            ctxNotes.strokeStyle = '#222';
+            for(let i = 0; i < canvasNotes.height; i += 20) {
+                ctxNotes.beginPath(); ctxNotes.moveTo(0, i); ctxNotes.lineTo(canvasNotes.width, i); ctxNotes.stroke();
+            }
+            activeNotes.forEach(note => {
+                ctxNotes.fillStyle = note.color; ctxNotes.fillRect(note.x, note.y, note.width, 8); note.x -= 2.0;
+            });
+
+            wiggleStream = wiggleStream.filter(pt => pt.time >= cutoffTime);
+            drawRoundedTimelineChart(canvasWiggle, ctxWiggle, wiggleStream, currentWiggleValue, '#e07a1d');
+
+            rawStream = rawStream.filter(pt => pt.time >= cutoffTime);
+            drawRoundedTimelineChart(canvasRaw, ctxRaw, rawStream, currentRawValue, '#00ffcc');
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // --- UI Observers ---
+        densitySlider.addEventListener('input', (e) => {
+            density = e.target.value / 100;
+            densityVal.textContent = e.target.value + "%";
+        });
+        soundSelector.addEventListener('change', (e) => {
+            currentSound = e.target.value;
+            log(`Synth voice: ${currentSound.toUpperCase()}`);
+        });
+        rootSlider.addEventListener('input', (e) => {
+            rootOffset = parseInt(e.target.value);
+            rootVal.textContent = noteNames[rootOffset];
+        });
+        scaleSelector.addEventListener('change', (e) => {
+            const selected = e.target.value;
+            if (scalePresets[selected]) {
+                customScaleMap = [...scalePresets[selected]];
+                initializePianoMatrix();
+            }
+        });
+        logVisibilityCheckbox.addEventListener('change', (e) => {
+            statusLog.style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // --- 100% SYNCHRONOUS, HARDENED SECURE TRIGGER ---
+        connectBtn.addEventListener('click', async () => {
+            // First operation: handle underlying audio context instantly without waiting
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            log("Core gesture verified. Launching hardware lookup window...");
+            
+            try {
+                // Must remain directly attached to the thread head execution stack
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [MIDI_SERVICE_UUID] }],
+                    optionalServices: [MIDI_SERVICE_UUID]
+                });
+
+                log(`Device connected: ${device.name}`);
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(MIDI_SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(MIDI_CHARACTERISTIC_UUID);
+
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', processIncomingTelemetry);
+                
+                log("Handshake secured! System reporting online.");
+                connectBtn.style.backgroundColor = "#2b8a3e";
+                connectBtn.innerText = "System Connected & Online";
+
+            } catch (error) {
+                log(`Handshake blocked by browser security: ${error.message}`);
+            }
+        });
+
+        function processIncomingTelemetry(event) {
+            const dataView = event.target.value;
+            if (dataView.byteLength < 3) return;
+
+            const command = dataView.getUint8(2) & 0xF0;
+            let byte1 = dataView.getUint8(3); 
+            const byte2 = dataView.getUint8(4); 
+            const timestampNow = Date.now();
+
+            if (command === 0x90 && byte2 > 0) {
+                if (Math.random() > density) return; 
+
+                const minAllowed = parseInt(noteMinInput.value) || 0;
+                const maxAllowed = parseInt(noteMaxInput.value) || 127;
+                if (byte1 < minAllowed || byte1 > maxAllowed) return; 
+
+                let chromaPosition = (byte1 - rootOffset) % 12;
+                if (chromaPosition < 0) chromaPosition += 12;
+
+                if (!customScaleMap[chromaPosition]) {
+                    let searchOffset = 1;
+                    let foundMatch = false;
+                    while (searchOffset < 12) {
+                        let testPos = (chromaPosition - searchOffset) % 12;
+                        if (testPos < 0) testPos += 12;
+                        if (customScaleMap[testPos]) {
+                            byte1 = byte1 - searchOffset;
+                            foundMatch = true;
+                            break;
+                        }
+                        searchOffset++;
+                    }
+                    if (!foundMatch) return;
+                }
+
+                log(`Telemetry Pulse -> Note: ${byte1} (${noteNames[byte1 % 12]})`);
+                playPolysynthNote(byte1, byte2);
+            }
+            else if (command === 0xB0) {
+                if (byte1 === 85) {
+                    tempDisplay.textContent = byte2 + "°C";
+                } 
+                else if (byte1 === 81) {
+                    chartNumberOverlay.textContent = byte2;
+                    currentWiggleValue = byte2;
+                    wiggleStream.push({ value: byte2, time: timestampNow });
+                }
+                else if (byte1 === 91) {
+                    rawNumberOverlay.textContent = byte2;
+                    currentRawValue = byte2;
+                    rawStream.push({ value: byte2, time: timestampNow });
+                }
+            }
+        }
+
+        function log(text) {
+            const time = new Date().toLocaleTimeString();
+            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+    </script>
+</body>
+</html>
