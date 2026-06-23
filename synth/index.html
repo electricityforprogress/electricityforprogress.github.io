@@ -10,7 +10,7 @@
             background-color: #121212;
             color: #e0e0e0;
             padding: 2rem;
-            max-width: 900px;
+            max-width: 1000px;
             margin: 0 auto;
             position: relative;
         }
@@ -23,9 +23,9 @@
             font-size: 0.75rem;
             padding: 0.4rem 0.75rem;
             border-radius: 4px;
-            background-color: hsla(160, 75%, 20%, 0.4); /* Hue 160 = Mint/Teal for v0.4.1 */
-            border: 1px solid hsl(160, 75%, 40%);
-            color: hsl(160, 90%, 75%);
+            background-color: hsla(210, 75%, 25%, 0.4); /* Hue 210 = Electric Blue for v0.4.2 */
+            border: 1px solid hsl(210, 75%, 45%);
+            color: hsl(210, 90%, 75%);
             text-align: right;
             line-height: 1.2;
         }
@@ -45,14 +45,14 @@
             gap: 1.5rem;
         }
 
+        /* Metrics grid expanded to 3 columns to host the secondary data module */
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 1rem;
             margin-bottom: 1.5rem;
         }
         
-        /* Metric box layout optimized to cleanly frame the compact chart layout */
         .metric-box {
             background-color: #151515;
             border: 1px solid #444;
@@ -68,14 +68,13 @@
         .metric-label { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 0.5rem; }
         .metric-value { font-size: 1.8rem; font-weight: bold; color: #d27b2d; font-family: monospace; }
 
-        /* Compact, relative container positioning for the numeric marker overlay */
         .chart-container-mini {
             position: relative;
             width: 100%;
             height: 90px;
             margin-top: 0.25rem;
         }
-        #wiggle-chart-mini {
+        .mini-oscilloscope {
             background-color: #080808;
             border: 1px solid #333;
             border-radius: 4px;
@@ -90,12 +89,13 @@
             font-family: monospace;
             font-size: 0.9rem;
             font-weight: bold;
-            color: #e07a1d;
             background: rgba(8, 8, 8, 0.75);
             padding: 1px 4px;
             border-radius: 2px;
             pointer-events: none;
         }
+        #chart-number-overlay { color: #e07a1d; }
+        #raw-number-overlay { color: #00ffcc; }
 
         button {
             background-color: #d27b2d;
@@ -164,8 +164,8 @@
 <body>
 
     <div class="version-stamp">
-        <strong>BUILD v0.4.1-alpha</strong><br>
-        2026-06-23 @ 10:15 EDT
+        <strong>BUILD v0.4.2-alpha</strong><br>
+        2026-06-23 @ 10:30 EDT
     </div>
 
     <h1>Electricity for Progress: Biodata Sonification</h1>
@@ -179,13 +179,20 @@
     <div class="metrics-grid">
         <div class="metric-box">
             <div class="metric-label">Ambient Temperature (CC 85)</div>
-            <div id="temp-display" class="metric-value" style="margin-auto: 0; padding: 1.5rem 0;">--°C</div>
+            <div id="temp-display" class="metric-value" style="margin: auto 0; padding: 1.5rem 0;">--°C</div>
         </div>
         <div class="metric-box">
-            <div class="metric-label">Wiggle Monitor (CC 81 Animation)</div>
+            <div class="metric-label">Wiggle Monitor (CC 81)</div>
             <div class="chart-container-mini">
-                <canvas id="wiggle-chart-mini" width="400" height="90"></canvas>
+                <canvas id="wiggle-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
                 <div id="chart-number-overlay" class="chart-value-overlay">--</div>
+            </div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">Raw 555 Feed (CC 91)</div>
+            <div class="chart-container-mini">
+                <canvas id="raw-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
+                <div id="raw-number-overlay" class="chart-value-overlay">--</div>
             </div>
         </div>
     </div>
@@ -199,6 +206,8 @@
                     <option value="vibes">Vibes (Pure Sine Chime)</option>
                     <option value="space-pad">Space Pad (Rich Triangle Ambient)</option>
                     <option value="organic">Organ-ic (Warm Multi-Harmonic)</option>
+                    <option value="flute">Flute (Breathy, Long Decay)</option>
+                    <option value="tr808">TR-808 (Analog Rhythm Toolkit)</option>
                 </select>
             </div>
             <div>
@@ -233,10 +242,14 @@
         let activeNotes = [];
         let currentSound = "vibes";
 
-        // Time-scrolling wiggle data points { value: ccVal, time: timestamp }
+        // Time-scrolling configurations for our dual mini channels
+        const viewDuration = 8000; 
+        
         let wiggleStream = [];
-        const viewDuration = 8000; // Keep 8 seconds of rolling timeline context visible
-        let currentWiggleValue = 64; // Fallback default baseline mid-point
+        let currentWiggleValue = 64; 
+
+        let rawStream = [];
+        let currentRawValue = 64;
 
         const connectBtn = document.getElementById('connect-btn');
         const soundSelector = document.getElementById('sound-selector');
@@ -247,11 +260,15 @@
         
         const tempDisplay = document.getElementById('temp-display');
         const chartNumberOverlay = document.getElementById('chart-number-overlay');
+        const rawNumberOverlay = document.getElementById('raw-number-overlay');
 
         const canvasNotes = document.getElementById('piano-roll-canvas');
         const ctxNotes = canvasNotes.getContext('2d');
-        const canvasMiniChart = document.getElementById('wiggle-chart-mini');
-        const ctxMiniChart = canvasMiniChart.getContext('2d');
+        
+        const canvasWiggle = document.getElementById('wiggle-chart-mini');
+        const ctxWiggle = canvasWiggle.getContext('2d');
+        const canvasRaw = document.getElementById('raw-chart-mini');
+        const ctxRaw = canvasRaw.getContext('2d');
 
         function initAudio() {
             try {
@@ -264,6 +281,7 @@
             }
         }
 
+        // --- POLYPHONIC AUDIO SYNTHESIS LOGIC ENGINE ---
         function playPolysynthNote(midiNote, velocity) {
             if (!audioCtx) return;
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
@@ -283,24 +301,20 @@
                 gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
                 
                 osc.connect(gainNode);
-                osc.start(now);
-                osc.stop(now + 1.5);
+                osc.start(now); osc.stop(now + 1.5);
             } 
             else if (currentSound === "space-pad") {
                 const osc1 = audioCtx.createOscillator();
                 const osc2 = audioCtx.createOscillator();
                 
-                osc1.type = 'triangle';
-                osc1.frequency.value = freq;
-                osc2.type = 'triangle';
-                osc2.frequency.value = freq + 2; 
+                osc1.type = 'triangle'; osc1.frequency.value = freq;
+                osc2.type = 'triangle'; osc2.frequency.value = freq + 2; 
                 
                 gainNode.gain.setValueAtTime(0, now);
                 gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.15); 
                 gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5);   
                 
-                osc1.connect(gainNode);
-                osc2.connect(gainNode);
+                osc1.connect(gainNode); osc2.connect(gainNode);
                 osc1.start(now); osc2.start(now);
                 osc1.stop(now + 2.7); osc2.stop(now + 2.7);
             } 
@@ -312,17 +326,79 @@
 
                 voices.forEach((harmonic, idx) => {
                     const osc = audioCtx.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.value = freq * harmonic;
-                    
+                    osc.type = 'sine'; osc.frequency.value = freq * harmonic;
                     const voiceGain = audioCtx.createGain();
                     voiceGain.gain.value = 1 / (idx + 1); 
-                    
-                    osc.connect(voiceGain);
-                    voiceGain.connect(gainNode);
-                    osc.start(now);
-                    osc.stop(now + 0.9);
+                    osc.connect(voiceGain); voiceGain.connect(gainNode);
+                    osc.start(now); osc.stop(now + 0.9);
                 });
+            }
+            else if (currentSound === "flute") {
+                // Flute: Sine + subtle Triangle overtone with breathy slow attack and long lingering release decay
+                const oscBase = audioCtx.createOscillator();
+                const oscBreath = audioCtx.createOscillator();
+                
+                oscBase.type = 'sine'; oscBase.frequency.value = freq;
+                oscBreath.type = 'triangle'; oscBreath.frequency.value = freq * 2;
+                
+                const breathGain = audioCtx.createGain();
+                breathGain.gain.value = 0.15; // Soft high overtone
+                
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(volume * 0.8, now + 0.12); // Smooth breathy build
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.2);    // Lingering flute ring
+                
+                oscBase.connect(gainNode);
+                oscBreath.connect(breathGain); breathGain.connect(gainNode);
+                
+                oscBase.start(now); oscBreath.start(now);
+                oscBase.stop(now + 2.4); oscBreath.stop(now + 2.4);
+            }
+            else if (currentSound === "tr808") {
+                // TR-808 Toolkit mapped to incoming registers
+                if (midiNote % 3 === 0) {
+                    // Drum Module 1: Analog Kick (Low pitch dropping sine)
+                    const kickOsc = audioCtx.createOscillator();
+                    kickOsc.type = 'sine';
+                    kickOsc.frequency.setValueAtTime(150, now);
+                    kickOsc.frequency.exponentialRampToValueAtTime(45, now + 0.1);
+                    
+                    gainNode.gain.setValueAtTime(0, now);
+                    gainNode.gain.linearRampToValueAtTime(volume * 1.5, now + 0.005);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    
+                    kickOsc.connect(gainNode);
+                    kickOsc.start(now); kickOsc.stop(now + 0.4);
+                } else if (midiNote % 3 === 1) {
+                    // Drum Module 2: Sharp Noise Snare
+                    if (audioCtx.createBuffer) {
+                        const bufferSize = audioCtx.sampleRate * 0.15;
+                        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                        const data = buffer.getChannelData(0);
+                        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                        
+                        const noiseNode = audioCtx.createBufferSource();
+                        noiseNode.buffer = buffer;
+                        
+                        gainNode.gain.setValueAtTime(0, now);
+                        gainNode.gain.linearRampToValueAtTime(volume * 0.9, now + 0.002);
+                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                        
+                        noiseNode.connect(gainNode);
+                        noiseNode.start(now); noiseNode.stop(now + 0.2);
+                    }
+                } else {
+                    // Drum Module 3: Metallic High-Hat
+                    const hatOsc = audioCtx.createOscillator();
+                    hatOsc.type = 'square'; hatOsc.frequency.value = 8000;
+                    
+                    gainNode.gain.setValueAtTime(0, now);
+                    gainNode.gain.linearRampToValueAtTime(volume * 0.6, now + 0.002);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    
+                    hatOsc.connect(gainNode);
+                    hatOsc.start(now); hatOsc.stop(now + 0.06);
+                }
             }
 
             addNoteToPianoRoll(midiNote);
@@ -345,9 +421,58 @@
             });
         }
 
-        // --- VISUALIZATION DRAW ENGINE MATRIX ---
+        // --- DYNAMIC RENDERING SMOOTH CURVE UTILITY ---
+        function drawRoundedTimelineChart(canvasNode, ctxNode, streamArray, liveCurrentVal, colorHex) {
+            const now = Date.now();
+            ctxNode.fillStyle = '#080808';
+            ctxNode.fillRect(0, 0, canvasNode.width, canvasNode.height);
+            
+            ctxNode.strokeStyle = '#1a1a1a';
+            ctxNode.lineWidth = 1;
+            for(let i = 0; i < canvasNode.height; i += 22) {
+                ctxNode.beginPath(); ctxNode.moveTo(0, i); ctxNode.lineTo(canvasNode.width, i); ctxNode.stroke();
+            }
+
+            const cutoffTime = now - viewDuration;
+            
+            let points = [];
+            if (streamArray.length > 0 && streamArray[0].time > cutoffTime) {
+                points.push({ value: streamArray[0].value, time: cutoffTime });
+            }
+            streamArray.forEach(pt => points.push(pt));
+            points.push({ value: liveCurrentVal, time: now });
+
+            if (points.length > 1) {
+                ctxNode.strokeStyle = colorHex;
+                ctxNode.lineWidth = 2.5;
+                ctxNode.lineCap = 'round';
+                ctxNode.lineJoin = 'round';
+                ctxNode.beginPath();
+
+                const coords = points.map(pt => {
+                    const elapsed = pt.time - cutoffTime;
+                    const x = (elapsed / viewDuration) * canvasNode.width;
+                    const y = canvasNode.height - (pt.value / 127 * canvasNode.height);
+                    return { x, y };
+                });
+
+                ctxNode.moveTo(coords[0].x, coords[0].y);
+                for (let i = 0; i < coords.length - 1; i++) {
+                    const currentPt = coords[i];
+                    const nextPt = coords[i + 1];
+                    const controlX = (currentPt.x + nextPt.x) / 2;
+                    const controlY = (currentPt.y + nextPt.y) / 2;
+                    ctxNode.quadraticCurveTo(currentPt.x, currentPt.y, controlX, controlY);
+                }
+                const lastPt = coords[coords.length - 1];
+                ctxNode.lineTo(lastPt.x, lastPt.y);
+                ctxNode.stroke();
+            }
+        }
+
         function animate() {
             const nowTimestamp = Date.now();
+            const cutoffTime = nowTimestamp - viewDuration;
 
             // 1. Render Piano Roll
             ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)';
@@ -364,75 +489,19 @@
                 note.x -= 2.0;
             });
 
-            // 2. Render Compact Scrolling Rounded Wiggle Chart (CC 81)
-            ctxMiniChart.fillStyle = '#080808';
-            ctxMiniChart.fillRect(0, 0, canvasMiniChart.width, canvasMiniChart.height);
-            
-            ctxMiniChart.strokeStyle = '#1a1a1a';
-            ctxMiniChart.lineWidth = 1;
-            for(let i = 0; i < canvasMiniChart.height; i += 22) {
-                ctxMiniChart.beginPath(); ctxMiniChart.moveTo(0, i); ctxMiniChart.lineTo(canvasMiniChart.width, i); ctxMiniChart.stroke();
-            }
-
-            // Clean up points outside the time visibility window
-            const cutoffTime = nowTimestamp - viewDuration;
+            // 2. Render Time-Scrolling CC 81 Wiggle Channel
             wiggleStream = wiggleStream.filter(pt => pt.time >= cutoffTime);
+            drawRoundedTimelineChart(canvasWiggle, ctxWiggle, wiggleStream, currentWiggleValue, '#e07a1d');
 
-            // Construct rendering path arrays
-            let pointsToDraw = [];
-            
-            // Add a virtual starting boundary marker if necessary
-            if (wiggleStream.length > 0 && wiggleStream[0].time > cutoffTime) {
-                pointsToDraw.push({ value: wiggleStream[0].value, time: cutoffTime });
-            }
-            
-            // Add actual packet timestamps
-            wiggleStream.forEach(pt => pointsToDraw.push(pt));
-            
-            // Anchor the current live tail directly to the modern frame moment
-            pointsToDraw.push({ value: currentWiggleValue, time: nowTimestamp });
-
-            if (pointsToDraw.length > 1) {
-                ctxMiniChart.strokeStyle = '#e07a1d';
-                ctxMiniChart.lineWidth = 2.5;
-                ctxMiniChart.lineCap = 'round';
-                ctxMiniChart.lineJoin = 'round';
-                ctxMiniChart.beginPath();
-
-                // Convert points to coordinate positions
-                const renderCoordinates = pointsToDraw.map(pt => {
-                    const elapsed = pt.time - cutoffTime;
-                    const x = (elapsed / viewDuration) * canvasMiniChart.width;
-                    const y = canvasMiniChart.height - (pt.value / 127 * canvasMiniChart.height);
-                    return { x, y };
-                });
-
-                // Implement smooth Bézier curve interpolation logic instead of sharp lines
-                ctxMiniChart.moveTo(renderCoordinates[0].x, renderCoordinates[0].y);
-                
-                for (let i = 0; i < renderCoordinates.length - 1; i++) {
-                    const currentPt = renderCoordinates[i];
-                    const nextPt = renderCoordinates[i + 1];
-                    
-                    // Locate control handles at the geometric midpoint
-                    const controlX = (currentPt.x + nextPt.x) / 2;
-                    const controlY = (currentPt.y + nextPt.y) / 2;
-                    
-                    // Generate quadratic rounded arcs
-                    ctxMiniChart.quadraticCurveTo(currentPt.x, currentPt.y, controlX, controlY);
-                }
-                
-                // Secure path line to final tracking boundary point
-                const lastPt = renderCoordinates[renderCoordinates.length - 1];
-                ctxMiniChart.lineTo(lastPt.x, lastPt.y);
-                ctxMiniChart.stroke();
-            }
+            // 3. Render Time-Scrolling CC 91 Raw Channel
+            rawStream = rawStream.filter(pt => pt.time >= cutoffTime);
+            drawRoundedTimelineChart(canvasRaw, ctxRaw, rawStream, currentRawValue, '#00ffcc');
 
             requestAnimationFrame(animate);
         }
         animate();
 
-        // --- INTERACTION HOOKS ---
+        // --- CORE EVENT BINDINGS ---
         densitySlider.addEventListener('input', (e) => {
             density = e.target.value / 100;
             densityVal.textContent = e.target.value + "%";
@@ -444,11 +513,7 @@
         });
 
         logVisibilityCheckbox.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                statusLog.style.display = 'block';
-            } else {
-                statusLog.style.display = 'none';
-            }
+            statusLog.style.display = e.target.checked ? 'block' : 'none';
         });
 
         connectBtn.addEventListener('click', async () => {
@@ -463,16 +528,13 @@
 
                 log(`Target device discovered: ${device.name}`);
                 const server = await device.gatt.connect();
-
-                log("Inspecting service architectures...");
                 const service = await server.getPrimaryService(MIDI_SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(MIDI_CHARACTERISTIC_UUID);
 
-                log("Enabling notification pipes...");
                 await characteristic.startNotifications();
                 characteristic.addEventListener('characteristicvaluechanged', processIncomingTelemetry);
                 
-                log("Handshake complete! Live telemetry map online.");
+                log("Handshake complete! Live telemetry maps online.");
                 connectBtn.style.backgroundColor = "#2b8a3e";
                 connectBtn.innerText = "System Connected & Online";
 
@@ -481,7 +543,7 @@
             }
         });
 
-        // --- MIDI ROUTING INTERPRETER ---
+        // --- ROUTING MATRIX PARSER FOR INCOMING CC REGISTERS ---
         function processIncomingTelemetry(event) {
             const dataView = event.target.value;
             if (dataView.byteLength < 3) return;
@@ -499,29 +561,6 @@
             else if (command === 0xB0) {
                 const ccNumber = byte1;
                 const ccValue = byte2;
+                const timestampNow = Date.now();
 
                 if (ccNumber === 85) {
-                    tempDisplay.textContent = ccValue + "°C";
-                } 
-                else if (ccNumber === 81) {
-                    // Update numerical elements overlay text matching CC 81 modifications
-                    chartNumberOverlay.textContent = ccValue;
-                    currentWiggleValue = ccValue;
-                    
-                    // Map real historical timestamps to track true time-scrolled metrics
-                    wiggleStream.push({
-                        value: ccValue,
-                        time: Date.now()
-                    });
-                }
-            }
-        }
-
-        function log(text) {
-            const time = new Date().toLocaleTimeString();
-            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
-            statusLog.scrollTop = statusLog.scrollHeight;
-        }
-    </script>
-</body>
-</html>
