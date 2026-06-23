@@ -22,10 +22,15 @@
         }
         h1, h2 { margin-top: 0; color: #fff; }
         
-        /* Grid for Telemetry Indicators */
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 1rem;
             margin-bottom: 1.5rem;
         }
@@ -52,11 +57,19 @@
             transition: background 0.2s;
         }
         button:hover { background-color: #b36422; }
-        .slider-container { margin: 1rem 0; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="range"] { width: 100%; cursor: pointer; }
         
-        /* Visualizer Canvases */
+        select, input[type="range"] {
+            width: 100%;
+            padding: 0.5rem;
+            background: #252525;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="range"] { padding: 0; cursor: pointer; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        
         canvas {
             background-color: #080808;
             border: 1px solid #444;
@@ -91,24 +104,30 @@
 
     <div class="metrics-grid">
         <div class="metric-box">
-            <div class="metric-label">Ambient Temperature</div>
+            <div class="metric-label">Ambient Temperature (CC 85)</div>
             <div id="temp-display" class="metric-value">--°C</div>
         </div>
         <div class="metric-box">
-            <div class="metric-label">Latest Raw 555 Value</div>
+            <div class="metric-label">Latest Wiggle Value (CC 81)</div>
             <div id="raw-display" class="metric-value">--</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-label">BLE Handshake Signal</div>
-            <div id="rssi-display" class="metric-value">-- dBm</div>
         </div>
     </div>
 
     <div class="card">
-        <h2>2. Note Density Probability Gate</h2>
-        <div class="slider-container">
-            <label for="density-slider">Pass-Through Rate: <span id="density-val">100%</span></label>
-            <input type="range" id="density-slider" min="0" max="100" value="100">
+        <h2>2. Audio Synthesis & Gating Configuration</h2>
+        <div class="control-grid">
+            <div>
+                <label for="sound-selector">Synth Voice Preset</label>
+                <select id="sound-selector">
+                    <option value="vibes">Vibes (Pure Sine Chime)</option>
+                    <option value="space-pad">Space Pad (Rich Triangle Ambient)</option>
+                    <option value="organic">Organ-ic (Warm Multi-Harmonic)</option>
+                </select>
+            </div>
+            <div>
+                <label for="density-slider">Note Pass-Through Rate: <span id="density-val">100%</span></label>
+                <input type="range" id="density-slider" min="0" max="100" value="100">
+            </div>
         </div>
     </div>
 
@@ -117,7 +136,7 @@
         <label>Expanded Piano Roll (C2 - C7 Range)</label>
         <canvas id="piano-roll-canvas" width="850" height="240"></canvas>
         
-        <label>Raw Data Oscilloscope (CC 91 Telemetry Line Chart)</label>
+        <label>Wiggle Oscilloscope (CC 81 Automation Line Chart)</label>
         <canvas id="raw-chart-canvas" width="850" height="120"></canvas>
     </div>
 
@@ -134,15 +153,16 @@
         let density = 1.0;
         let activeNotes = [];
         let rawDataHistory = new Array(100).fill(64); // Rolling buffer for line chart
+        let currentSound = "vibes";
 
         const connectBtn = document.getElementById('connect-btn');
+        const soundSelector = document.getElementById('sound-selector');
         const densitySlider = document.getElementById('density-slider');
         const densityVal = document.getElementById('density-val');
         const statusLog = document.getElementById('status-log');
         
         const tempDisplay = document.getElementById('temp-display');
         const rawDisplay = document.getElementById('raw-display');
-        const rssiDisplay = document.getElementById('rssi-display');
 
         const canvasNotes = document.getElementById('piano-roll-canvas');
         const ctxNotes = canvasNotes.getContext('2d');
@@ -156,27 +176,70 @@
             }
         }
 
-        function playVibeNote(midiNote, velocity) {
+        // --- POLYPHONIC ENGINE MATRIX ---
+        function playPolysynthNote(midiNote, velocity) {
             if (!audioCtx) return;
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-            const volume = (velocity / 127) * 0.25;
-
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            
-            osc.type = 'sine';
-            osc.frequency.value = freq;
-
+            const volume = (velocity / 127) * 0.2;
             const now = audioCtx.currentTime;
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(volume, now + 0.015);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
 
-            osc.connect(gainNode);
+            const gainNode = audioCtx.createGain();
             gainNode.connect(audioCtx.destination);
 
-            osc.start(now);
-            osc.stop(now + 1.5);
+            if (currentSound === "vibes") {
+                // Vibes: Single clean sine wave oscillator
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(volume, now + 0.015);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+                
+                osc.connect(gainNode);
+                osc.start(now);
+                osc.stop(now + 1.5);
+            } 
+            else if (currentSound === "space-pad") {
+                // Space Pad: Triangle wave + slight detune for cosmic depth
+                const osc1 = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                
+                osc1.type = 'triangle';
+                osc1.frequency.value = freq;
+                osc2.type = 'triangle';
+                osc2.frequency.value = freq + 2; // Detune value
+                
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.15); // Slow ambient attack
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5);   // Long spacious tail
+                
+                osc1.connect(gainNode);
+                osc2.connect(gainNode);
+                osc1.start(now); osc2.start(now);
+                osc1.stop(now + 2.7); osc2.stop(now + 2.7);
+            } 
+            else if (currentSound === "organic") {
+                // Organ-ic: Multi-oscillator additive generation (Fundamental + Harmonics)
+                const voices = [1, 2, 3]; // Overtones
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(volume * 0.5, now + 0.03);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.8); // Punchy release
+
+                voices.forEach((harmonic, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq * harmonic;
+                    
+                    const voiceGain = audioCtx.createGain();
+                    voiceGain.gain.value = 1 / (idx + 1); // Drop volume of higher harmonics
+                    
+                    osc.connect(voiceGain);
+                    voiceGain.connect(gainNode);
+                    osc.start(now);
+                    osc.stop(now + 0.9);
+                });
+            }
 
             addNoteToPianoRoll(midiNote);
         }
@@ -199,7 +262,7 @@
             });
         }
 
-        // --- DUAL DRAW LOOP ANIMATION ---
+        // --- VISUALIZATION DRAW ENGINE ---
         function animate() {
             // 1. Render Piano Roll
             ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)';
@@ -216,22 +279,21 @@
                 note.x -= 2.0;
             });
 
-            // 2. Render CC 91 Raw Oscilloscope Line Chart
+            // 2. Render CC 81 Wiggle Oscilloscope Line Chart
             ctxChart.fillStyle = '#080808';
             ctxChart.fillRect(0, 0, canvasChart.width, canvasChart.height);
             
-            ctxChart.strokeStyle = '#1a3a2a';
+            ctxChart.strokeStyle = '#1e293b';
             for(let i = 0; i < canvasChart.height; i += 30) {
                 ctxChart.beginPath(); ctxChart.moveTo(0, i); ctxChart.lineTo(canvasChart.width, i); ctxChart.stroke();
             }
 
-            ctxChart.strokeStyle = '#00ffcc';
+            ctxChart.strokeStyle = '#e07a1d';
             ctxChart.lineWidth = 2;
             ctxChart.beginPath();
             
             const step = canvasChart.width / (rawDataHistory.length - 1);
             for (let i = 0; i < rawDataHistory.length; i++) {
-                // Map MIDI CC range (0-127) to chart height inverted
                 const y = canvasChart.height - (rawDataHistory[i] / 127 * canvasChart.height);
                 const x = i * step;
                 if (i === 0) ctxChart.moveTo(x, y); else ctxChart.lineTo(x, y);
@@ -242,10 +304,15 @@
         }
         animate();
 
-        // --- INTERACTION & PACKET ROUTING MATRIX ---
+        // --- DOM CONTROLS ---
         densitySlider.addEventListener('input', (e) => {
             density = e.target.value / 100;
             densityVal.textContent = e.target.value + "%";
+        });
+
+        soundSelector.addEventListener('change', (e) => {
+            currentSound = e.target.value;
+            log(`Synthesizer profile shifted to: ${currentSound.toUpperCase()}`);
         });
 
         connectBtn.addEventListener('click', async () => {
@@ -260,14 +327,6 @@
 
                 log(`Paired with device asset: ${device.name}`);
                 const server = await device.gatt.connect();
-                
-                // Fetch Signal Level Metric safely at handshake instantiation
-                try {
-                    const r = await device.watchAdvertisements();
-                    rssiDisplay.textContent = device.adData?.rssi ? device.adData.rssi : "-65"; 
-                } catch(e) {
-                    rssiDisplay.textContent = "-58"; // Standard mock fallback for browsers blocking watchAdvertisements
-                }
 
                 const service = await server.getPrimaryService(MIDI_SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(MIDI_CHARACTERISTIC_UUID);
@@ -284,6 +343,7 @@
             }
         });
 
+        // --- MIDI DATA ROUTING MATRIX ---
         function processIncomingTelemetry(event) {
             const dataView = event.target.value;
             if (dataView.byteLength < 3) return;
@@ -291,38 +351,4 @@
             const statusByte = dataView.getUint8(2);
             const command = statusByte & 0xF0;
             const byte1 = dataView.getUint8(3); // Note or CC Number
-            const byte2 = dataView.getUint8(4); // Velocity or CC Value
-
-            // ROUTE A: Standard Musical Note-On Packets
-            if (command === 0x90 && byte2 > 0) {
-                const roll = Math.random();
-                if (roll > density) return; 
-                playVibeNote(byte1, byte2);
-            }
-            
-            // ROUTE B: Continuous Controller (CC) Metric Packets
-            else if (command === 0xB0) {
-                const ccNumber = byte1;
-                const ccValue = byte2;
-
-                if (ccNumber === 81) {
-                    // CC 81: Temperature data streaming from ESP32-S3
-                    tempDisplay.textContent = ccValue + "°C";
-                } 
-                else if (ccNumber === 91) {
-                    // CC 91: Raw 555 data streaming
-                    rawDisplay.textContent = ccValue;
-                    rawDataHistory.push(ccValue);
-                    rawDataHistory.shift(); // Evict matching head column step
-                }
-            }
-        }
-
-        function log(text) {
-            const time = new Date().toLocaleTimeString();
-            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
-            statusLog.scrollTop = statusLog.scrollHeight;
-        }
-    </script>
-</body>
-</html>
+            const byte2 = dataView.getUint
