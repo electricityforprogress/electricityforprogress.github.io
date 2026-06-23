@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biodata Sonification Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            padding: 2rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #333;
+        }
+        h1, h2 { margin-top: 0; color: #fff; }
+        button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover { background-color: #005999; }
+        .slider-container {
+            margin: 1.5rem 0;
+        }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        input[type="range"] { width: 100%; }
+        #status-log {
+            background-color: #000;
+            font-family: monospace;
+            padding: 1rem;
+            height: 150px;
+            overflow-y: auto;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #00ff00;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Biodata Sonification Prototype</h1>
+    <p>Standardized electro-physiology to musical telemetry translation platform.</p>
+
+    <div class="card">
+        <h2>1. Wireless Hardware Connection</h2>
+        <button id="connect-btn">Connect BLE-MIDI Device</button>
+    </div>
+
+    <div class="card">
+        <h2>2. Data Filtering Matrix</h2>
+        <div class="slider-container">
+            <label for="density-slider">Note Density (Probability Gate): <span id="density-val">100%</span></label>
+            <input type="range" id="density-slider" min="0" max="100" value="100">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. Live Telemetry Log</h2>
+        <div id="status-log">System idling. Awaiting Web MIDI activation...</div>
+    </div>
+
+    <script>
+        // --- Web Audio Setup ("Vibes" Poly Synth) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+                log("Web Audio Context initialized.");
+            }
+        }
+
+        function playVibeNote(midiNote, velocity) {
+            if (!audioCtx) return;
+            
+            // Convert MIDI note to frequency
+            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            const gainValue = (velocity / 127) * 0.3; // Scale master volume
+
+            // Oscillator Setup (Sine wave for pure, sweet bell/vibe tones)
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+
+            // Simple Organic ADSR Envelope
+            const now = audioCtx.currentTime;
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(gainValue, now + 0.02); // Quick attack
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.5); // Elegant, long decay
+
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + 1.6);
+        }
+
+        // --- Web MIDI & Data Density Setup ---
+        let density = 1.0; // 100% default
+        const connectBtn = document.getElementById('connect-btn');
+        const densitySlider = document.getElementById('density-slider');
+        const densityVal = document.getElementById('density-val');
+        const statusLog = document.getElementById('status-log');
+
+        // Update Density Gate value dynamically
+        densitySlider.addEventListener('input', (e) => {
+            density = e.target.value / 100;
+            densityVal.textContent = e.target.value + "%";
+        });
+
+        // Initialize Web MIDI Access
+        connectBtn.addEventListener('click', () => {
+            initAudio(); // Audio must be user-triggered in browsers
+            
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess({ sysex: true }).then(onMIDISuccess, onMIDIFailure);
+            } else {
+                log("Error: Your browser does not support Web MIDI.");
+            }
+        });
+
+        function onMIDISuccess(midiAccess) {
+            log("Web MIDI API connected successfully.");
+            const inputs = midiAccess.inputs.values();
+            
+            let sourceFound = false;
+            for (let input of inputs) {
+                log(`Found MIDI Port: ${input.name}`);
+                input.onmidimessage = handleMIDIMessage;
+                sourceFound = true;
+            }
+
+            if (!sourceFound) {
+                log("No active MIDI devices detected. Ensure your BLE-MIDI peripheral is paired to your OS Bluetooth configuration.");
+            }
+        }
+
+        function onMIDIFailure() {
+            log("Critical Error: Could not access your local MIDI ecosystem.");
+        }
+
+        // --- Core Packet Parsing Logic ---
+        function handleMIDIMessage(message) {
+            const command = message.data[0] & 0xf0;
+            const note = message.data[1];
+            const velocity = message.data[2];
+
+            // Filter out events using our runtime Probability Gate
+            if (command === 0x90 && velocity > 0) { // Note On Packet
+                const roll = Math.random();
+                if (roll > density) {
+                    log(`Filtered Out Note: ${note} (Gate: ${Math.round(density*100)}%)`);
+                    return; // Drop note calculation entirely
+                }
+
+                log(`Playing Biodata Note: ${note} | Velocity: ${velocity}`);
+                playVibeNote(note, velocity);
+            }
+        }
+
+        // UI Logger Helper
+        function log(text) {
+            const time = new Date().toLocaleTimeString();
+            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+    </script>
+</body>
+</html>
