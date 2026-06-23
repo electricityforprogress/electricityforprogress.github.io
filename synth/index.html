@@ -1,20 +1,18 @@
+//Biodata Synth engine v0.6.2 mostly functional ;)
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Permissions-Policy" content="bluetooth=(self)">
-    <title>Biodata Sonification Dashboard</title>
+    <title>Biodata Sonification</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #eee; padding: 20px; max-width: 900px; margin: auto; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        /* Keyboard Styles */
-        .piano-keyboard { display: flex; height: 80px; margin-top: 10px; border: 1px solid #444; position: relative; }
+        .piano-keyboard { display: flex; height: 80px; margin-top: 10px; border: 1px solid #444; }
         .key { flex: 1; border: 1px solid #000; cursor: pointer; display: flex; align-items: flex-end; justify-content: center; font-size: 0.7rem; background: #eee; color: #000; }
         .key.black { background: #333; color: #fff; }
-        .key.playing { background: #f0a050 !important; } /* Orange Flash */
-        .key.active-blue { border: 3px solid #2d7bd2 !important; } /* Blue Scale Membership */
-        .key.inactive { opacity: 0.5; }
+        .key.playing { background: #f0a050 !important; }
+        .key.inactive { opacity: 0.3; }
+        .key.active-blue { border: 3px solid #2d7bd2; }
     </style>
 </head>
 <body>
@@ -27,10 +25,7 @@
 
     <div class="card">
         <h2>2. Audio Synthesis & MIDI Routing</h2>
-        <div class="grid">
-            <select id="sound-selector"><option value="vibes">Vibes</option><option value="tr808">TR-808</option></select>
-            <label>Mute Audio: <input type="checkbox" id="audio-toggle"></label>
-        </div>
+        <select id="sound-selector"><option value="vibes">Vibes</option><option value="tr808">TR-808</option></select>
         <select id="midi-output-selector"><option value="none">Select MIDI Output...</option></select>
     </div>
 
@@ -45,9 +40,9 @@
     </div>
 
     <script>
-        const state = { output: null, muted: false, map: new Array(12).fill(true) };
+        const state = { output: null, map: new Array(12).fill(true), sound: "vibes" };
         
-        // Piano Init
+        // 1. Initialize Piano
         const keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
         const container = document.getElementById('piano-keys');
         keys.forEach((n, i) => {
@@ -55,39 +50,29 @@
             d.className = `key ${n.includes('#') ? 'black' : ''} active-blue`;
             d.id = 'key-' + i;
             d.innerHTML = n;
-            d.onclick = () => { 
-                state.map[i] = !state.map[i]; 
-                d.classList.toggle('active-blue'); 
-                d.classList.toggle('inactive'); 
-            };
+            d.onclick = () => { d.classList.toggle('active-blue'); d.classList.toggle('inactive'); state.map[i] = !state.map[i]; };
             container.appendChild(d);
         });
 
-        // Bluetooth Logic
+        // 2. Bluetooth
         document.getElementById('connect-btn').onclick = async () => {
-            try {
-                const device = await navigator.bluetooth.requestDevice({ 
-                    filters: [{ services: ["03b80e5a-ede8-4b33-a751-6ce34ec4c700"] }], 
-                    optionalServices: ["03b80e5a-ede8-4b33-a751-6ce34ec4c700"] 
-                });
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService("03b80e5a-ede8-4b33-a751-6ce34ec4c700");
-                const char = await service.getCharacteristic("7772e5db-3868-4112-a1a9-f2669d106bf3");
-                await char.startNotifications();
-                char.addEventListener('characteristicvaluechanged', (e) => {
-                    const raw = e.target.value.getUint8(3);
-                    if(state.map[raw % 12]) {
-                        // Flash Orange
-                        const key = document.getElementById('key-' + (raw % 12));
-                        if(key) { key.classList.add('playing'); setTimeout(() => key.classList.remove('playing'), 200); }
-                        // MIDI Out
-                        if(state.output) state.output.send([0x90, raw, 100]);
-                    }
-                });
-            } catch(e) { console.error(e); }
+            const device = await navigator.bluetooth.requestDevice({ filters: [{ services: ["03b80e5a-ede8-4b33-a751-6ce34ec4c700"] }], optionalServices: ["03b80e5a-ede8-4b33-a751-6ce34ec4c700"] });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService("03b80e5a-ede8-4b33-a751-6ce34ec4c700");
+            const char = await service.getCharacteristic("7772e5db-3868-4112-a1a9-f2669d106bf3");
+            await char.startNotifications();
+            char.addEventListener('characteristicvaluechanged', (e) => {
+                const raw = e.target.value.getUint8(3);
+                // Simple Quantization check
+                if(state.map[raw % 12]) {
+                    const key = document.getElementById('key-' + (raw % 12));
+                    if(key) { key.classList.add('playing'); setTimeout(() => key.classList.remove('playing'), 200); }
+                    if(state.output) state.output.send([0x90, raw, 100]);
+                }
+            });
         };
 
-        // MIDI Access
+        // 3. MIDI Setup
         navigator.requestMIDIAccess().then(access => {
             const s = document.getElementById('midi-output-selector');
             access.outputs.forEach(o => {
@@ -98,8 +83,6 @@
             });
             s.onchange = (e) => state.output = access.outputs.get(e.target.value);
         });
-
-        document.getElementById('audio-toggle').onchange = (e) => state.muted = e.target.checked;
     </script>
 </body>
 </html>
