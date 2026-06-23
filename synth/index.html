@@ -23,7 +23,7 @@
             font-size: 0.75rem;
             padding: 0.4rem 0.75rem;
             border-radius: 4px;
-            background-color: hsla(210, 75%, 25%, 0.4); /* v0.4.3 stable */
+            background-color: hsla(210, 75%, 25%, 0.4); /* v0.4.4 baseline stable */
             border: 1px solid hsl(210, 75%, 45%);
             color: hsl(210, 90%, 75%);
             text-align: right;
@@ -124,4 +124,135 @@
         
         #piano-roll-canvas {
             background-color: #080808;
-            border: 1px solid #44
+            border: 1px solid #444;
+            border-radius: 4px;
+            display: block;
+            width: 100%;
+        }
+
+        .log-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .toggle-container {
+            font-size: 0.85rem;
+            color: #aaa;
+            cursor: pointer;
+            user-select: none;
+        }
+        .toggle-container input {
+            width: auto;
+            margin-right: 0.3rem;
+            cursor: pointer;
+        }
+        #status-log {
+            background-color: #000;
+            font-family: monospace;
+            padding: 1rem;
+            height: 120px;
+            overflow-y: auto;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #00ff00;
+            border: 1px solid #222;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="version-stamp">
+        <strong>BUILD v0.4.4-alpha</strong><br>
+        2026-06-23 @ 10:55 EDT
+    </div>
+
+    <h1>Electricity for Progress: Biodata Sonification</h1>
+    <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
+
+    <div class="card" style="position: relative; z-index: 9999;">
+        <h2>1. Hardware Connection</h2>
+        <button id="connect-btn" style="display: block; width: 100%; position: relative; pointer-events: auto;">
+            Connect via Bluetooth (BLE-MIDI)
+        </button>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-box">
+            <div class="metric-label">Ambient Temperature (CC 85)</div>
+            <div id="temp-display" class="metric-value" style="margin: auto 0; padding: 1.5rem 0;">--°C</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">Wiggle Monitor (CC 81)</div>
+            <div class="chart-container-mini">
+                <canvas id="wiggle-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
+                <div id="chart-number-overlay" class="chart-value-overlay">--</div>
+            </div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">Raw 555 Feed (CC 91)</div>
+            <div class="chart-container-mini">
+                <canvas id="raw-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
+                <div id="raw-number-overlay" class="chart-value-overlay">--</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. Audio Synthesis & Gating Configuration</h2>
+        <div class="control-grid">
+            <div>
+                <label for="sound-selector">Synth Voice Preset</label>
+                <select id="sound-selector">
+                    <option value="vibes">Vibes (Pure Sine Chime)</option>
+                    <option value="space-pad">Space Pad (Rich Triangle Ambient)</option>
+                    <option value="organic">Organ-ic (Warm Multi-Harmonic)</option>
+                    <option value="flute">Flute (Breathy, Long Decay)</option>
+                    <option value="tr808">TR-808 (Analog Rhythm Toolkit)</option>
+                </select>
+            </div>
+            <div>
+                <label for="density-slider">Note Pass-Through Rate: <span id="density-val">100%</span></label>
+                <input type="range" id="density-slider" min="0" max="100" value="100">
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. Live Visualizer Arrays</h2>
+        <label>Expanded Piano Roll (C2 - C7 Range)</label>
+        <canvas id="piano-roll-canvas" width="850" height="240"></canvas>
+    </div>
+
+    <div class="card">
+        <div class="log-header-row">
+            <h2 style="margin: 0;">4. Live System Output Log</h2>
+            <label class="toggle-container">
+                <input type="checkbox" id="log-visibility-checkbox" checked> Show Console Monitor
+            </label>
+        </div>
+        <div id="status-log">Ready for Bluetooth handshake...</div>
+    </div>
+
+    <script>
+        const MIDI_SERVICE_UUID = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
+        const MIDI_CHARACTERISTIC_UUID = "7772e5db-3868-4112-a1a9-f2669d106bf3";
+        
+        let audioCtx = null;
+        let density = 1.0;
+        let activeNotes = [];
+        let currentSound = "vibes";
+
+        const viewDuration = 8000; 
+        
+        let wiggleStream = [];
+        let currentWiggleValue = 64; 
+
+        let rawStream = [];
+        let currentRawValue = 64;
+
+        const connectBtn = document.getElementById('connect-btn');
+        const soundSelector = document.getElementById('sound-selector');
+        const densitySlider = document.getElementById('density-slider');
+        const densityVal = document.getElementById('density-val');
+        const statusLog = document.getElementById('status-log');
