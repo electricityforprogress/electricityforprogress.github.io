@@ -23,9 +23,9 @@
             font-size: 0.75rem;
             padding: 0.4rem 0.75rem;
             border-radius: 4px;
-            background-color: hsla(35, 75%, 25%, 0.5); /* v0.5.0 Vector Pipeline Rebuild */
-            border: 1px solid hsl(35, 75%, 45%);
-            color: hsl(35, 90%, 75%);
+            background-color: hsla(210, 85%, 25%, 0.5); /* v0.5.1 Structural Synchronization */
+            border: 1px solid hsl(210, 85%, 45%);
+            color: hsl(210, 95%, 75%);
             text-align: right;
             line-height: 1.2;
         }
@@ -173,66 +173,4 @@
             align-items: center;
             margin-bottom: 0.5rem;
         }
-        .toggle-container { font-size: 0.85rem; color: #aaa; cursor: pointer; user-select: none; }
-        .toggle-container input { width: auto; margin-right: 0.3rem; cursor: pointer; }
-        
-        #status-log {
-            background-color: #000;
-            font-family: monospace;
-            padding: 1rem;
-            height: 120px;
-            overflow-y: auto;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color: #00ff00;
-            border: 1px solid #222;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="version-stamp">
-        <strong>BUILD v0.5.0-alpha</strong><br>
-        2026-06-23 @ 12:00 EDT
-    </div>
-
-    <h1>Electricity for Progress: Biodata Sonification</h1>
-    <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
-
-    <div class="hardware-gate-box">
-        <h2 style="margin-top: 0;">1. Hardware Connection</h2>
-        <button id="connect-btn">Connect via Bluetooth (BLE-MIDI)</button>
-    </div>
-
-    <div class="metrics-grid">
-        <div class="metric-box">
-            <div class="metric-label">Ambient Temperature (CC 85)</div>
-            <div id="temp-display" class="metric-value" style="margin: auto 0; padding: 1.5rem 0;">--°C</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-label">Wiggle Monitor (CC 81)</div>
-            <div class="chart-container-mini">
-                <canvas id="wiggle-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
-                <div id="chart-number-overlay" class="chart-value-overlay">--</div>
-            </div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-label">Raw 555 Feed (CC 91)</div>
-            <div class="chart-container-mini">
-                <canvas id="raw-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
-                <div id="raw-number-overlay" class="chart-value-overlay">--</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>2. Audio Synthesis Configuration</h2>
-        <div class="control-grid" style="grid-template-columns: 1fr;">
-            <div>
-                <label for="sound-selector">Synth Voice Preset Selection</label>
-                <select id="sound-selector">
-                    <option value="vibes">Vibes (Pure Sine Chime)</option>
-                    <option value="space-pad">Space Pad (Rich Triangle Ambient)</option>
-                    <option value="organic">Organ-ic (Warm Multi-Harmonic)</option>
-                    <option value="flute">Flute (Breathy, Haunted Release)</option>
-                    <option value="tr808">TR-8
+        .toggle
