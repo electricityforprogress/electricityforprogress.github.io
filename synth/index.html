@@ -5,934 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Biodata Sonification Dashboard</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #121212;
-            color: #e0e0e0;
-            padding: 2rem;
-            max-width: 1000px;
-            margin: 0 auto;
-            position: relative;
-        }
+        body { font-family: -apple-system, sans-serif; background-color: #121212; color: #e0e0e0; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+        .card { background-color: #1e1e1e; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #333; }
+        h1, h2 { color: #fff; }
+        .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
         
-        .version-stamp {
-            position: absolute;
-            top: 1rem;
-            right: 2rem;
-            font-family: monospace;
-            font-size: 0.75rem;
-            padding: 0.4rem 0.75rem;
-            border-radius: 4px;
-            background-color: hsla(280, 80%, 25%, 0.5); /* v0.6.2 Piano UI & IAC Auto-Route */
-            border: 1px solid hsl(280, 80%, 45%);
-            color: hsl(280, 95%, 75%);
-            text-align: right;
-            line-height: 1.2;
-        }
+        /* Piano Keyboard */
+        .piano-keyboard { display: flex; height: 100px; margin-top: 1rem; border: 1px solid #444; }
+        .key { flex: 1; border: 1px solid #000; cursor: pointer; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-size: 0.7rem; background: #eee; color: #000; }
+        .key.black { background: #333; color: #fff; }
+        .key.inactive { opacity: 0.3; }
+        .key.active-blue { border: 3px solid #2d7bd2; }
+        .key.playing { background: #f0a050 !important; }
 
-        .hardware-gate-box {
-            background-color: #1e1e1e;
-            border: 2px solid #d27b2d;
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
+        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: #d27b2d; }
+        input:checked + .slider:before { transform: translateX(26px); }
 
-        .card {
-            background-color: #1e1e1e;
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid #333;
-        }
-        h1, h2 { margin-top: 0; color: #fff; }
-        
-        .control-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        .metric-box {
-            background-color: #151515;
-            border: 1px solid #444;
-            border-radius: 6px;
-            padding: 1rem;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .metric-label { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 0.5rem; }
-        .metric-value { font-size: 1.8rem; font-weight: bold; color: #d27b2d; font-family: monospace; }
-
-        .chart-container-mini {
-            position: relative;
-            width: 100%;
-            height: 90px;
-            margin-top: 0.25rem;
-        }
-        .mini-oscilloscope {
-            background-color: #080808;
-            border: 1px solid #333;
-            border-radius: 4px;
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-        .chart-value-overlay {
-            position: absolute;
-            bottom: 4px;
-            right: 8px;
-            font-family: monospace;
-            font-size: 0.9rem;
-            font-weight: bold;
-            background: rgba(8, 8, 8, 0.75);
-            padding: 1px 4px;
-            border-radius: 2px;
-            pointer-events: none;
-        }
-        #chart-number-overlay { color: #e07a1d; }
-        #raw-number-overlay { color: #00ffcc; }
-
-        #connect-btn {
-            background-color: #d27b2d;
-            color: white;
-            border: none;
-            padding: 1rem 1.5rem;
-            font-size: 1.2rem;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
-        #connect-btn:hover { background-color: #b36422; }
-        
-        select, input[type="range"], input[type="number"] {
-            width: 100%;
-            padding: 0.5rem;
-            background: #252525;
-            color: #fff;
-            border: 1px solid #444;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        input[type="range"] { padding: 0; cursor: pointer; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        
-        .range-inputs { display: flex; gap: 0.5rem; }
-
-        /* --- UI SLIDE SWITCH --- */
-        .switch-container {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 4px 0;
-        }
-        .switch {
-          position: relative;
-          display: inline-block;
-          width: 50px;
-          height: 24px;
-        }
-        .switch input { 
-          opacity: 0;
-          width: 0;
-          height: 0;
-        }
-        .slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background-color: #555;
-          transition: .3s;
-          border-radius: 24px;
-        }
-        .slider:before {
-          position: absolute;
-          content: "";
-          height: 16px;
-          width: 16px;
-          left: 4px;
-          bottom: 4px;
-          background-color: white;
-          transition: .3s;
-          border-radius: 50%;
-        }
-        input:checked + .slider {
-          background-color: #d27b2d;
-        }
-        input:checked + .slider:before {
-          transform: translateX(26px);
-        }
-
-        /* --- PIANO KEYBOARD UI --- */
-        .piano-keyboard {
-            position: relative;
-            height: 140px;
-            background: #111;
-            border: 2px solid #444;
-            border-radius: 4px;
-            margin-top: 0.5rem;
-        }
-        .white-key, .black-key {
-            position: absolute;
-            top: 0;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            padding-bottom: 10px;
-            cursor: pointer;
-            user-select: none;
-            box-sizing: border-box;
-            transition: background 0.1s, transform 0.05s;
-        }
-        .white-key:active, .black-key:active { transform: translateY(2px); }
-        .white-key {
-            height: 100%;
-            background: #e0e0e0;
-            color: #111;
-            border: 1px solid #999;
-            border-bottom-left-radius: 4px;
-            border-bottom-right-radius: 4px;
-            z-index: 1;
-            font-weight: bold;
-            font-size: 0.85rem;
-        }
-        .white-key.inactive { background: #666; color: #333; }
-        .white-key.playing { background: #f0a050 !important; color: #111; }
-        
-        .black-key {
-            height: 60%;
-            background: #222;
-            color: #ddd;
-            border: 1px solid #000;
-            border-bottom-left-radius: 4px;
-            border-bottom-right-radius: 4px;
-            z-index: 2;
-            font-size: 0.75rem;
-        }
-        .black-key.inactive { background: #333; color: #111; }
-        .black-key.playing { background: #d27b2d !important; color: white; }
-
-        #piano-roll-canvas {
-            background-color: #080808;
-            border: 1px solid #444;
-            border-radius: 4px;
-            display: block;
-            width: 100%;
-        }
-
-        .log-header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-        .toggle-container { font-size: 0.85rem; color: #aaa; cursor: pointer; user-select: none; }
-        .toggle-container input { width: auto; margin-right: 0.3rem; cursor: pointer; }
-        
-        #status-log {
-            background-color: #000;
-            font-family: monospace;
-            padding: 1rem;
-            height: 120px;
-            overflow-y: auto;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color: #00ff00;
-            border: 1px solid #222;
-        }
+        #connect-btn { background-color: #d27b2d; color: white; border: none; padding: 1rem; width: 100%; font-weight: bold; cursor: pointer; }
+        #piano-roll-canvas { background-color: #080808; width: 100%; height: 200px; }
     </style>
 </head>
 <body>
 
-    <div class="version-stamp">
-        <strong>BUILD v0.6.2-alpha</strong><br>
-        2026-06-23
-    </div>
-
     <h1>Electricity for Progress: Biodata Sonification</h1>
-    <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
 
-    <div class="hardware-gate-box">
-        <h2 style="margin-top: 0;">1. Hardware Connection</h2>
+    <div class="card">
+        <h2>1. Hardware Connection</h2>
         <button id="connect-btn">Connect via Bluetooth (BLE-MIDI)</button>
     </div>
 
-    <div class="metrics-grid">
-        <div class="metric-box">
-            <div class="metric-label">Ambient Temperature (CC 85)</div>
-            <div id="temp-display" class="metric-value" style="margin: auto 0; padding: 1.5rem 0;">--°C</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-label">Wiggle Monitor (CC 81)</div>
-            <div class="chart-container-mini">
-                <canvas id="wiggle-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
-                <div id="chart-number-overlay" class="chart-value-overlay">--</div>
-            </div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-label">Raw 555 Feed (CC 91)</div>
-            <div class="chart-container-mini">
-                <canvas id="raw-chart-mini" class="mini-oscilloscope" width="300" height="90"></canvas>
-                <div id="raw-number-overlay" class="chart-value-overlay">--</div>
-            </div>
-        </div>
-    </div>
-
     <div class="card">
-        <h2>2. Audio Synthesis & External MIDI Routing</h2>
+        <h2>2. Audio Synthesis & MIDI Routing</h2>
         <div class="control-grid">
-            <div>
-                <label for="sound-selector">Synth Voice Preset Selection</label>
-                <select id="sound-selector">
-                    <option value="vibes">Vibes (Pure Sine Chime)</option>
-                    <option value="space-pad">Space Pad (Rich Triangle Ambient)</option>
-                    <option value="organic">Organ-ic (Warm Multi-Harmonic)</option>
-                    <option value="flute">Flute (Breathy, Haunted Release)</option>
-                    <option value="tr808">TR-808 (Analog Rhythm Toolkit)</option>
-                </select>
-            </div>
-            <div>
-                <label>Local Audio Environment</label>
-                <div class="switch-container">
-                    <label class="switch">
-                        <input type="checkbox" id="audio-engine-toggle" checked>
-                        <span class="slider round"></span>
-                    </label>
-                    <span id="audio-status-label" style="font-weight: bold; color: #d27b2d;">Audio Engine: ON</span>
-                </div>
-            </div>
+            <select id="sound-selector"><option value="vibes">Vibes</option><option value="tr808">TR-808</option></select>
+            <label class="switch"><input type="checkbox" id="audio-toggle" checked><span class="slider"></span></label>
         </div>
-        <div class="control-grid" style="margin-top: 1.5rem;">
-            <div>
-                <label for="midi-output-selector">Target System MIDI Output Port</label>
-                <select id="midi-output-selector">
-                    <option value="none">No External MIDI Routing (Idle)</option>
-                </select>
-            </div>
-            <div>
-                <label for="midi-routing-mode">External Output Stream Format</label>
-                <select id="midi-routing-mode">
-                    <option value="quantized">Send Quantized, Scaled, & Ranged Notes</option>
-                    <option value="raw">Send Raw, Untransformed Biodata Notes</option>
-                </select>
-            </div>
+        <select id="midi-output-selector"><option value="none">No External MIDI</option></select>
+    </div>
+
+    <div class="card">
+        <h2>3. Quantization, Scales & Note Mapping</h2>
+        <select id="scale-selector"><option value="chromatic">Chromatic</option><option value="major">Major</option></select>
+        <div class="piano-keyboard" id="piano-keys">
+            <script>
+                const keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+                keys.forEach((n, i) => {
+                    const div = document.createElement('div');
+                    div.className = `key ${n.includes('#') ? 'black' : ''} active-blue`;
+                    div.id = 'key-' + i;
+                    div.innerHTML = n;
+                    div.onclick = () => { div.classList.toggle('active-blue'); div.classList.toggle('inactive'); };
+                    document.write(div.outerHTML);
+                });
+            </script>
         </div>
     </div>
 
     <div class="card">
-        <h2>3. Quantization, Scales & Note Mapping Engine</h2>
-        
-        <div class="control-grid">
-            <div>
-                <label for="scale-selector">Quantize Scale Framework</label>
-                <select id="scale-selector">
-                    <option value="chromatic">Chromatic (No Scale Restrictions)</option>
-                    <option value="major">Major (Diatonic Ionian)</option>
-                    <option value="minor">Natural Minor (Aeolian)</option>
-                    <option value="pentatonic">Pentatonic (Organic Ambient Custom)</option>
-                </select>
-            </div>
-            <div>
-                <label for="root-slider">Scale Root Note Selection: <span id="root-val">C</span></label>
-                <input type="range" id="root-slider" min="0" max="11" value="0">
-            </div>
-        </div>
-
-        <div class="control-grid">
-            <div>
-                <label>Target Compression Output Boundaries (Min / Max)</label>
-                <div class="range-inputs">
-                    <input type="number" id="note-min-input" min="0" max="127" value="36">
-                    <input type="number" id="note-max-input" min="0" max="127" value="96">
-                </div>
-            </div>
-            <div>
-                <label for="density-slider">Note Probability Gate (Pass Rate): <span id="density-val">100%</span></label>
-                <input type="range" id="density-slider" min="0" max="100" value="100">
-            </div>
-        </div>
-
-        <label style="margin-top: 1.5rem;">Active Scale Tone Intercepts Matrix</label>
-        <div class="piano-keyboard" id="piano-chroma-row">
-            </div>
+        <h2>4. Live Visualizer</h2>
+        <canvas id="piano-roll-canvas"></canvas>
     </div>
 
     <div class="card">
-        <h2>4. Live Visualizer Arrays</h2>
-        <label>Expanded Piano Roll (C2 - C7 Range)</label>
-        <canvas id="piano-roll-canvas" width="850" height="240"></canvas>
-    </div>
-
-    <div class="card">
-        <div class="log-header-row">
-            <h2 style="margin: 0;">5. Live System Output Log</h2>
-            <label class="toggle-container">
-                <input type="checkbox" id="log-visibility-checkbox" checked> Show Console Monitor
-            </label>
-        </div>
-        <div id="status-log">Ready for Bluetooth handshake...</div>
+        <h2>5. Live System Output Log</h2>
+        <div id="status-log" style="height: 100px; overflow: auto; background: #000; color: #0f0; font-family: monospace;"></div>
     </div>
 
     <script>
-        const SystemBus = {
-            MIDI_SERVICE_UUID: "03b80e5a-ede8-4b33-a751-6ce34ec4c700",
-            MIDI_CHARACTERISTIC_UUID: "7772e5db-3868-4112-a1a9-f2669d106bf3",
-            noteNames: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
-            viewDuration: 8000,
-            density: 1.0,
-            currentSound: "vibes",
-            audioEngineMuted: false,
-            midiAccess: null,
-            chosenMidiOutput: null,
-            midiRoutingMode: "quantized", 
-            rootOffset: 0,
-            customScaleMap: [true, true, true, true, true, true, true, true, true, true, true, true],
-            wiggleStream: [],
-            currentWiggleValue: 64,
-            rawStream: [],
-            currentRawValue: 64,
-            activeNotes: [],
-            scalePresets: {
-                chromatic: [true, true, true, true, true, true, true, true, true, true, true, true],
-                major:     [true, false, true, false, true, true, false, true, false, true, false, true],
-                minor:     [true, false, true, true, false, true, false, true, true, false, true, false],
-                pentatonic:[true, false, true, false, true, false, false, true, false, true, false, false]
-            }
+        // CORE LOGIC
+        const System = {
+            output: null,
+            audioMuted: false,
+            scaleMap: new Array(12).fill(true)
         };
 
-        function log(text) {
-            const statusLog = document.getElementById('status-log');
-            if (!statusLog) return;
-            const time = new Date().toLocaleTimeString();
-            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
-            statusLog.scrollTop = statusLog.scrollHeight;
+        function lightKey(note) {
+            const key = document.getElementById('key-' + (note % 12));
+            if(key) {
+                key.classList.add('playing');
+                setTimeout(() => key.classList.remove('playing'), 200);
+            }
         }
 
-        // ----------------------------------------------------------
-        // MODULE 1: MUSICAL SCALE & PIANO UI ENGINE
-        // ----------------------------------------------------------
-        const ScaleEngine = {
-            initialize() {
-                try {
-                    const pianoContainer = document.getElementById('piano-chroma-row');
-                    if (!pianoContainer) return;
-
-                    pianoContainer.innerHTML = "";
-                    const whiteKeyWidth = 100 / 7;
-                    let whiteKeyCount = 0;
-
-                    SystemBus.noteNames.forEach((name, index) => {
-                        const isBlack = name.includes('#');
-                        const key = document.createElement('div');
-                        key.id = 'piano-key-' + index;
-
-                        // Set initial visual state based on SystemBus.customScaleMap
-                        this.updateKeyVisuals(key, index, isBlack);
-
-                        key.addEventListener('click', () => {
-                            SystemBus.customScaleMap[index] = !SystemBus.customScaleMap[index];
-                            this.updateKeyVisuals(key, index, isBlack);
-                            document.getElementById('scale-selector').value = "custom";
-                        });
-
-                        if (isBlack) {
-                            key.className = 'black-key';
-                            key.style.left = (whiteKeyCount * whiteKeyWidth) - 2.5 + '%';
-                            key.style.width = '5%';
-                        } else {
-                            key.className = 'white-key';
-                            key.style.left = (whiteKeyCount * whiteKeyWidth) + '%';
-                            key.style.width = whiteKeyWidth + '%';
-                            whiteKeyCount++;
-                        }
-                        
-                        const label = document.createElement('span');
-                        label.textContent = name;
-                        key.appendChild(label);
-                        pianoContainer.appendChild(key);
-                    });
-                } catch (e) { console.error("ScaleEngine Init Error:", e); }
-            },
-
-            // New helper to keep the "Membership" (Blue) and "Activity" (Flash) states separate
-            updateKeyVisuals(key, index, isBlack) {
-                const isActive = SystemBus.customScaleMap[index];
-                key.style.backgroundColor = isActive ? (isBlack ? '#444' : '#fff') : '#222';
-                key.style.border = isActive ? '2px solid #2d7bd2' : '1px solid #000';
-            },
-
-            process(rawNote) { /* ... Same logic as before ... */ }
-        };
-            
-            process(rawNote) {
-                try {
-                    const minAllowed = parseInt(document.getElementById('note-min-input').value) || 0;
-                    const maxAllowed = parseInt(document.getElementById('note-max-input').value) || 127;
-                    
-                    const normalized = rawNote / 127;
-                    let mapped = Math.round(minAllowed + (normalized * (maxAllowed - minAllowed)));
-
-                    let chroma = (mapped - SystemBus.rootOffset) % 12;
-                    if (chroma < 0) chroma += 12;
-
-                    if (!SystemBus.customScaleMap[chroma]) {
-                        let searchOffset = 1;
-                        let found = false;
-                        while (searchOffset < 12) {
-                            let testPos = (chroma - searchOffset) % 12;
-                            if (testPos < 0) testPos += 12;
-                            if (SystemBus.customScaleMap[testPos]) {
-                                mapped -= searchOffset;
-                                found = true;
-                                break;
-                            }
-                            searchOffset++;
-                        }
-                        if (!found) return null;
-                    }
-                    return mapped;
-                } catch (e) {
-                    console.error("ScaleEngine Processing Error:", e);
-                    return rawNote;
-                }
-            }
+        document.getElementById('connect-btn').onclick = async () => {
+            const device = await navigator.bluetooth.requestDevice({ filters: [{ services: ["03b80e5a-ede8-4b33-a751-6ce34ec4c700"] }], optionalServices: ["03b80e5a-ede8-4b33-a751-6ce34ec4c700"] });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService("03b80e5a-ede8-4b33-a751-6ce34ec4c700");
+            const char = await service.getCharacteristic("7772e5db-3868-4112-a1a9-f2669d106bf3");
+            await char.startNotifications();
+            char.addEventListener('characteristicvaluechanged', (e) => {
+                const note = e.target.value.getUint8(3);
+                lightKey(note);
+                if(System.output) System.output.send([0x90, note, 100]);
+            });
         };
 
-        // ----------------------------------------------------------
-        // MODULE 2: AUDIO SYNTHESIZER VOICE ENGINE
-        // ----------------------------------------------------------
-        const AudioEngine = {
-            ctx: null,
-            initContext() {
-                if (!this.ctx && !SystemBus.audioEngineMuted) {
-                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-                    log("Audio Context mounted.");
-                }
-            },
-            play(midiNote, velocity) {
-                try {
-                    if (SystemBus.audioEngineMuted) return;
-
-                    this.initContext();
-                    if (!this.ctx) return;
-
-                    const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-                    const volume = (velocity / 127) * 0.2;
-                    const now = this.ctx.currentTime;
-                    const gainNode = this.ctx.createGain();
-                    gainNode.connect(this.ctx.destination);
-
-                    if (SystemBus.currentSound === "vibes") {
-                        const osc = this.ctx.createOscillator();
-                        osc.type = 'sine'; osc.frequency.value = freq;
-                        gainNode.gain.setValueAtTime(0, now);
-                        gainNode.gain.linearRampToValueAtTime(volume, now + 0.015);
-                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
-                        osc.connect(gainNode); osc.start(now); osc.stop(now + 1.5);
-                    } 
-                    else if (SystemBus.currentSound === "space-pad") {
-                        const osc1 = this.ctx.createOscillator(); const osc2 = this.ctx.createOscillator();
-                        osc1.type = 'triangle'; osc1.frequency.value = freq;
-                        osc2.type = 'triangle'; osc2.frequency.value = freq + 2; 
-                        gainNode.gain.setValueAtTime(0, now);
-                        gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.15); 
-                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5);   
-                        osc1.connect(gainNode); osc2.connect(gainNode);
-                        osc1.start(now); osc2.start(now);
-                        osc1.stop(now + 2.7); osc2.stop(now + 2.7);
-                    } 
-                    else if (SystemBus.currentSound === "organic") {
-                        const voices = [1, 2, 3]; 
-                        gainNode.gain.setValueAtTime(0, now);
-                        gainNode.gain.linearRampToValueAtTime(volume * 0.5, now + 0.03);
-                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.8); 
-                        voices.forEach((harmonic, idx) => {
-                            const osc = this.ctx.createOscillator();
-                            osc.type = 'sine'; osc.frequency.value = freq * harmonic;
-                            const voiceGain = this.ctx.createGain();
-                            voiceGain.gain.value = 1 / (idx + 1); 
-                            osc.connect(voiceGain); voiceGain.connect(gainNode);
-                            osc.start(now); osc.stop(now + 0.9);
-                        });
-                    }
-                    else if (SystemBus.currentSound === "flute") {
-                        const oscBase = this.ctx.createOscillator(); const oscBreath = this.ctx.createOscillator();
-                        oscBase.type = 'sine'; oscBase.frequency.value = freq;
-                        oscBreath.type = 'triangle'; oscBreath.frequency.value = freq * 2;
-                        const breathGain = this.ctx.createGain(); breathGain.gain.value = 0.12; 
-                        gainNode.gain.setValueAtTime(0, now);
-                        gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.25); 
-                        gainNode.gain.setValueAtTime(volume * 0.7, now + 0.5); 
-                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 3.8); 
-                        oscBase.connect(gainNode); oscBreath.connect(breathGain); breathGain.connect(gainNode);
-                        oscBase.start(now); oscBreath.start(now);
-                        oscBase.stop(now + 4.0); oscBreath.stop(now + 4.0);
-                    }
-                    else if (SystemBus.currentSound === "tr808") {
-                        const drumIndex = midiNote % 3;
-                        if (drumIndex === 0) {
-                            const kickOsc = this.ctx.createOscillator();
-                            kickOsc.type = 'sine'; kickOsc.frequency.setValueAtTime(130, now);
-                            kickOsc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
-                            gainNode.gain.setValueAtTime(0, now);
-                            gainNode.gain.linearRampToValueAtTime(volume * 1.6, now + 0.004);
-                            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-                            kickOsc.connect(gainNode); kickOsc.start(now); kickOsc.stop(now + 0.45);
-                        } else if (drumIndex === 1) {
-                            if (this.ctx.createBuffer) {
-                                const bufferSize = this.ctx.sampleRate * 0.15;
-                                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-                                const data = buffer.getChannelData(0);
-                                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-                                const noiseNode = this.ctx.createBufferSource();
-                                noiseNode.buffer = buffer;
-                                gainNode.gain.setValueAtTime(0, now);
-                                gainNode.gain.linearRampToValueAtTime(volume * 0.85, now + 0.002);
-                                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-                                noiseNode.connect(gainNode); noiseNode.start(now); noiseNode.stop(now + 0.2);
-                            }
-                        } else {
-                            const hatOsc = this.ctx.createOscillator();
-                            hatOsc.type = 'square'; hatOsc.frequency.value = 9000;
-                            gainNode.gain.setValueAtTime(0, now);
-                            gainNode.gain.linearRampToValueAtTime(volume * 0.5, now + 0.002);
-                            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-                            hatOsc.connect(gainNode); hatOsc.start(now); hatOsc.stop(now + 0.05);
-                        }
-                    }
-                } catch (e) { console.error("AudioEngine Playback Exception:", e); }
-            }
-        };
-
-        // ----------------------------------------------------------
-        // MODULE 3: VISUALIZATION & CANVAS RENDERING ENGINE
-        // ----------------------------------------------------------
-        const VisualEngine = {
-            lightUpPianoKey(mappedNote) {
-                try {
-                    const chromaPosition = (mappedNote - SystemBus.rootOffset) % 12;
-                    const finalChroma = chromaPosition < 0 ? chromaPosition + 12 : chromaPosition;
-                    const keyEl = document.getElementById('piano-key-' + finalChroma);
-                    
-                    if (keyEl) {
-                        // Flash "Activity" Orange
-                        keyEl.style.backgroundColor = '#f0a050'; 
-                        setTimeout(() => {
-                            // Revert to "Membership" Blue/White/Black color
-                            const isActive = SystemBus.customScaleMap[finalChroma];
-                            keyEl.style.backgroundColor = isActive ? (keyEl.classList.contains('black-key') ? '#444' : '#fff') : '#222';
-                        }, 180);
-                    }
-                } catch (e) {}
-            },
-
-            addNote(midiNote) {
-                try {
-                    const canvasNotes = document.getElementById('piano-roll-canvas');
-                    if (!canvasNotes) return;
-                    if (SystemBus.activeNotes.length >= 25) SystemBus.activeNotes.shift();
-                    const minNote = 36; const maxNote = 96; 
-                    const clamped = Math.max(minNote, Math.min(maxNote, midiNote));
-                    const yPos = canvasNotes.height - ((clamped - minNote) / (maxNote - minNote) * canvasNotes.height);
-                    SystemBus.activeNotes.push({
-                        note: midiNote, x: canvasNotes.width, y: yPos - 4, width: 50,
-                        color: `hsl(${(midiNote * 9) % 360}, 85%, 65%)`
-                    });
-                } catch (e) { console.error("VisualEngine AddNote Error:", e); }
-            },
-
-            drawChart(canvasId, streamArray, liveVal, colorHex) {
-                try {
-                    const canvas = document.getElementById(canvasId);
-                    if (!canvas) return;
-                    const ctx = canvas.getContext('2d');
-                    const now = Date.now();
-                    const cutoff = now - SystemBus.viewDuration;
-
-                    ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
-                    for(let i = 0; i < canvas.height; i += 22) {
-                        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
-                    }
-
-                    let points = [];
-                    if (streamArray.length > 0 && streamArray[0].time > cutoff) {
-                        points.push({ value: streamArray[0].value, time: cutoff });
-                    }
-                    streamArray.forEach(pt => points.push(pt));
-                    points.push({ value: liveVal, time: now });
-
-                    if (points.length > 1) {
-                        ctx.strokeStyle = colorHex; ctx.lineWidth = 2.5;
-                        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-                        ctx.beginPath();
-                        const coords = points.map(pt => {
-                            const elapsed = pt.time - cutoff;
-                            return { x: (elapsed / SystemBus.viewDuration) * canvas.width, y: canvas.height - (pt.value / 127 * canvas.height) };
-                        });
-                        ctx.moveTo(coords[0].x, coords[0].y);
-                        for (let i = 0; i < coords.length - 1; i++) {
-                            const ctrlX = (coords[i].x + coords[i+1].x) / 2;
-                            const ctrlY = (coords[i].y + coords[i+1].y) / 2;
-                            ctx.quadraticCurveTo(coords[i].x, coords[i].y, ctrlX, ctrlY);
-                        }
-                        ctx.lineTo(coords[coords.length - 1].x, coords[coords.length - 1].y);
-                        ctx.stroke();
-                    }
-                } catch(e) {}
-            },
-
-            renderLoop() {
-                try {
-                    const canvasNotes = document.getElementById('piano-roll-canvas');
-                    if (canvasNotes) {
-                        const ctxNotes = canvasNotes.getContext('2d');
-                        ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)'; ctxNotes.fillRect(0, 0, canvasNotes.width, canvasNotes.height);
-                        ctxNotes.strokeStyle = '#222';
-                        for(let i = 0; i < canvasNotes.height; i += 20) {
-                            ctxNotes.beginPath(); ctxNotes.moveTo(0, i); ctxNotes.lineTo(canvasNotes.width, i); ctxNotes.stroke();
-                        }
-                        SystemBus.activeNotes.forEach(note => {
-                            ctxNotes.fillStyle = note.color; ctxNotes.fillRect(note.x, note.y, note.width, 8); note.x -= 2.0;
-                        });
-                    }
-
-                    const cutoff = Date.now() - SystemBus.viewDuration;
-                    SystemBus.wiggleStream = SystemBus.wiggleStream.filter(pt => pt.time >= cutoff);
-                    SystemBus.rawStream = SystemBus.rawStream.filter(pt => pt.time >= cutoff);
-
-                    VisualEngine.drawChart('wiggle-chart-mini', SystemBus.wiggleStream, SystemBus.currentWiggleValue, '#e07a1d');
-                    VisualEngine.drawChart('raw-chart-mini', SystemBus.rawStream, SystemBus.currentRawValue, '#00ffcc');
-
-                } catch (e) {}
-                requestAnimationFrame(VisualEngine.renderLoop);
-            }
-        };
-
-        // ----------------------------------------------------------
-        // MODULE 4: CENTRAL MIDI & BLUETOOTH DATA ROUTER
-        // ----------------------------------------------------------
-        const MidiRouter = {
-            sendExternalMidiData(midiStatus, data1, data2) {
-                try {
-                    if (!SystemBus.chosenMidiOutput) return;
-                    SystemBus.chosenMidiOutput.send([midiStatus, data1, data2]);
-                    
-                    // Auto-release for notes
-                    if (midiStatus === 0x90) {
-                        setTimeout(() => {
-                            if (SystemBus.chosenMidiOutput) SystemBus.chosenMidiOutput.send([0x80, data1, 0]);
-                        }, 350);
-                    }
-                } catch (e) { console.error("External Web MIDI Send Error:", e); }
-            },
-
-            routeInbound(event) {
-                try {
-                    const dataView = event.target.value;
-                    if (dataView.byteLength < 3) return;
-
-                    const command = dataView.getUint8(2) & 0xF0;
-                    const byte1 = dataView.getUint8(3); 
-                    const byte2 = dataView.getUint8(4); 
-                    const nowTS = Date.now();
-
-                    if (command === 0x90 && byte2 > 0) {
-                        // Bypass directly to DAW if RAW mode is active
-                        if (SystemBus.midiRoutingMode === "raw") {
-                            MidiRouter.sendExternalMidiData(0x90, byte1, byte2);
-                        }
-
-                        if (Math.random() > SystemBus.density) return; 
-
-                        const finalNote = ScaleEngine.process(byte1);
-                        if (finalNote === null) return; 
-
-                        log(`Ingest [${byte1}] -> Quantized To [${finalNote}] (${SystemBus.noteNames[finalNote % 12]})`);
-                        
-                        // Pass fully sequenced note to DAW if QUANTIZED mode is active
-                        if (SystemBus.midiRoutingMode === "quantized") {
-                            MidiRouter.sendExternalMidiData(0x90, finalNote, byte2);
-                        }
-
-                        // Fire localized rendering pipelines
-                        AudioEngine.play(finalNote, byte2);
-                        VisualEngine.addNote(finalNote);
-                        VisualEngine.lightUpPianoKey(finalNote);
-                    }
-                    else if (command === 0xB0) {
-                        if (byte1 === 85) {
-                            const tempDisplay = document.getElementById('temp-display');
-                            if (tempDisplay) tempDisplay.textContent = byte2 + "°C";
-                        } 
-                        else if (byte1 === 81) {
-                            // Automatically bridge Wiggle Monitor CC 81 directly to DAW mapping
-                            MidiRouter.sendExternalMidiData(0xB0, 81, byte2);
-
-                            const overlay = document.getElementById('chart-number-overlay');
-                            if (overlay) overlay.textContent = byte2;
-                            SystemBus.currentWiggleValue = byte2;
-                            SystemBus.wiggleStream.push({ value: byte2, time: nowTS });
-                        }
-                        else if (byte1 === 91) {
-                            const overlay = document.getElementById('raw-number-overlay');
-                            if (overlay) overlay.textContent = byte2;
-                            SystemBus.currentRawValue = byte2;
-                            SystemBus.rawStream.push({ value: byte2, time: nowTS });
-                        }
-                    }
-                } catch (e) { console.error("MidiRouter Framework Exception:", e); }
-            }
-        };
-
-        // ----------------------------------------------------------
-        // MODULE 5: USER INTERFACE INTERACTION OBSERVERS
-        // ----------------------------------------------------------
-        const UIModule = {
-            async initNativeWebMidi() {
-                try {
-                    if (!navigator.requestMIDIAccess) {
-                        log("Web MIDI API not supported in this browser layout profile.");
-                        return;
-                    }
-                    
-                    SystemBus.midiAccess = await navigator.requestMIDIAccess();
-                    log("Native Web MIDI browser subsystem linked successfully.");
-                    
-                    const outputSelector = document.getElementById('midi-output-selector');
-                    if (!outputSelector) return;
-
-                    const outputs = SystemBus.midiAccess.outputs.values();
-                    let defaultIacId = null;
-
-                    for (let output of outputs) {
-                        const opt = document.createElement('option');
-                        opt.value = output.id;
-                        opt.textContent = output.name || `MIDI Out Channel (${output.id})`;
-                        outputSelector.appendChild(opt);
-
-                        // Sniff for OS-level internal routing bus (IAC on Mac)
-                        if (output.name && output.name.toLowerCase().includes('iac')) {
-                            defaultIacId = output.id;
-                        }
-                    }
-
-                    // Auto-link the IAC bus if one exists on the machine
-                    if (defaultIacId) {
-                        outputSelector.value = defaultIacId;
-                        SystemBus.chosenMidiOutput = SystemBus.midiAccess.outputs.get(defaultIacId);
-                        log(`External MIDI Port Auto-Locked to Default: ${SystemBus.chosenMidiOutput.name}`);
-                    }
-
-                    outputSelector.addEventListener('change', (e) => {
-                        const id = e.target.value;
-                        if (id === "none") {
-                            SystemBus.chosenMidiOutput = null;
-                            log("External MIDI pipeline deactivated.");
-                        } else {
-                            SystemBus.chosenMidiOutput = SystemBus.midiAccess.outputs.get(id);
-                            log(`External System MIDI Port Locked -> ${SystemBus.chosenMidiOutput.name}`);
-                        }
-                    });
-                } catch(e) { log("Web MIDI Pipeline initialization failed: " + e.message); }
-            },
-
-            bindObservers() {
-                try {
-                    document.getElementById('density-slider')?.addEventListener('input', (e) => {
-                        SystemBus.density = e.target.value / 100;
-                        const label = document.getElementById('density-val');
-                        if (label) label.textContent = e.target.value + "%";
-                    });
-
-                    document.getElementById('sound-selector')?.addEventListener('change', (e) => {
-                        SystemBus.currentSound = e.target.value;
-                        log(`Synth Profile: ${SystemBus.currentSound.toUpperCase()}`);
-                    });
-
-                    // Linked to new toggle slider
-                    document.getElementById('audio-engine-toggle')?.addEventListener('change', (e) => {
-                        SystemBus.audioEngineMuted = !e.target.checked;
-                        const label = document.getElementById('audio-status-label');
-                        if (label) {
-                            label.textContent = SystemBus.audioEngineMuted ? "Audio Engine: MUTED" : "Audio Engine: ON";
-                            label.style.color = SystemBus.audioEngineMuted ? "#888" : "#d27b2d";
-                        }
-                        log(`Local synthesizer context status: ${SystemBus.audioEngineMuted ? 'MUTED' : 'ACTIVE'}`);
-                    });
-
-                    document.getElementById('midi-routing-mode')?.addEventListener('change', (e) => {
-                        SystemBus.midiRoutingMode = e.target.value;
-                        log(`External routing schema set to: ${SystemBus.midiRoutingMode.toUpperCase()}`);
-                    });
-
-                    document.getElementById('root-slider')?.addEventListener('input', (e) => {
-                        SystemBus.rootOffset = parseInt(e.target.value);
-                        const label = document.getElementById('root-val');
-                        if (label) label.textContent = SystemBus.noteNames[SystemBus.rootOffset];
-                    });
-
-                    document.getElementById('scale-selector')?.addEventListener('change', (e) => {
-                        const selected = e.target.value;
-                        if (SystemBus.scalePresets[selected]) {
-                            SystemBus.customScaleMap = [...SystemBus.scalePresets[selected]];
-                            ScaleEngine.initialize();
-                        }
-                    });
-
-                    document.getElementById('log-visibility-checkbox')?.addEventListener('change', (e) => {
-                        const logBox = document.getElementById('status-log');
-                        if (logBox) logBox.style.display = e.target.checked ? 'block' : 'none';
-                    });
-
-                    document.getElementById('connect-btn')?.addEventListener('click', async () => {
-                        AudioEngine.initContext();
-                        log("Requesting hardware layer access channel...");
-                        try {
-                            const device = await navigator.bluetooth.requestDevice({
-                                filters: [{ services: [SystemBus.MIDI_SERVICE_UUID] }],
-                                optionalServices: [SystemBus.MIDI_SERVICE_UUID]
-                            });
-
-                            log(`Linked to hardware: ${device.name}`);
-                            const server = await device.gatt.connect();
-                            const service = await server.getPrimaryService(SystemBus.MIDI_SERVICE_UUID);
-                            const characteristic = await service.getCharacteristic(SystemBus.MIDI_CHARACTERISTIC_UUID);
-
-                            await characteristic.startNotifications();
-                            characteristic.addEventListener('characteristicvaluechanged', MidiRouter.routeInbound);
-                            
-                            const btn = document.getElementById('connect-btn');
-                            if (btn) {
-                                btn.style.backgroundColor = "#2b8a3e";
-                                btn.innerText = "System Connected & Online";
-                            }
-                            log("Handshake stabilized. Data streaming safely through isolated core router.");
-
-                        } catch (error) { log(`Handshake aborted: ${error.message}`); }
-                    });
-                } catch (e) { console.error("UIModule Observer Binding Exception:", e); }
-            }
-        };
-
-        // --- System Sequence Boot Instantiation ---
-        ScaleEngine.initialize();
-        UIModule.bindObservers();
-        UIModule.initNativeWebMidi(); 
-        VisualEngine.renderLoop();
+        // Initialize MIDI Outputs
+        navigator.requestMIDIAccess().then(access => {
+            const select = document.getElementById('midi-output-selector');
+            access.outputs.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.id; opt.text = o.name;
+                select.add(opt);
+                if(o.name.includes("IAC")) System.output = o;
+            });
+            select.onchange = (e) => System.output = access.outputs.get(e.target.value);
+        });
     </script>
 </body>
 </html>
