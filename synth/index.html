@@ -152,7 +152,7 @@
         let audioCtx = null;
         let density = 1.0;
         let activeNotes = [];
-        let rawDataHistory = new Array(100).fill(64); // Rolling buffer for line chart
+        let rawDataHistory = new Array(100).fill(64); 
         let currentSound = "vibes";
 
         const connectBtn = document.getElementById('connect-btn');
@@ -170,13 +170,16 @@
         const ctxChart = canvasChart.getContext('2d');
 
         function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                log("Web Audio engine active.");
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    log("Web Audio engine context mounted successfully.");
+                }
+            } catch(e) {
+                log("Audio Init Error: " + e.message);
             }
         }
 
-        // --- POLYPHONIC ENGINE MATRIX ---
         function playPolysynthNote(midiNote, velocity) {
             if (!audioCtx) return;
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
@@ -187,7 +190,6 @@
             gainNode.connect(audioCtx.destination);
 
             if (currentSound === "vibes") {
-                // Vibes: Single clean sine wave oscillator
                 const osc = audioCtx.createOscillator();
                 osc.type = 'sine';
                 osc.frequency.value = freq;
@@ -201,18 +203,17 @@
                 osc.stop(now + 1.5);
             } 
             else if (currentSound === "space-pad") {
-                // Space Pad: Triangle wave + slight detune for cosmic depth
                 const osc1 = audioCtx.createOscillator();
                 const osc2 = audioCtx.createOscillator();
                 
                 osc1.type = 'triangle';
                 osc1.frequency.value = freq;
                 osc2.type = 'triangle';
-                osc2.frequency.value = freq + 2; // Detune value
+                osc2.frequency.value = freq + 2; 
                 
                 gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.15); // Slow ambient attack
-                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5);   // Long spacious tail
+                gainNode.gain.linearRampToValueAtTime(volume * 0.7, now + 0.15); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5);   
                 
                 osc1.connect(gainNode);
                 osc2.connect(gainNode);
@@ -220,11 +221,10 @@
                 osc1.stop(now + 2.7); osc2.stop(now + 2.7);
             } 
             else if (currentSound === "organic") {
-                // Organ-ic: Multi-oscillator additive generation (Fundamental + Harmonics)
-                const voices = [1, 2, 3]; // Overtones
+                const voices = [1, 2, 3]; 
                 gainNode.gain.setValueAtTime(0, now);
                 gainNode.gain.linearRampToValueAtTime(volume * 0.5, now + 0.03);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.8); // Punchy release
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.8); 
 
                 voices.forEach((harmonic, idx) => {
                     const osc = audioCtx.createOscillator();
@@ -232,7 +232,7 @@
                     osc.frequency.value = freq * harmonic;
                     
                     const voiceGain = audioCtx.createGain();
-                    voiceGain.gain.value = 1 / (idx + 1); // Drop volume of higher harmonics
+                    voiceGain.gain.value = 1 / (idx + 1); 
                     
                     osc.connect(voiceGain);
                     voiceGain.connect(gainNode);
@@ -244,7 +244,6 @@
             addNoteToPianoRoll(midiNote);
         }
 
-        // --- EXPANDED PIANO ROLL (C2 to C7 Range: MIDI 36 to 96) ---
         function addNoteToPianoRoll(midiNote) {
             if (activeNotes.length >= 25) activeNotes.shift();
 
@@ -262,9 +261,7 @@
             });
         }
 
-        // --- VISUALIZATION DRAW ENGINE ---
         function animate() {
-            // 1. Render Piano Roll
             ctxNotes.fillStyle = 'rgba(8, 8, 8, 0.2)';
             ctxNotes.fillRect(0, 0, canvasNotes.width, canvasNotes.height);
 
@@ -279,7 +276,6 @@
                 note.x -= 2.0;
             });
 
-            // 2. Render CC 81 Wiggle Oscilloscope Line Chart
             ctxChart.fillStyle = '#080808';
             ctxChart.fillRect(0, 0, canvasChart.width, canvasChart.height);
             
@@ -304,7 +300,6 @@
         }
         animate();
 
-        // --- DOM CONTROLS ---
         densitySlider.addEventListener('input', (e) => {
             density = e.target.value / 100;
             densityVal.textContent = e.target.value + "%";
@@ -312,29 +307,34 @@
 
         soundSelector.addEventListener('change', (e) => {
             currentSound = e.target.value;
-            log(`Synthesizer profile shifted to: ${currentSound.toUpperCase()}`);
+            log(`Synth configuration voice: ${currentSound.toUpperCase()}`);
         });
 
+        // --- HARDENED CLICK EVENT TRIGGER ROUTINE ---
         connectBtn.addEventListener('click', async () => {
+            // Step 1: Force audio activation immediately inside user context
             initAudio();
-            log("Opening BLE diagnostic portal...");
+            log("Opening BLE scanning utility...");
             
             try {
+                // Step 2: Trigger hardware inquiry
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [MIDI_SERVICE_UUID] }],
                     optionalServices: [MIDI_SERVICE_UUID]
                 });
 
-                log(`Paired with device asset: ${device.name}`);
+                log(`Target device discovered: ${device.name}`);
                 const server = await device.gatt.connect();
 
+                log("Inspecting service architectures...");
                 const service = await server.getPrimaryService(MIDI_SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(MIDI_CHARACTERISTIC_UUID);
 
+                log("Enabling notification pipes...");
                 await characteristic.startNotifications();
                 characteristic.addEventListener('characteristicvaluechanged', processIncomingTelemetry);
                 
-                log("Handshake complete! Telemetry streams mapped.");
+                log("Handshake complete! Live telemetry map online.");
                 connectBtn.style.backgroundColor = "#2b8a3e";
                 connectBtn.innerText = "System Connected & Online";
 
@@ -343,12 +343,40 @@
             }
         });
 
-        // --- MIDI DATA ROUTING MATRIX ---
         function processIncomingTelemetry(event) {
             const dataView = event.target.value;
             if (dataView.byteLength < 3) return;
 
             const statusByte = dataView.getUint8(2);
             const command = statusByte & 0xF0;
-            const byte1 = dataView.getUint8(3); // Note or CC Number
-            const byte2 = dataView.getUint
+            const byte1 = dataView.getUint8(3); 
+            const byte2 = dataView.getUint8(4); 
+
+            if (command === 0x90 && byte2 > 0) {
+                const roll = Math.random();
+                if (roll > density) return; 
+                playPolysynthNote(byte1, byte2);
+            }
+            else if (command === 0xB0) {
+                const ccNumber = byte1;
+                const ccValue = byte2;
+
+                if (ccNumber === 85) {
+                    tempDisplay.textContent = ccValue + "°C";
+                } 
+                else if (ccNumber === 81) {
+                    rawDisplay.textContent = ccValue;
+                    rawDataHistory.push(ccValue);
+                    rawDataHistory.shift(); 
+                }
+            }
+        }
+
+        function log(text) {
+            const time = new Date().toLocaleTimeString();
+            statusLog.innerHTML += `<div>[${time}] ${text}</div>`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+    </script>
+</body>
+</html>
