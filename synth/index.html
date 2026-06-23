@@ -428,7 +428,6 @@
             initialize() {
                 try {
                     const pianoContainer = document.getElementById('piano-chroma-row');
-                    const scaleSelector = document.getElementById('scale-selector');
                     if (!pianoContainer) return;
 
                     pianoContainer.innerHTML = "";
@@ -440,26 +439,21 @@
                         const key = document.createElement('div');
                         key.id = 'piano-key-' + index;
 
-                        // Click Interaction
+                        // Set initial visual state based on SystemBus.customScaleMap
+                        this.updateKeyVisuals(key, index, isBlack);
+
                         key.addEventListener('click', () => {
                             SystemBus.customScaleMap[index] = !SystemBus.customScaleMap[index];
-                            if (SystemBus.customScaleMap[index]) {
-                                key.classList.remove('inactive');
-                            } else {
-                                key.classList.add('inactive');
-                            }
-                            if (scaleSelector) scaleSelector.value = "custom";
-                            log(`Scale Step Toggled -> ${name}: ${SystemBus.customScaleMap[index] ? 'ON' : 'OFF'}`);
+                            this.updateKeyVisuals(key, index, isBlack);
+                            document.getElementById('scale-selector').value = "custom";
                         });
 
-                        // Position and Class Assignment
                         if (isBlack) {
-                            key.className = 'black-key ' + (!SystemBus.customScaleMap[index] ? 'inactive' : '');
-                            const leftPos = (whiteKeyCount * whiteKeyWidth) - 4; // Shift half width left over the gap
-                            key.style.left = leftPos + '%';
-                            key.style.width = '8%';
+                            key.className = 'black-key';
+                            key.style.left = (whiteKeyCount * whiteKeyWidth) - 2.5 + '%';
+                            key.style.width = '5%';
                         } else {
-                            key.className = 'white-key ' + (!SystemBus.customScaleMap[index] ? 'inactive' : '');
+                            key.className = 'white-key';
                             key.style.left = (whiteKeyCount * whiteKeyWidth) + '%';
                             key.style.width = whiteKeyWidth + '%';
                             whiteKeyCount++;
@@ -472,6 +466,16 @@
                     });
                 } catch (e) { console.error("ScaleEngine Init Error:", e); }
             },
+
+            // New helper to keep the "Membership" (Blue) and "Activity" (Flash) states separate
+            updateKeyVisuals(key, index, isBlack) {
+                const isActive = SystemBus.customScaleMap[index];
+                key.style.backgroundColor = isActive ? (isBlack ? '#444' : '#fff') : '#222';
+                key.style.border = isActive ? '2px solid #2d7bd2' : '1px solid #000';
+            },
+
+            process(rawNote) { /* ... Same logic as before ... */ }
+        };
             
             process(rawNote) {
                 try {
@@ -624,10 +628,12 @@
                     const keyEl = document.getElementById('piano-key-' + finalChroma);
                     
                     if (keyEl) {
-                        keyEl.classList.add('playing');
-                        // Use a short timer to emulate the note visual release
+                        // Flash "Activity" Orange
+                        keyEl.style.backgroundColor = '#f0a050'; 
                         setTimeout(() => {
-                            keyEl.classList.remove('playing');
+                            // Revert to "Membership" Blue/White/Black color
+                            const isActive = SystemBus.customScaleMap[finalChroma];
+                            keyEl.style.backgroundColor = isActive ? (keyEl.classList.contains('black-key') ? '#444' : '#fff') : '#222';
                         }, 180);
                     }
                 } catch (e) {}
