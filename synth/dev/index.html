@@ -305,6 +305,51 @@
             background-color: orange !important; /* Update this if your specific flash was a different hex orange */
         }
 
+        /* ===========================================================
+         CUSTOM WHITE KEY INDICATOR PADDING (The "Pretty" Edges)
+         ===========================================================
+         This prevents the blue lines from sliding underneath the black keys
+         by using CSS math to recognize exactly which note in the scale it is!
+        */
+
+        /* C (1st note) - Right side is covered by C# */
+        .white-key:nth-child(12n + 1)::after, .w-key:nth-child(12n + 1)::after, .key:nth-child(12n + 1)::after { 
+            right: 35% !important; 
+        }
+
+        /* D (3rd note) - Both sides are covered by C# and D# */
+        .white-key:nth-child(12n + 3)::after, .w-key:nth-child(12n + 3)::after, .key:nth-child(12n + 3)::after { 
+            left: 35% !important; 
+            right: 35% !important; 
+        }
+
+        /* E (5th note) - Left side is covered by D# */
+        .white-key:nth-child(12n + 5)::after, .w-key:nth-child(12n + 5)::after, .key:nth-child(12n + 5)::after { 
+            left: 35% !important; 
+        }
+
+        /* F (6th note) - Right side is covered by F# */
+        .white-key:nth-child(12n + 6)::after, .w-key:nth-child(12n + 6)::after, .key:nth-child(12n + 6)::after { 
+            right: 35% !important; 
+        }
+
+        /* G (8th note) - Both sides are covered by F# and G# */
+        .white-key:nth-child(12n + 8)::after, .w-key:nth-child(12n + 8)::after, .key:nth-child(12n + 8)::after { 
+            left: 35% !important; 
+            right: 35% !important; 
+        }
+
+        /* A (10th note) - Both sides are covered by G# and A# */
+        .white-key:nth-child(12n + 10)::after, .w-key:nth-child(12n + 10)::after, .key:nth-child(12n + 10)::after { 
+            left: 35% !important; 
+            right: 35% !important; 
+        }
+
+        /* B (12th note) - Left side is covered by A# */
+        .white-key:nth-child(12n + 12)::after, .w-key:nth-child(12n + 12)::after, .key:nth-child(12n + 12)::after { 
+            left: 35% !important; 
+        }
+        
         
     </style>
 </head>
