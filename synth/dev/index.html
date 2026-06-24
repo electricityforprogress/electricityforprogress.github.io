@@ -254,35 +254,34 @@
             border: 1px solid #222;
         }
 
-        /* 1. Force unselected keys to keep their original high-contrast background and text colors */
-        .w-key.inactive {
-            background-color: #fff !important;
-            color: #222 !important;
+        /* 1. FORCE white keys to stay white and black keys to stay black when they are SELECTED (not inactive) */
+        .w-key:not(.inactive) {
+            background-color: #ffffff !important;
+            color: #222222 !important;
         }
-        .b-key.inactive {
-            background-color: #222 !important;
-            color: #fff !important; /* Forces text to remain crisp white */
+        .b-key:not(.inactive) {
+            background-color: #222222 !important;
+            color: #ffffff !important;
         }
 
-        /* 2. Position anchor for the absolute top indicator bar */
+        /* 2. Set up the positioning context for the top bar line */
         .w-key, .b-key {
             position: relative !important;
         }
 
-        /* 3. Build the horizontal indicator strip element at the top ceiling of every key */
+        /* 3. Build the horizontal indicator element at the absolute top ceiling edge of every key */
         .w-key::after, .b-key::after {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 6px; /* Thickness of the blue indicator line */
+            height: 6px; /* Thickness of the blue indicator strip */
             background: transparent;
-            transition: background-color 0.1s ease;
-            z-index: 5;
+            z-index: 10; /* Put it above the text labels and animations */
         }
 
-        /* 4. Turn ONLY the top line blue when the scale step is active (NOT inactive) */
+        /* 4. Illuminate ONLY the top line blue when the key is SELECTED (meaning it does NOT have .inactive) */
         .w-key:not(.inactive)::after, 
         .b-key:not(.inactive)::after {
             background-color: #2d7bd2 !important;
