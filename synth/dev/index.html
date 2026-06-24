@@ -281,12 +281,23 @@
             color: #fff !important;
         }
 
-        /* 4. Draw the 6px blue bar at the top edge of active scale notes using an inset shadow. 
-           This leaves all structural 'position' rules completely untouched. */
-        .white-key:not(.inactive), .black-key:not(.inactive),
-        .w-key:not(.inactive), .b-key:not(.inactive),
-        .key:not(.inactive) {
-            box-shadow: inset 0 6px 0 0 #2d7bd2 !important;
+/* 4. Draw the padded blue indicator using an independent ::after element.
+           This maps perfectly to your script's positioning without breaking the layout. */
+        .white-key:not(.inactive):not(.playing)::after, 
+        .black-key:not(.inactive):not(.playing)::after,
+        .w-key:not(.inactive):not(.playing)::after, 
+        .b-key:not(.inactive):not(.playing)::after,
+        .key:not(.inactive):not(.playing)::after {
+            content: '';
+            position: absolute;
+            top: 3px;      /* Padding from the top edge */
+            left: 3px;     /* Padding from the left edge */
+            right: 3px;    /* Padding from the right edge */
+            height: 5px;   /* Thickness of the blue bar */
+            background-color: #2d7bd2 !important;
+            border-radius: 2px; /* Softens the corners for a cleaner look */
+            z-index: 10;
+            pointer-events: none; /* Prevents the bar from blocking mouse clicks */
         }
 
         /* 5. Restore the orange flash priority so it overrides everything else when a note plays */
