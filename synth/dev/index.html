@@ -209,8 +209,7 @@
             font-weight: bold;
             font-size: 0.85rem;
         }
-        .white-key.inactive { background: #666; color: #333; }
-        .white-key.playing { background: #f0a050 !important; color: #111; }
+
         
         .black-key {
             height: 60%;
@@ -222,8 +221,7 @@
             z-index: 2;
             font-size: 0.75rem;
         }
-        .black-key.inactive { background: #333; color: #111; }
-        .black-key.playing { background: #d27b2d !important; color: white; }
+
         
         #piano-roll-canvas {
             background-color: #080808;
@@ -254,37 +252,39 @@
             border: 1px solid #222;
         }
 
-        /* 1. FORCE white keys to stay white and black keys to stay black when they are SELECTED (not inactive) */
-        .w-key:not(.inactive) {
-            background-color: #ffffff !important;
+        /* 1. Stop the grey effect: Keys keep their base colors ALWAYS */
+        .white-key.inactive {
+            background-color: #ffffff !important; 
             color: #222222 !important;
+            opacity: 1 !important;
         }
-        .b-key:not(.inactive) {
+        .black-key.inactive {
             background-color: #222222 !important;
-            color: #ffffff !important;
+            color: #ffffff !important; 
+            opacity: 1 !important;
         }
 
-        /* 2. Set up the positioning context for the top bar line */
-        .w-key, .b-key {
-            position: relative !important;
+        /* 2. Base positioning for the top blue bar */
+        .white-key, .black-key {
+            position: relative;
         }
 
-        /* 3. Build the horizontal indicator element at the absolute top ceiling edge of every key */
-        .w-key::after, .b-key::after {
+        /* 3. Build the blue indicator bar at the top edge of EVERY key (hidden by default) */
+        .white-key::after, .black-key::after {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 6px; /* Thickness of the blue indicator strip */
-            background: transparent;
-            z-index: 10; /* Put it above the text labels and animations */
+            height: 6px; 
+            background-color: transparent; /* Invisible when inactive */
+            z-index: 10; 
         }
 
-        /* 4. Illuminate ONLY the top line blue when the key is SELECTED (meaning it does NOT have .inactive) */
-        .w-key:not(.inactive)::after, 
-        .b-key:not(.inactive)::after {
-            background-color: #2d7bd2 !important;
+        /* 4. Show the blue bar ONLY when the key is active (NOT inactive) */
+        .white-key:not(.inactive)::after, 
+        .black-key:not(.inactive)::after {
+            background-color: #2d7bd2 !important; 
         }
 
         
