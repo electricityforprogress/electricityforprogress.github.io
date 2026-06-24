@@ -252,39 +252,46 @@
             border: 1px solid #222;
         }
 
-        /* 1. Stop the grey effect: Keys keep their base colors ALWAYS */
-        .white-key.inactive {
-            background-color: #ffffff !important; 
-            color: #222222 !important;
-            opacity: 1 !important;
-        }
-        .black-key.inactive {
-            background-color: #222222 !important;
-            color: #ffffff !important; 
+        /* 1. Stop the fading effect on inactive keys */
+        .white-key.inactive, .black-key.inactive, 
+        .w-key.inactive, .b-key.inactive, 
+        .key.inactive {
             opacity: 1 !important;
         }
 
-        /* 2. Base positioning for the top blue bar */
-        .white-key, .black-key {
-            position: relative;
+        /* 2. Keep base colors when inactive (but yield to the playing state) */
+        .white-key:not(.playing).inactive, .w-key:not(.playing).inactive {
+            background-color: #fff !important;
+            color: #222 !important;
+        }
+        
+        .black-key:not(.playing).inactive, .b-key:not(.playing).inactive {
+            background-color: #222 !important;
+            color: #fff !important;
         }
 
-        /* 3. Build the blue indicator bar at the top edge of EVERY key (hidden by default) */
-        .white-key::after, .black-key::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 6px; 
-            background-color: transparent; /* Invisible when inactive */
-            z-index: 10; 
+        /* 3. Force base colors when ACTIVE (yield to playing state) */
+        .white-key:not(.playing):not(.inactive), .w-key:not(.playing):not(.inactive) {
+            background-color: #fff !important;
+            color: #222 !important;
         }
 
-        /* 4. Show the blue bar ONLY when the key is active (NOT inactive) */
-        .white-key:not(.inactive)::after, 
-        .black-key:not(.inactive)::after {
-            background-color: #2d7bd2 !important; 
+        .black-key:not(.playing):not(.inactive), .b-key:not(.playing):not(.inactive) {
+            background-color: #222 !important;
+            color: #fff !important;
+        }
+
+        /* 4. Draw the 6px blue bar at the top edge of active scale notes using an inset shadow. 
+           This leaves all structural 'position' rules completely untouched. */
+        .white-key:not(.inactive), .black-key:not(.inactive),
+        .w-key:not(.inactive), .b-key:not(.inactive),
+        .key:not(.inactive) {
+            box-shadow: inset 0 6px 0 0 #2d7bd2 !important;
+        }
+
+        /* 5. Restore the orange flash priority so it overrides everything else when a note plays */
+        .playing {
+            background-color: orange !important; /* Update this if your specific flash was a different hex orange */
         }
 
         
