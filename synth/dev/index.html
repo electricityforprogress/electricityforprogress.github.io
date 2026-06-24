@@ -226,6 +226,40 @@
         .black-key.inactive { background: #333; color: #111; }
         .black-key.playing { background: #d27b2d !important; color: white; }
 
+/* 1. Prevent the key backgrounds from turning dark grey/opaque when inactive */
+.white-key.inactive, .black-key.inactive {
+    opacity: 1 !important;
+    background-color: #fff !important; /* Keep white keys white */
+}
+.black-key.inactive {
+    background-color: #222 !important; /* Keep black keys black */
+}
+
+/* 2. Turn on relative positioning so the child element highlights align inside the keys */
+.white-key, .black-key {
+    position: relative !important;
+}
+
+/* 3. Build a centered, horizontal indicator strip element near the bottom of every key */
+.white-key::after, .black-key::after {
+    content: '';
+    position: absolute;
+    bottom: 8px;
+    left: 15%;
+    right: 15%;
+    height: 6px;
+    background: transparent;
+    border-radius: 3px;
+    transition: background 0.1s ease;
+    z-index: 2;
+}
+
+/* 4. Rather than coloring the full key, turn ONLY the center section blue when selected */
+.white-key:not(.inactive)::after, .black-key:not(.inactive)::after {
+    background: #2d7bd2 !important; /* Light blue accent */
+}
+        
+        
         #piano-roll-canvas {
             background-color: #080808;
             border: 1px solid #444;
