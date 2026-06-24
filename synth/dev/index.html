@@ -356,12 +356,12 @@
 <body>
 
     <div class="version-stamp">
-        <strong>BUILD v0.6.4-alpha</strong><br>
-        2026-06-23
+        <strong>BUILD v0.6.5-alpha</strong><br>
+        2026-06-24
     </div>
 
     <h1>Electricity for Progress: Biodata Sonification</h1>
-    <p>Isolated wireless BLE-MIDI translation platform and visual synthesizer matrix.</p>
+    <p>Data Audio Synthesis</p>
 
     <div class="hardware-gate-box">
         <h2 style="margin-top: 0;">1. Hardware Connection</h2>
@@ -445,7 +445,20 @@
             </div>
             <div>
                 <label for="root-slider">Scale Root Note Selection: <span id="root-val">C</span></label>
-                <input type="range" id="root-slider" min="0" max="11" value="0">
+                <select id="scale-root" onchange="updateScaleRoot(this.value)">
+                    <option value="0">Root: C</option>
+                    <option value="1">Root: C#</option>
+                    <option value="2">Root: D</option>
+                    <option value="3">Root: D#</option>
+                    <option value="4">Root: E</option>
+                    <option value="5">Root: F</option>
+                    <option value="6">Root: F#</option>
+                    <option value="7">Root: G</option>
+                    <option value="8">Root: G#</option>
+                    <option value="9">Root: A</option>
+                    <option value="10">Root: A#</option>
+                    <option value="11">Root: B</option>
+                </select>
             </div>
         </div>
 
@@ -971,10 +984,21 @@
                         log(`External routing schema set to: ${SystemBus.midiRoutingMode.toUpperCase()}`);
                     });
 
-                    document.getElementById('root-slider')?.addEventListener('input', (e) => {
-                        SystemBus.rootOffset = parseInt(e.target.value);
-                        const label = document.getElementById('root-val');
-                        if (label) label.textContent = SystemBus.noteNames[SystemBus.rootOffset];
+                    // Scale Root Logic
+                    document.getElementById('scale-root').addEventListener('change', (e) => {
+                        const root = parseInt(e.target.value, 10);
+                        SystemBus.scaleRoot = root;
+    
+                        // Refresh the keyboard display
+                        for (let i = 0; i < 12; i++) {
+                            const key = document.getElementById('piano-key-' + i);
+                            if (key) {
+                                // Your logic here: check if (i - root + 12) % 12 is in your active scale
+                                // If active, remove 'inactive', else add 'inactive'
+                                const isScaleNote = checkIsScaleNote(i, root, SystemBus.scaleSelector.value);
+                                key.classList.toggle('inactive', !isScaleNote);
+                            }
+                        }    
                     });
 
                     document.getElementById('scale-selector')?.addEventListener('change', (e) => {
