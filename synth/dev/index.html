@@ -534,6 +534,20 @@
         // MODULE 1: MUSICAL SCALE & PIANO UI ENGINE
         // ----------------------------------------------------------
 
+        function updateScaleRoot(rootIndex) {
+                const root = parseInt(rootIndex, 10);
+                SystemBus.scaleRoot = root;
+
+                // Recalculate based on current scale mode (assuming 'major' for now, adapt to your 'scaleSelector.value')
+                const pattern = [true, false, true, false, true, true, false, true, false, true, false, true];
+    
+                // Shift the pattern
+                SystemBus.customScaleMap = pattern.map((_, i) => pattern[(i - root + 12) % 12]);
+
+                // Force UI Refresh
+                refreshKeyboard();
+            }
+        
         function refreshKeyboard() {
             for (let i = 0; i < 12; i++) {
                 const key = document.getElementById('piano-key-' + i);
