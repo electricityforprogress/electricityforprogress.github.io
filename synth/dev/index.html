@@ -535,6 +535,20 @@
         // ----------------------------------------------------------
         // MODULE 1: MUSICAL SCALE & PIANO UI ENGINE
         // ----------------------------------------------------------
+
+        function refreshKeyboard() {
+            for (let i = 0; i < 12; i++) {
+                const key = document.getElementById('piano-key-' + i);
+                if (key) {
+                    // Check if this key's index is active in the current SystemBus map
+                    const isActive = SystemBus.customScaleMap[i];
+                    key.classList.toggle('inactive', !isActive);
+                }
+            }
+        }
+
+        
+        
         const ScaleEngine = {
             initialize() {
                 try {
@@ -988,17 +1002,7 @@
                     document.getElementById('scale-root').addEventListener('change', (e) => {
                         const root = parseInt(e.target.value, 10);
                         SystemBus.scaleRoot = root;
-    
-                        // Refresh the keyboard display
-                        for (let i = 0; i < 12; i++) {
-                            const key = document.getElementById('piano-key-' + i);
-                            if (key) {
-                                // Your logic here: check if (i - root + 12) % 12 is in your active scale
-                                // If active, remove 'inactive', else add 'inactive'
-                                const isScaleNote = checkIsScaleNote(i, root, SystemBus.scaleSelector.value);
-                                key.classList.toggle('inactive', !isScaleNote);
-                            }
-                        }    
+                        refreshKeyboard();    
                     });
 
                     document.getElementById('scale-selector')?.addEventListener('change', (e) => {
