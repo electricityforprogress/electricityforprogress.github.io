@@ -1,4 +1,3 @@
-//Biodata Synth engine v0.6.2 mostly functional ;)
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,7 +23,7 @@
             font-size: 0.75rem;
             padding: 0.4rem 0.75rem;
             border-radius: 4px;
-            background-color: hsla(280, 80%, 25%, 0.5); /* v0.6.2 Piano UI & IAC Auto-Route */
+            background-color: hsla(280, 80%, 25%, 0.5);
             border: 1px solid hsl(280, 80%, 45%);
             color: hsl(280, 95%, 75%);
             text-align: right;
@@ -255,44 +254,47 @@
             border: 1px solid #222;
         }
 
-        /* 1. Prevent the key backgrounds from turning dark grey/opaque when inactive */
-.white-key.inactive, .black-key.inactive {
-    opacity: 1 !important;
-    background-color: #fff !important; /* Keep white keys white */
-}
-.black-key.inactive {
-    background-color: #222 !important; /* Keep black keys black */
-}
+        /* 1. Force unselected keys to keep their original high-contrast background and text colors */
+        .w-key.inactive {
+            background-color: #fff !important;
+            color: #222 !important;
+        }
+        .b-key.inactive {
+            background-color: #222 !important;
+            color: #fff !important; /* Forces text to remain crisp white */
+        }
 
-/* 2. Turn on relative positioning so the child element highlights align inside the keys */
-.white-key, .black-key {
-    position: relative !important;
-}
+        /* 2. Position anchor for the absolute top indicator bar */
+        .w-key, .b-key {
+            position: relative !important;
+        }
 
-/* 3. Build a centered, horizontal indicator strip element near the bottom of every key */
-.white-key::after, .black-key::after {
-    content: '';
-    position: absolute;
-    bottom: 8px;
-    left: 15%;
-    right: 15%;
-    height: 6px;
-    background: transparent;
-    border-radius: 3px;
-    transition: background 0.1s ease;
-    z-index: 2;
-}
+        /* 3. Build the horizontal indicator strip element at the top ceiling of every key */
+        .w-key::after, .b-key::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px; /* Thickness of the blue indicator line */
+            background: transparent;
+            transition: background-color 0.1s ease;
+            z-index: 5;
+        }
 
-/* 4. Rather than coloring the full key, turn ONLY the center section blue when selected */
-.white-key:not(.inactive)::after, .black-key:not(.inactive)::after {
-    background: #2d7bd2 !important; /* Light blue accent */
-}
+        /* 4. Turn ONLY the top line blue when the scale step is active (NOT inactive) */
+        .w-key:not(.inactive)::after, 
+        .b-key:not(.inactive)::after {
+            background-color: #2d7bd2 !important;
+        }
+
+        
     </style>
 </head>
 <body>
 
     <div class="version-stamp">
-        <strong>BUILD v0.6.2-alpha</strong><br>
+        <strong>BUILD v0.6.4-alpha</strong><br>
         2026-06-23
     </div>
 
