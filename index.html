@@ -32,12 +32,12 @@ body, html {
             pointer-events: none;
         }
 
-        header {
-            background-color: rgba(10, 10, 10, 0.85); /* Slightly transparent */
-            padding: 2rem 1rem;
-            text-align: center;
-            position: relative;
-        }
+header {
+    background-color: transparent; /* Now the stars will flow right behind the logo */
+    padding: 2rem 1rem;
+    text-align: center;
+    position: relative;
+}
         header img {
             max-width: 100%;
             height: auto;
@@ -279,7 +279,7 @@ body, html {
                     ctx.fillStyle = "rgba(255, 255, 255, " + depthAlpha + ")";
                     
                     // Locked at a highly visible 3x3 pixel star size
-                    ctx.fillRect(px, py, 3, 3);
+                    ctx.fillRect(px, py, 5, 5);
                 }
             }
             requestAnimationFrame(renderFrame);
