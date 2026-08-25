@@ -6,12 +6,12 @@
     <title>Electricity for Progress</title>
     <style>
         :root {
-            --bg-color: #262626;
+            --bg-color: #050505; /* Updated to match starfield fallback */
             --text-color: #e5e5e5;
             --accent-color: #9adffd;
-            --content-bg: #1a1a1a;
+            --content-bg: rgba(26, 26, 26, 0.9); /* Made slightly transparent so stars peek through */
         }
-        body {
+        body, html {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.8;
             margin: 0;
@@ -19,22 +19,37 @@
             background-color: var(--bg-color);
             color: var(--text-color);
         }
+        
+        /* Starfield Canvas CSS */
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            pointer-events: none;
+        }
+
         header {
-            background-color: #0a0a0a;
+            background-color: rgba(10, 10, 10, 0.85); /* Slightly transparent */
             padding: 2rem 1rem;
             text-align: center;
+            position: relative;
         }
         header img {
             max-width: 100%;
             height: auto;
         }
         nav {
-            background-color: #111;
+            background-color: rgba(17, 17, 17, 0.85); /* Slightly transparent */
             display: flex;
             justify-content: center;
             padding: 1rem;
             flex-wrap: wrap;
             gap: 1rem;
+            position: relative;
         }
         nav a {
             color: var(--text-color);
@@ -54,6 +69,7 @@
             background: var(--content-bg);
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            position: relative;
         }
         h1, h2, h3 {
             color: var(--accent-color);
@@ -83,10 +99,14 @@
             padding: 2rem;
             font-size: 0.9rem;
             color: #c1c1c1;
+            position: relative;
         }
     </style>
 </head>
 <body>
+
+    <!-- Integrated Canvas -->
+    <canvas id="starfieldCanvas"></canvas>
 
     <header>
         <a href="/">
@@ -169,14 +189,14 @@
             <p>Below is an image of MIDI data over a 16 hour session with a Monstera on top and a trusty Snake Plant at the bottom. You can see the ‘waves’ and changes in the overall pitch, density, and distribution of the notes. This type of process is really hard to ‘hear’ during a brief performance, and if the performance is at the wrong time of day (or in the wrong environment) there might not be any notes at all! Plants play a long-game and the patient are rewarded.</p>
 
             <figure>
-                <img src="/images/BiodataMIDI_example_long-1-1024x476.png" alt="16 Hour Biodata Sonification session Monstera and Snake Plant">
+                <img src="https://web.archive.org/web/20240707060428im_/https://electricityforprogress.com/wp-content/uploads/2021/06/BiodataMIDI_example_long-1-1024x476.png" alt="16 Hour Biodata Sonification session Monstera and Snake Plant">
                 <figcaption>16 Hour Biodata Sonification session Monstera and Snake Plant</figcaption>
             </figure>
 
             <p>Below you will find an image showing raw MIDI Biodata which was recorded over multiple days from the Snake Plant sitting on my office desk. Laid out in a row the colored Clips show examples of MIDI data from different times of day. You can easily see by the distribution of notes in each Clip that the overall pitch or root note varies throughout the day, while the structure of the biodata signal is similar in each segment.</p>
 
             <figure>
-                <img src="/images/Biodata_Clips-1-1024x169.png" alt="MIDI data captured from Snake Plant over multiple days">
+                <img src="https://web.archive.org/web/20240707060428im_/https://electricityforprogress.com/wp-content/uploads/2020/08/Biodata_Clips-1-1024x169.png" alt="MIDI data captured from Snake Plant over multiple days">
                 <figcaption>MIDI data captured from Snake Plant over multiple days</figcaption>
             </figure>
 
@@ -211,5 +231,61 @@
         <p>Electricity for Progress</p>
     </footer>
 
+    <!-- Integrated Starfield JS -->
+    <script>
+        const canvas = document.getElementById("starfieldCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const STAR_COUNT = 400;
+        const FLIGHT_SPEED = 3.0; // Warp speed velocity
+
+        let w = canvas.width = window.innerWidth;
+        let h = canvas.height = window.innerHeight;
+
+        let stars = [];
+        for (let i = 0; i < STAR_COUNT; i++) {
+            stars.push({
+                x: Math.random() * w - w / 2,
+                y: Math.random() * h - h / 2,
+                z: Math.random() * w
+            });
+        }
+
+        window.addEventListener("resize", () => {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        });
+
+        function renderFrame() {
+            // Paint over the frame cleanly instead of erasing it, preventing the Plash grey screen bug
+            ctx.fillStyle = "#050505";
+            ctx.fillRect(0, 0, w, h);
+
+            for (let i = 0; i < STAR_COUNT; i++) {
+                let star = stars[i];
+                star.z -= FLIGHT_SPEED;
+
+                if (star.z <= 0) {
+                    star.x = Math.random() * w - w / 2;
+                    star.y = Math.random() * h - h / 2;
+                    star.z = w;
+                }
+
+                const px = (star.x / star.z) * w + w / 2;
+                const py = (star.y / star.z) * h + h / 2;
+
+                if (px >= 0 && px < w && py >= 0 && py < h) {
+                    const depthAlpha = 1 - (star.z / w);
+                    ctx.fillStyle = "rgba(255, 255, 255, " + depthAlpha + ")";
+                    
+                    // Locked at a highly visible 3x3 pixel star size
+                    ctx.fillRect(px, py, 3, 3);
+                }
+            }
+            requestAnimationFrame(renderFrame);
+        }
+
+        renderFrame();
+    </script>
 </body>
 </html>
