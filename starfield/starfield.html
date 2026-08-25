@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Starfield Simulation</title>
+    <link rel="icon" href="data:,">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* Using a standard fallback color so Chrome doesn't break */
+            background-color: #050505; 
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="starfieldCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById("starfieldCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const STAR_COUNT = 400;
+        const FLIGHT_SPEED = 3.0; // Warp speed velocity
+
+        let w = canvas.width = window.innerWidth;
+        let h = canvas.height = window.innerHeight;
+
+        let stars = [];
+        for (let i = 0; i < STAR_COUNT; i++) {
+            stars.push({
+                x: Math.random() * w - w / 2,
+                y: Math.random() * h - h / 2,
+                z: Math.random() * w
+            });
+        }
+
+        window.addEventListener("resize", () => {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        });
+
+        function renderFrame() {
+            // Paint over the frame cleanly instead of erasing it, preventing the Plash grey screen bug
+            ctx.fillStyle = "#050505";
+            ctx.fillRect(0, 0, w, h);
+
+            for (let i = 0; i < STAR_COUNT; i++) {
+                let star = stars[i];
+                star.z -= FLIGHT_SPEED;
+
+                if (star.z <= 0) {
+                    star.x = Math.random() * w - w / 2;
+                    star.y = Math.random() * h - h / 2;
+                    star.z = w;
+                }
+
+                const px = (star.x / star.z) * w + w / 2;
+                const py = (star.y / star.z) * h + h / 2;
+
+                if (px >= 0 && px < w && py >= 0 && py < h) {
+                    const depthAlpha = 1 - (star.z / w);
+                    ctx.fillStyle = "rgba(255, 255, 255, " + depthAlpha + ")";
+                    
+                    // Locked at a highly visible 3x3 pixel star size
+                    ctx.fillRect(px, py, 3, 3);
+                }
+            }
+            requestAnimationFrame(renderFrame);
+        }
+
+        renderFrame();
+    </script>
+</body>
+</html>
