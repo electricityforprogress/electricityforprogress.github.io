@@ -1,44 +1,200 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>3D Starfield Simulation</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Starfield Simulation - Electricity for Progress</title>
     <link rel="icon" href="data:,">
     <style>
+        :root {
+            --text-color: #e5e5e5;
+            --accent-color: #9adffd;
+        }
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
             overflow: hidden;
-            /* Using a standard fallback color so Chrome doesn't break */
-            background-color: #050505; 
+            background-color: #050505;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
         canvas {
             display: block;
             width: 100vw;
             height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Back to Home Link (Optional convenience link in top-left) */
+        .home-link {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: var(--text-color);
+            background: rgba(10, 10, 10, 0.7);
+            border: 1px solid #333;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-family: monospace;
+            font-size: 0.85rem;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .home-link:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        /* Starfield Control Panel Styling */
+        #starfield-controls-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(10, 10, 10, 0.85);
+            color: var(--accent-color);
+            border: 1px solid var(--accent-color);
+            padding: 0.6rem 1.2rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+        }
+        #starfield-controls-toggle:hover {
+            background: var(--accent-color);
+            color: #000;
+        }
+        #starfield-panel {
+            position: fixed;
+            bottom: 75px;
+            right: 20px;
+            background: rgba(15, 15, 15, 0.95);
+            border: 1px solid #333;
+            padding: 1.2rem;
+            border-radius: 8px;
+            width: 260px;
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            box-shadow: 0 8px 25px rgba(0,0,0,0.8);
+            font-size: 0.85rem;
+            font-family: monospace;
+            color: var(--text-color);
+            backdrop-filter: blur(8px);
+        }
+        #starfield-panel.active {
+            display: block;
+        }
+        .control-group {
+            margin-bottom: 0.9rem;
+        }
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.3rem;
+        }
+        .control-group input[type="range"], .control-group select {
+            width: 100%;
+            cursor: pointer;
+        }
+        .control-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .control-buttons button {
+            flex: 1;
+            background: #222;
+            color: var(--text-color);
+            border: 1px solid #444;
+            padding: 0.4rem;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .control-buttons button:hover {
+            border-color: var(--accent-color);
         }
     </style>
 </head>
 <body>
+
+    <!-- Optional: Quick escape hatch back to the main site -->
+    <a href="/" class="home-link">&larr; Back to Home</a>
+
+    <!-- The Starfield Canvas -->
     <canvas id="starfieldCanvas"></canvas>
+
+    <!-- Interactive Starfield Controls UI -->
+    <button id="starfield-controls-toggle" onclick="toggleControls()">[ ⚙ Starfield FX ]</button>
+    <div id="starfield-panel">
+        <div class="control-group">
+            <label>Warp Speed: <span id="speed-val">3.0</span></label>
+            <input type="range" id="speedRange" min="0.2" max="15" step="0.2" value="3.0" oninput="updateSpeed(this.value)">
+        </div>
+        <div class="control-group">
+            <label>Star Count: <span id="count-val">400</span></label>
+            <input type="range" id="countRange" min="50" max="1000" step="50" value="400" oninput="updateCount(this.value)">
+        </div>
+        <div class="control-group">
+            <label>Star Size: <span id="size-val">5</span>px</label>
+            <input type="range" id="sizeRange" min="1" max="12" step="1" value="5" oninput="updateSize(this.value)">
+        </div>
+        <div class="control-group">
+            <label>Color Profile:</label>
+            <select id="colorScheme" onchange="updateColorScheme(this.value)">
+                <option value="white">Classic White</option>
+                <option value="cyan">Electric Cyan (#9adffd)</option>
+                <option value="nebula">RGB Nebula Mix</option>
+            </select>
+        </div>
+        <div class="control-buttons">
+            <button id="pauseBtn" onclick="togglePause()">Pause</button>
+            <button onclick="resetStars()">Reset</button>
+        </div>
+    </div>
+
+    <!-- Starfield Simulation & Control Script -->
     <script>
         const canvas = document.getElementById("starfieldCanvas");
         const ctx = canvas.getContext("2d");
 
-        const STAR_COUNT = 400;
-        const FLIGHT_SPEED = 3.0; // Warp speed velocity
+        let starCount = 400;
+        let flightSpeed = 3.0; 
+        let starSize = 5;
+        let colorScheme = "white";
+        let isPaused = false;
+        let animationFrameId = null;
 
         let w = canvas.width = window.innerWidth;
         let h = canvas.height = window.innerHeight;
 
         let stars = [];
-        for (let i = 0; i < STAR_COUNT; i++) {
-            stars.push({
-                x: Math.random() * w - w / 2,
-                y: Math.random() * h - h / 2,
-                z: Math.random() * w
-            });
+        
+        function initStars() {
+            stars = [];
+            for (let i = 0; i < starCount; i++) {
+                stars.push({
+                    x: Math.random() * w - w / 2,
+                    y: Math.random() * h - h / 2,
+                    z: Math.random() * w,
+                    color: getRandomColor()
+                });
+            }
+        }
+
+        function getRandomColor() {
+            if (colorScheme === "cyan") return "#9adffd";
+            if (colorScheme === "nebula") {
+                const colors = ["#9adffd", "#ff9ae1", "#9affb5", "#ffffff"];
+                return colors[Math.floor(Math.random() * colors.length)];
+            }
+            return "#ffffff"; // Classic white
         }
 
         window.addEventListener("resize", () => {
@@ -47,18 +203,20 @@
         });
 
         function renderFrame() {
-            // Paint over the frame cleanly instead of erasing it, preventing the Plash grey screen bug
+            if (isPaused) return;
+
             ctx.fillStyle = "#050505";
             ctx.fillRect(0, 0, w, h);
 
-            for (let i = 0; i < STAR_COUNT; i++) {
+            for (let i = 0; i < stars.length; i++) {
                 let star = stars[i];
-                star.z -= FLIGHT_SPEED;
+                star.z -= flightSpeed;
 
                 if (star.z <= 0) {
                     star.x = Math.random() * w - w / 2;
                     star.y = Math.random() * h - h / 2;
                     star.z = w;
+                    star.color = getRandomColor();
                 }
 
                 const px = (star.x / star.z) * w + w / 2;
@@ -66,15 +224,74 @@
 
                 if (px >= 0 && px < w && py >= 0 && py < h) {
                     const depthAlpha = 1 - (star.z / w);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + depthAlpha + ")";
                     
-                    // Locked at a highly visible 3x3 pixel star size
-                    ctx.fillRect(px, py, 3, 3);
+                    if (colorScheme === "white") {
+                        ctx.fillStyle = "rgba(255, 255, 255, " + depthAlpha + ")";
+                    } else if (colorScheme === "cyan") {
+                        ctx.fillStyle = "rgba(154, 223, 253, " + depthAlpha + ")";
+                    } else {
+                        ctx.fillStyle = star.color;
+                    }
+                    
+                    ctx.fillRect(px, py, starSize, starSize);
                 }
             }
-            requestAnimationFrame(renderFrame);
+            animationFrameId = requestAnimationFrame(renderFrame);
         }
 
+        // Control Panel Handlers
+        function toggleControls() {
+            document.getElementById("starfield-panel").classList.toggle("active");
+        }
+
+        function updateSpeed(val) {
+            flightSpeed = parseFloat(val);
+            document.getElementById("speed-val").innerText = val;
+        }
+
+        function updateCount(val) {
+            starCount = parseInt(val);
+            document.getElementById("count-val").innerText = val;
+            initStars();
+        }
+
+        function updateSize(val) {
+            starSize = parseInt(val);
+            document.getElementById("size-val").innerText = val;
+        }
+
+        function updateColorScheme(val) {
+            colorScheme = val;
+            initStars();
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById("pauseBtn").innerText = isPaused ? "Resume" : "Pause";
+            if (!isPaused) {
+                renderFrame();
+            }
+        }
+
+        function resetStars() {
+            flightSpeed = 3.0;
+            starCount = 400;
+            starSize = 5;
+            colorScheme = "white";
+            
+            document.getElementById("speedRange").value = 3.0;
+            document.getElementById("speed-val").innerText = "3.0";
+            document.getElementById("countRange").value = 400;
+            document.getElementById("count-val").innerText = "400";
+            document.getElementById("sizeRange").value = 5;
+            document.getElementById("size-val").innerText = "5";
+            document.getElementById("colorScheme").value = "white";
+            
+            initStars();
+        }
+
+        // Initialize and run
+        initStars();
         renderFrame();
     </script>
 </body>
