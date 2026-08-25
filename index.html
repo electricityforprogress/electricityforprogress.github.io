@@ -183,7 +183,7 @@
     <canvas id="starfieldCanvas"></canvas>
 
     <!-- Interactive Starfield Controls UI -->
-    <button id="starfield-controls-toggle" onclick="toggleControls()">[ ⚙ Starfield FX ]</button>
+    <button id="starfield-controls-toggle" onclick="toggleControls()">[Starfield]</button>
     <div id="starfield-panel">
         <div class="control-group">
             <label>Warp Speed: <span id="speed-val">3.0</span></label>
@@ -200,9 +200,9 @@
         <div class="control-group">
             <label>Color Profile:</label>
             <select id="colorScheme" onchange="updateColorScheme(this.value)">
-                <option value="white">Classic White</option>
-                <option value="cyan">Electric Cyan (#9adffd)</option>
-                <option value="nebula">RGB Nebula Mix</option>
+                <option value="white">Classic</option>
+                <option value="cyan">Blue</option>
+                <option value="nebula">Rainbow</option>
             </select>
         </div>
         <div class="control-buttons">
@@ -366,7 +366,35 @@
         function getRandomColor() {
             if (colorScheme === "cyan") return "#9adffd";
             if (colorScheme === "nebula") {
-                const colors = ["#9adffd", "#ff9ae1", "#9affb5", "#ffffff"];
+               // const colors = ["#9adffd", "#ff9ae1", "#9affb5", "#ffffff"];
+               const colors =  [   //["#9adffd", "#ff9ae1", "#9affb5", "#ffffff"];
+                    // Pinks & Violets
+                      "#ff9ae1", // Soft Bubblegum Pink
+                      "#ff6b81", // Coral Rose
+                      "#d980fa", // Orchid Purple
+                      "#c56cf0", // Deep Lavender
+  
+                  // Blues & Cyans
+                      "#9adffd", // Light Ice Blue
+                      "#54a0ff", // Electric Blue
+                      "#48dbfb", // Bright Sky Blue
+                      "#0abde3", // Deep Cyan
+  
+                  // Greens & Teals
+                      "#9affb5", // Mint Green
+                      "#1dd1a1", // Emerald Mint
+                      "#10ac84", // Deep Teal
+  
+                  // Yellows, Oranges & Warm Tones
+                      "#feca57", // Bright Yellow
+                      "#ff9f43", // Warm Amber
+                      "#ff6b6b", // Vibrant Red-Orange
+  
+                  // Stellar Whites & Neutrals
+                      "#ffffff", // Pure White
+                      "#f1f2f6", // Soft Cool White
+                      "#ffeaa7"  // Warm Starlight Yellow
+                    ];
                 return colors[Math.floor(Math.random() * colors.length)];
             }
             return "#ffffff"; // Classic white
