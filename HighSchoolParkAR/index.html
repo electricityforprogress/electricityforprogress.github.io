@@ -231,7 +231,7 @@ function toggleViewMode() {
       const container = document.getElementById('ar-container');
       
       // Replaced the procedural calibration tower with your HStest.glb model
-      container.innerHTML = `
+ /*     container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
           <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
           
@@ -240,8 +240,9 @@ function toggleViewMode() {
           </a-entity>
         </a-scene>
       `;
+  */
       // MASSIVE CALIBRATION TOWER: 20 meters wide, 50 meters tall with multi-colored sections
-  /*    container.innerHTML = `
+     container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
           <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
           
@@ -258,7 +259,7 @@ function toggleViewMode() {
             <a-box position="0 47 0" width="8" height="14" depth="8" material="color: #FFFF00; side: double"></a-box>
           </a-entity>
         </a-scene>
-      `;  */
+      `;  
     }
 
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
