@@ -209,33 +209,33 @@
       return R * c;
     }
 
-    function renderParkAR() {
+function renderParkAR() {
       document.getElementById('loading').style.display = 'none';
       const container = document.getElementById('container');
       
       container.innerHTML = `
-      <a-scene 
+        <a-scene 
           embedded 
           arjs="sourceType: webcam; debugUIEnabled: false;" 
           vr-mode-ui="enabled: false">
-          <!-- Only update GPS position if the user moves 5 meters or more -->
+          
+          <!-- The updated camera with the 5-meter anti-jitter threshold -->
           <a-camera gps-camera="gpsMinDistance: 5" far="2000"></a-camera>
           
-          <!-- 1. The Parent: Locks to the GPS coordinate -->
+          <!-- The Parent: Locks to the GPS coordinate -->
           <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
             
-            <!-- 2. The Child: Handles the 3D model, scale, height, and rotation -->
+            <!-- The Child: Handles the 3D model, scale, and position -->
             <a-entity gltf-model="url(${MODEL_URL})"
                       scale="10 10 10"
                       rotation="0 0 0"
-                      position="0 -1.6 0">
+                      position="0 -1.6 -10">
             </a-entity>
 
           </a-entity>
         </a-scene>
       `;
     }
-
     function renderOffsiteFallback() {
       document.getElementById('loading').style.display = 'none';
       const container = document.getElementById('container');
