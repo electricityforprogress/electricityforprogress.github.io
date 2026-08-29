@@ -114,12 +114,13 @@
       panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
     }
 
-    function toggleViewMode() {
+function toggleViewMode() {
       const staticView = document.getElementById('3d-container');
       const arContainer = document.getElementById('ar-container');
       const centerLaunch = document.getElementById('center-launch');
       const arVideo = document.getElementById('arjs-video'); 
       const toggleBtn = document.getElementById('view-toggle');
+      const modelViewer = document.querySelector('model-viewer');
 
       if (currentMode !== '3D') {
         currentMode = '3D';
@@ -128,6 +129,12 @@
         centerLaunch.style.display = 'none'; 
         if (arVideo) arVideo.style.display = 'none';
         toggleBtn.innerText = "View Live AR";
+        
+        // Force model-viewer to calculate its canvas size now that it is visible
+        if (modelViewer) {
+          modelViewer.style.display = 'block';
+          modelViewer.updateHotspots();
+        }
         
         const arScene = document.querySelector('a-scene');
         if (arScene) arScene.pause();
@@ -187,8 +194,11 @@
             const acc = position.coords.accuracy;
             
             // TIP: Change parkCenter to testLocation here if you want to anchor this massive tower to your yard for testing!
-            const targetLat = APP_CONFIG.parkCenter.lat;
-            const targetLng = APP_CONFIG.parkCenter.lng;
+            //const targetLat = APP_CONFIG.parkCenter.lat;
+            //const targetLng = APP_CONFIG.parkCenter.lng;
+//testLocation
+            const targetLat = APP_CONFIG.testLocation.lat;
+            const targetLng = APP_CONFIG.testLocation.lng;
             
             const distance = getDistanceInMeters(lat, lng, targetLat, targetLng);
 
