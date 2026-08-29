@@ -91,9 +91,9 @@
     <a href="mailto:CHS_AR@hspark.org?subject=Archive%20Submission" class="btn btn-primary btn-large" style="display: block; text-align: center;">Send Email Submission</a>
   </div>
 
-  <script>
+<script>
     const APP_CONFIG = {
-      version: "3.0.0",
+      version: "3.0.1",
       parkCenter: { lat: 40.071238, lng: -75.124073 },
       farPlane: 5000 
     };
@@ -102,6 +102,7 @@
     let currentHeading = 0;
     let userLat = 0;
     let userLng = 0;
+    let targetLocked = false;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
@@ -189,7 +190,7 @@
           (error) => {
             statusObj.innerText = `GPS Error: ${error.message}`;
           },
-          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 }
         );
       } else {
         statusObj.innerText = "Geolocation not supported.";
@@ -199,10 +200,9 @@
     function renderARScene() {
       const container = document.getElementById('ar-container');
       
-      // Scaled up to 4 4 4 and elevated 15 meters on the Y-axis
       container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-          <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
+          <a-camera gps-camera="gpsMinDistance: 5" far="${APP_CONFIG.farPlane}"></a-camera>
           
           <a-entity gps-entity-place="latitude: ${APP_CONFIG.parkCenter.lat}; longitude: ${APP_CONFIG.parkCenter.lng};">
             <a-entity id="park-model" gltf-model="url(HStest.glb)" scale="4 4 4" position="0 15 0" rotation="0 0 0" visible="true"></a-entity>
@@ -217,7 +217,6 @@
       `;
     }
 
-    // Calculates bearing to park and compares it against phone compass heading to check viewfinder alignment
     function updateViewfinderStatus() {
       if (!userLat || !userLng) return;
       
@@ -236,12 +235,16 @@
       document.getElementById('dbg-bearing').innerText = `${Math.round(bearing)}°`;
 
       const targetEl = document.getElementById('dbg-target');
-      // If phone heading is within ±20 degrees of target bearing, display locked
       const diff = Math.abs(currentHeading - bearing);
-      if (diff < 20 || diff > 340) {
+      
+      // Hysteresis buffer to stop the UI flashing back and forth
+      const inWindow = (diff < 25 || diff > 335);
+      if (inWindow) {
+        targetLocked = true;
         targetEl.innerText = "LOCKED ON TARGET ✓";
         targetEl.style.color = "#00FF00";
       } else {
+        targetLocked = false;
         targetEl.innerText = "Searching (Pan Camera)...";
         targetEl.style.color = "#ffc107";
       }
@@ -268,10 +271,12 @@
       }
 
       if (compass !== null) {
-        currentHeading = compass;
+        // Smooth out compass jitter using a 20/80 blend with the old heading
+        currentHeading = (currentHeading * 0.8) + (compass * 0.2);
+        
         const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-        const val = Math.floor((compass / 45) + 0.5);
-        document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(compass)}°)`;
+        const val = Math.floor((currentHeading / 45) + 0.5);
+        document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(currentHeading)}°)`;
         updateViewfinderStatus();
       }
     }
