@@ -8,70 +8,52 @@
   <!-- Core AR & 3D Libraries -->
   <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
+  <!-- Bulletproof Model-Viewer CDN -->
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 
   <style>
-    /* =========================================
-       UI & LAYOUT STYLES
-       ========================================= */
     body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #222; color: #333; }
     
-    /* View Containers */
     #ar-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
     #3d-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 10; background: #222; display: none; }
     #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: flex; flex-direction: column; justify-content: space-between; }
     
     .interactive { pointer-events: auto; }
     
-    /* Buttons */
     .btn { background: rgba(255, 255, 255, 0.95); border: none; padding: 6px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111; box-shadow: 0 2px 4px rgba(0,0,0,0.2); white-space: nowrap; }
     .btn-primary { background: #0056b3; color: white; }
     .btn-success { background: #28a745; color: white; }
-    .btn-warning { background: #ffc107; color: #111; }
     .btn-large { font-size: 14px; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
-    /* Compact Top Navigation */
     #top-bar { display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; background: rgba(0, 0, 0, 0.75); padding: 10px; box-sizing: border-box; backdrop-filter: blur(4px); border-bottom: 1px solid rgba(255,255,255,0.1); }
     #header-title { color: white; font-size: 16px; font-weight: bold; cursor: pointer; text-align: left; line-height: 1.2; flex-grow: 1; }
     #top-links { display: flex; gap: 8px; align-items: center; }
 
-    /* Center Launch Area */
     #center-launch { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 105; text-align: center; }
     #launch-status { margin-top: 15px; font-size: 13px; color: #FFF; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; display: none; }
 
-    /* Bottom Navigation Elements - Right Justified */
     #bottom-bar { display: flex; flex-direction: column; align-items: flex-end; padding: 15px; width: 100%; box-sizing: border-box; }
     .bottom-buttons { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-    
-    /* 3D Debug Overlay */
-    #viewer-debug { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: none; z-index: 200; }
 
-    /* Debug HUD */
     #debug-panel { display: none; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.5; border: 1px solid #333; min-width: 160px; text-align: left; margin-bottom: 10px; pointer-events: none; }
     .dbg-val { color: #FFF; }
 
-    /* Modals */
     .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 450px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-height: 75vh; overflow-y: auto; }
     .close-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; float: right; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <!-- 3D MODEL VIEWER (Static Mode) -->
+  <!-- Static 3D Viewer for HStest.glb -->
   <div id="3d-container">
-    <div id="viewer-debug" class="interactive">
-      <button class="btn btn-warning" onclick="loadSampleModel()">Test Viewer (Load Sample GLB)</button>
-    </div>
-    <model-viewer id="main-viewer" src="HStest.glb" alt="3D Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
+    <model-viewer src="HStest.glb" alt="HStest Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
   </div>
 
-  <!-- AR CAMERA CONTAINER -->
+  <!-- AR Camera Container -->
   <div id="ar-container"></div>
 
-  <!-- MAIN UI OVERLAY -->
+  <!-- UI Overlay -->
   <div id="ui-layer">
-    
-    <!-- Top Nav -->
     <div id="top-bar" class="interactive">
       <div id="header-title" onclick="toggleModal('history-modal')">Cheltenham High School Park ⓘ</div>
       <div id="top-links">
@@ -80,19 +62,15 @@
       </div>
     </div>
     
-    <!-- Center Launch Button -->
     <div id="center-launch" class="interactive">
       <button id="launch-btn" class="btn btn-success btn-large" onclick="startExperience()">Launch AR Camera</button>
       <div id="launch-status"></div>
     </div>
 
-    <!-- Bottom Nav -->
     <div id="bottom-bar">
       <div id="debug-panel">
         <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
-        <div>Zone: <span id="dbg-zone" class="dbg-val">None</span></div>
-        <div>Park Dist: <span id="dbg-dist" class="dbg-val">--</span></div>
-        <div>Test Dist: <span id="dbg-dist-test" class="dbg-val">--</span></div>
+        <div>Dist to Park: <span id="dbg-dist" class="dbg-val">--</span></div>
         <div>Lat: <span id="dbg-lat" class="dbg-val">--</span></div>
         <div>Lng: <span id="dbg-lng" class="dbg-val">--</span></div>
         <div>Acc: <span id="dbg-acc" class="dbg-val">--</span></div>
@@ -100,15 +78,13 @@
       </div>
 
       <div class="bottom-buttons interactive">
-        <button id="toggle-test-btn" class="btn" style="background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; display: none;" onclick="toggleTestTower()">Hide Test Tower</button>
         <button class="btn btn-large" id="view-toggle" onclick="toggleViewMode()">View 3D Model</button>
         <button id="debug-toggle" class="btn" style="background: rgba(0,0,0,0.6); color: #FFF; border: 1px solid #444;" onclick="toggleDebug()">Debug Info</button>
       </div>
     </div>
-
   </div>
 
-  <!-- HISTORY MODAL -->
+  <!-- History Modal -->
   <div id="history-modal" class="modal interactive">
     <button class="close-btn" onclick="toggleModal('history-modal')">Close</button>
     <h2 style="margin-top:0;">Site History</h2>
@@ -117,41 +93,18 @@
     <p>On July 3, 1995, the remains of the building were demolished and imploded. Following the demolition, the 11-acre site was transformed into High School Park to preserve the native ecosystem where the school once stood.</p>
   </div>
 
-
-  <!-- =========================================
-       APPLICATION LOGIC
-       ========================================= -->
   <script>
-    // 1. GLOBAL CONFIGURATION
     const APP_CONFIG = {
-      version: "2.6.0",
-      parkCenter:  { lat: 40.071238, lng: -75.124073 }, 
+      version: "2.7.0",
+      parkCenter: { lat: 40.071238, lng: -75.124073 }, 
       testLocation: { lat: 40.066951, lng: -75.124436 }, 
       farPlane: 5000 
     };
 
-    // 2. GEOFENCE ENGINE
-    const GEOFENCES = [
-      {
-        id: "Creek Hollow",
-        bounds: { minLat: 40.070000, maxLat: 40.071000, minLng: -75.126000, maxLng: -75.123000 },
-        targetY: 15.0 
-      },
-      {
-        id: "Upper Plateau",
-        bounds: { minLat: 40.071001, maxLat: 40.072000, minLng: -75.125000, maxLng: -75.123000 },
-        targetY: -2.0
-      }
-    ];
-
     let currentMode = 'INIT'; 
-    let watchId = null;
-    let initialLockAchieved = false;
-    let testTowerEnabled = true;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
-    // 3. UI MANAGEMENT
     function toggleModal(modalId) {
       const modal = document.getElementById(modalId);
       modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
@@ -161,30 +114,6 @@
       const panel = document.getElementById('debug-panel');
       panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
     }
-    
-    function loadSampleModel() {
-      const viewer = document.getElementById('main-viewer');
-      viewer.src = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
-      alert("Loading Sample Astronaut Model.\n\nIf you can see the Astronaut but not your HStest.glb, your 3D file is corrupted or exported incorrectly.");
-    }
-
-    function toggleTestTower() {
-      const tower = document.getElementById('test-tower');
-      const btn = document.getElementById('toggle-test-btn');
-      if (!tower) return;
-      
-      testTowerEnabled = !testTowerEnabled;
-      
-      if (testTowerEnabled) {
-        tower.setAttribute('visible', 'true');
-        btn.innerText = "Hide Test Tower";
-        btn.style.background = "#e2e3e5";
-      } else {
-        tower.setAttribute('visible', 'false');
-        btn.innerText = "Show Test Tower";
-        btn.style.background = "#ffc107";
-      }
-    }
 
     function toggleViewMode() {
       const staticView = document.getElementById('3d-container');
@@ -192,18 +121,13 @@
       const centerLaunch = document.getElementById('center-launch');
       const arVideo = document.getElementById('arjs-video'); 
       const toggleBtn = document.getElementById('view-toggle');
-      const viewerDebugBtn = document.getElementById('viewer-debug');
-      const toggleTestBtn = document.getElementById('toggle-test-btn');
 
       if (currentMode !== '3D') {
         currentMode = '3D';
         staticView.style.display = 'block'; 
         arContainer.style.display = 'none';
         centerLaunch.style.display = 'none'; 
-        viewerDebugBtn.style.display = 'block';
-        if (toggleTestBtn.style.display === 'block') toggleTestBtn.style.display = 'none';
         if (arVideo) arVideo.style.display = 'none';
-        
         toggleBtn.innerText = "View Live AR";
         
         const arScene = document.querySelector('a-scene');
@@ -213,10 +137,7 @@
         currentMode = 'AR';
         staticView.style.display = 'none'; 
         arContainer.style.display = 'block';
-        viewerDebugBtn.style.display = 'none';
-        if (document.getElementById('ar-container').innerHTML !== "") toggleTestBtn.style.display = 'block';
         if (arVideo) arVideo.style.display = 'block';
-        
         toggleBtn.innerText = "View 3D Model";
         
         if (document.getElementById('ar-container').innerHTML === "") {
@@ -230,29 +151,6 @@
       }
     }
 
-    // 4. PROCEDURAL GEOMETRY GENERATOR
-    // Spawns with visible="false" to prevent origin-spawning glitches
-    function buildCalibrationTowerHTML(lat, lng, elementId, sizeScale, offsetZ = 0) {
-      const w = 8 * sizeScale;
-      const d = 8 * sizeScale;
-      const pointerZOffset = (d / 2) + (w / 8);
-      const pointerSize = w / 4;
-
-      return `
-        <a-entity id="${elementId}" gps-entity-place="latitude: ${lat}; longitude: ${lng};" position="0 0 0" visible="false">
-          <a-entity position="0 0 ${offsetZ}">
-            <a-box position="0 -2.5 0" width="${w}" height="5" depth="${d}" material="color: #333333; side: double" opacity="0.8"></a-box>
-            <a-box position="0 5 0" width="${w}" height="10" depth="${d}" material="color: #FF3333; side: double"></a-box>
-            <a-box position="0 15 0" width="${w}" height="10" depth="${d}" material="color: #FFFFFF; side: double"></a-box>
-            <a-box position="0 25 0" width="${w}" height="10" depth="${d}" material="color: #3388FF; side: double"></a-box>
-            <a-box position="0 35 0" width="${w}" height="10" depth="${d}" material="color: #33FF57; side: double"></a-box>
-            <a-box position="0 5 -${pointerZOffset}" width="${pointerSize}" height="10" depth="${pointerSize}" material="color: #FFFF00; side: double"></a-box>
-          </a-entity>
-        </a-entity>
-      `;
-    }
-
-    // 5. INITIALIZATION & SENSOR BOOT
     function startExperience() {
       currentMode = 'AR';
       const launchBtn = document.getElementById('launch-btn');
@@ -269,7 +167,7 @@
               window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
               initGPS(statusObj);
             } else {
-              statusObj.innerText = "Compass permission denied. AR may be inaccurate.";
+              statusObj.innerText = "Compass permission denied.";
               setTimeout(() => initGPS(statusObj), 2000);
             }
           }).catch(console.error);
@@ -279,43 +177,32 @@
       }
     }
 
-    // 6. GEOLOCATION LOGIC
     function initGPS(statusObj) {
       statusObj.innerText = "Acquiring GPS lock...";
 
       if ("geolocation" in navigator) {
-        watchId = navigator.geolocation.watchPosition(
+        navigator.geolocation.watchPosition(
           (position) => {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
             const acc = position.coords.accuracy;
             
-            const distanceToPark = getDistanceInMeters(lat, lng, APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng);
-            const distanceToTest = getDistanceInMeters(lat, lng, APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng);
+            // To test in your backyard instantly, change parkCenter below to testLocation
+            const targetLat = APP_CONFIG.parkCenter.lat;
+            const targetLng = APP_CONFIG.parkCenter.lng;
+            
+            const distance = getDistanceInMeters(lat, lng, targetLat, targetLng);
 
             document.getElementById('dbg-lat').innerText = lat.toFixed(5);
             document.getElementById('dbg-lng').innerText = lng.toFixed(5);
             document.getElementById('dbg-acc').innerText = `±${Math.round(acc)}m`;
-            document.getElementById('dbg-dist').innerText = `${Math.round(distanceToPark)}m`;
-            document.getElementById('dbg-dist-test').innerText = `${Math.round(distanceToTest)}m`;
+            document.getElementById('dbg-dist').innerText = `${Math.round(distance)}m`;
 
-            evaluateGeofences(lat, lng);
-
-            if (document.getElementById('ar-container').innerHTML === "" && acc < 100) {
+            if (document.getElementById('ar-container').innerHTML === "" && acc < 150) {
               document.getElementById('center-launch').style.display = 'none';
-              document.getElementById('toggle-test-btn').style.display = 'block';
-              renderARScene();
-            } else if (document.getElementById('ar-container').innerHTML === "" && acc >= 100) {
-              statusObj.innerText = `GPS signal weak (±${Math.round(acc)}m). Waiting for lock...`;
-            }
-
-            // Reveal models only after first solid position update
-            if (!initialLockAchieved && document.getElementById('ar-container').innerHTML !== "") {
-               initialLockAchieved = true;
-               const pTower = document.getElementById('park-tower');
-               const tTower = document.getElementById('test-tower');
-               if (pTower) pTower.setAttribute('visible', 'true');
-               if (tTower && testTowerEnabled) tTower.setAttribute('visible', 'true');
+              renderARScene(targetLat, targetLng);
+            } else if (document.getElementById('ar-container').innerHTML === "" && acc >= 150) {
+              statusObj.innerText = `GPS weak (±${Math.round(acc)}m). Waiting...`;
             }
           },
           (error) => {
@@ -328,48 +215,20 @@
       }
     }
 
-    function evaluateGeofences(userLat, userLng) {
-      let activeZone = "Default (0m offset)";
-      let calculatedYOffset = 0;
-
-      for (const zone of GEOFENCES) {
-        if (userLat >= zone.bounds.minLat && userLat <= zone.bounds.maxLat && 
-            userLng >= zone.bounds.minLng && userLng <= zone.bounds.maxLng) {
-          activeZone = zone.id;
-          calculatedYOffset = zone.targetY;
-          break;
-        }
-      }
-
-      document.getElementById('dbg-zone').innerText = activeZone;
-
-      const parkModel = document.getElementById('park-tower');
-      const testModel = document.getElementById('test-tower');
-      
-      if (parkModel) parkModel.setAttribute('position', `0 ${calculatedYOffset} 0`);
-      if (testModel) testModel.setAttribute('position', `0 ${calculatedYOffset} 0`);
-    }
-
-    // 7. RENDER AR SCENE
-    function renderARScene() {
+    function renderARScene(lat, lng) {
       const container = document.getElementById('ar-container');
       
-      // Park tower at scale 4
-      const parkTower = buildCalibrationTowerHTML(APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng, "park-tower", 4, 0);
-      
-      // Backyard tower at scale 0.5. 
-      const testTower = buildCalibrationTowerHTML(APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng, "test-tower", 0.5, -15);
-
+      // Clean, direct GLTF loading formula that worked for your windmill
       container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
           <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
-          ${parkTower}
-          ${testTower}
+          <a-entity gps-entity-place="latitude: ${lat}; longitude: ${lng};">
+            <a-entity gltf-model="url(HStest.glb)" scale="1 1 1" position="0 0 0" rotation="0 0 0"></a-entity>
+          </a-entity>
         </a-scene>
       `;
     }
 
-    // 8. MATH & UTILITIES
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
       const p1 = lat1 * Math.PI / 180;
