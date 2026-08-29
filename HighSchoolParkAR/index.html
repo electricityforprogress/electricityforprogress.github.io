@@ -2,80 +2,298 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>High School Park AR Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>High School Park AR</title>
   
+  <!-- Core AR & 3D Libraries -->
   <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
 
   <style>
-    body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #222; color: #333; }
-    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.2rem; color: white; z-index: 9999; text-align: center; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px;}
-    #container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+    /* =========================================
+       UI & LAYOUT STYLES
+       ========================================= */
+    body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #111; color: #333; }
     
-    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; display: flex; flex-direction: column; justify-content: space-between; }
-    .ui-interactive { pointer-events: auto; }
+    /* Containers */
+    #ar-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+    #3d-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 10; background: #222; display: none; }
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: flex; flex-direction: column; justify-content: space-between; }
+    .interactive { pointer-events: auto; }
 
-    #top-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px; background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0)); }
-    .nav-btn { background: rgba(255, 255, 255, 0.9); border: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; color: #333; }
-    .nav-btn.donate { background: #28a745; color: white; }
-    .nav-btn.contribute { background: #0056b3; color: white; }
+    /* Header Banner */
+    #header-banner { background: rgba(0, 0, 0, 0.75); color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; backdrop-filter: blur(4px); }
+    #header-banner h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+    .history-badge { font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px; }
 
-    /* Bottom Debug Telemetry Panel */
-    #bottom-panel { background: rgba(0, 0, 0, 0.85); color: white; margin: 15px; padding: 12px 15px; border-radius: 8px; font-family: monospace; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-    #bottom-panel div { margin-bottom: 3px; }
+    /* Navigation Bar */
+    #nav-bar { display: flex; justify-content: center; gap: 8px; padding: 10px; }
+    .btn { background: rgba(255, 255, 255, 0.95); border: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .btn-primary { background: #0056b3; color: white; }
+    
+    /* Launch Overlay (Required for iOS Sensor Permissions) */
+    #launch-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #111; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; padding: 20px; box-sizing: border-box; }
 
-    #history-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 500px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; pointer-events: auto; max-height: 70vh; overflow-y: auto; color: #333;}
-    .close-modal { background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; float: right; font-weight: bold; }
+    /* Debug HUD */
+    #debug-toggle { position: absolute; bottom: 15px; right: 15px; background: rgba(0,0,0,0.6); color: #888; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 10px; z-index: 200; }
+    #debug-panel { display: none; position: absolute; bottom: 45px; right: 15px; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.6; border: 1px solid #333; max-width: 250px; }
+    .dbg-val { color: #FFF; }
+
+    /* Modals */
+    .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 400px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-height: 75vh; overflow-y: auto; }
+    .close-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; float: right; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <div id="loading">Requesting GPS permissions...</div>
-  <div id="container"></div>
+  <!-- INITIAL LAUNCH SCREEN -->
+  <div id="launch-overlay" class="interactive">
+    <h2>High School Park AR</h2>
+    <p style="margin-bottom: 25px; color: #CCC; font-size: 14px;">This experience requires camera and location access to place historical structures in the real world.</p>
+    <button class="btn btn-primary" style="font-size: 16px; padding: 12px 24px;" onclick="startExperience()">Launch Experience</button>
+    <div id="launch-status" style="margin-top: 15px; font-size: 12px; color: #888;">Waiting to start...</div>
+  </div>
 
+  <!-- 3D MODEL VIEWER (Fallback/Static Mode) -->
+  <div id="3d-container">
+    <!-- Replace 'placeholder.glb' when you have the final model -->
+    <model-viewer src="placeholder.glb" alt="3D Model" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
+  </div>
+
+  <!-- AR CAMERA CONTAINER -->
+  <div id="ar-container"></div>
+
+  <!-- MAIN UI OVERLAY -->
   <div id="ui-layer">
-    <!-- Top Navigation with Contribute, Website, Donate, History -->
-    <div id="top-nav" class="ui-interactive">
-      <button class="nav-btn" onclick="toggleHistory()">Park History</button>
-      <a href="https://electricityforprogress.com" target="_blank" class="nav-btn">Our Website</a>
-      <a href="https://electricityforprogress.com/donate" target="_blank" class="nav-btn donate">Donate</a>
-      <a href="mailto:CHS_AR@hspark.org?subject=High%20School%20Park%20AR%20Contribution" class="nav-btn contribute">Contribute</a>
+    
+    <!-- Header Banner -->
+    <div id="header-banner" class="interactive" onclick="toggleModal('history-modal')">
+      <h1>Cheltenham High School</h1>
+      <span class="history-badge">ⓘ History</span>
     </div>
 
-    <!-- Bottom Debug Telemetry Panel -->
-    <div id="bottom-panel" class="ui-interactive">
-      <div><strong>Status:</strong> <span id="debug-status">Initializing GPS...</span></div>
-      <div><strong>Distance:</strong> <span id="debug-dist">--</span></div>
-      <div><strong>GPS Lat/Lng:</strong> <span id="debug-coords">--</span></div>
-      <div><strong>GPS Accuracy:</strong> <span id="debug-acc">--</span></div>
-      <div><strong>Heading:</strong> <span id="debug-heading">--</span></div>
+    <!-- Bottom Navigation -->
+    <div style="margin-top: auto;">
+      <div id="nav-bar" class="interactive">
+        <button class="btn" id="view-toggle" onclick="toggleViewMode()">View 3D Model</button>
+        <a href="https://fhps.org" target="_blank" class="btn">fhps.org</a>
+        <a href="mailto:CHS_AR@hspark.org?subject=Archive%20Submission" class="btn btn-primary">Submit</a>
+      </div>
     </div>
+
   </div>
 
-  <div id="history-modal">
-    <button class="close-modal" onclick="toggleHistory()">Close</button>
-    <h2>History of High School Park</h2>
-    <p>Insert historical text here about the demolished high school and surrounding park grounds.</p>
+  <!-- DEBUG HUD -->
+  <button id="debug-toggle" class="interactive" onclick="toggleDebug()">DEBUG</button>
+  <div id="debug-panel" class="interactive">
+    <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
+    <div>Zone: <span id="dbg-zone" class="dbg-val">None</span></div>
+    <div>Dist: <span id="dbg-dist" class="dbg-val">--</span></div>
+    <div>Lat: <span id="dbg-lat" class="dbg-val">--</span></div>
+    <div>Lng: <span id="dbg-lng" class="dbg-val">--</span></div>
+    <div>Acc: <span id="dbg-acc" class="dbg-val">--</span></div>
+    <div>Head: <span id="dbg-heading" class="dbg-val">--</span></div>
   </div>
 
-<script>
-    window.onerror = function(msg, url, line) {
-      document.getElementById('loading').innerHTML = `JS Error: ${msg}<br>Line: ${line}`;
+  <!-- HISTORY MODAL -->
+  <div id="history-modal" class="modal interactive">
+    <button class="close-btn" onclick="toggleModal('history-modal')">Close</button>
+    <h2 style="margin-top:0;">Site History</h2>
+    <p>Constructed in 1927, this site served as the primary educational facility until its demographic shifts required a new building. Today, the park preserves the ecological footprint.</p>
+  </div>
+
+
+  <!-- =========================================
+       APPLICATION LOGIC
+       ========================================= -->
+  <script>
+    // 1. GLOBAL CONFIGURATION
+    const APP_CONFIG = {
+      version: "2.0.1",
+      parkCenter:  { lat: 40.071238, lng: -75.124073 }, // Actual Park Center
+      testLocation: { lat: 40.067356, lng: -75.124541 }, // Backyard Test Site
+      farPlane: 5000 // 5km visibility to see towers across the neighborhood
     };
 
-    function toggleHistory() {
-      const modal = document.getElementById('history-modal');
+    // 2. GEOFENCE ENGINE
+    // Define rectangular zones. When the user enters a zone, the models adjust their Y-axis (altitude).
+    const GEOFENCES = [
+      {
+        id: "Creek Hollow",
+        bounds: { minLat: 40.066000, maxLat: 40.068000, minLng: -75.126000, maxLng: -75.123000 }, // Example coordinates
+        targetY: 15.0 // Push models 15m up if user is standing in a deep hollow
+      },
+      {
+        id: "Upper Plateau",
+        bounds: { minLat: 40.070000, maxLat: 40.072000, minLng: -75.125000, maxLng: -75.123000 },
+        targetY: -2.0 // Drop models 2m down if user is on a high ridge
+      }
+    ];
+
+    // State Variables
+    let currentMode = 'AR'; // 'AR' or '3D'
+    let currentHeading = null;
+    let watchId = null;
+
+    // Set Version in Debug HUD
+    document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
+
+    // 3. UI MANAGEMENT
+    function toggleModal(modalId) {
+      const modal = document.getElementById(modalId);
       modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
     }
 
-  //40.067356, -75.124541
-    const PARK_LAT = 40.067356; 
-    const PARK_LNG = -75.124541;
-    const MAX_DISTANCE_METERS = 500;
-    const MODEL_URL = 'HStest.glb';
+    function toggleDebug() {
+      const panel = document.getElementById('debug-panel');
+      panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+    }
 
+    function toggleViewMode() {
+      const arView = document.getElementById('ar-container');
+      const staticView = document.getElementById('3d-container');
+      const toggleBtn = document.getElementById('view-toggle');
+
+      if (currentMode === 'AR') {
+        currentMode = '3D';
+        staticView.style.display = 'block'; // Overlay the static viewer
+        toggleBtn.innerText = "View Live AR";
+      } else {
+        currentMode = 'AR';
+        staticView.style.display = 'none'; // Reveal the camera
+        toggleBtn.innerText = "View 3D Model";
+      }
+    }
+
+    // 4. PROCEDURAL GEOMETRY GENERATOR
+    // Builds a 40m banded calibration tower out of A-Frame primitives
+    function buildCalibrationTowerHTML(lat, lng, elementId) {
+      return `
+        <a-entity id="${elementId}" gps-entity-place="latitude: ${lat}; longitude: ${lng};" position="0 0 0">
+          <!-- Root Anchor (-5m to 0m) -->
+          <a-box position="0 -2.5 0" width="8" height="5" depth="8" color="#333333" opacity="0.8"></a-box>
+          <!-- Base Level (0m to 10m) - RED -->
+          <a-box position="0 5 0" width="8" height="10" depth="8" color="#FF3333"></a-box>
+          <!-- Level 2 (10m to 20m) - WHITE -->
+          <a-box position="0 15 0" width="8" height="10" depth="8" color="#FFFFFF"></a-box>
+          <!-- Level 3 (20m to 30m) - BLUE -->
+          <a-box position="0 25 0" width="8" height="10" depth="8" color="#3388FF"></a-box>
+          <!-- Roof Peak (30m to 40m) - GREEN -->
+          <a-box position="0 35 0" width="8" height="10" depth="8" color="#33FF57"></a-box>
+          <!-- Orientation Pointer (Front/North face) -->
+          <a-box position="0 5 -4" width="2" height="10" depth="2" color="#FFFF00"></a-box>
+        </a-entity>
+      `;
+    }
+
+    // 5. INITIALIZATION & SENSOR BOOT
+    // Triggered by the user clicking "Launch Experience"
+    function startExperience() {
+      const statusObj = document.getElementById('launch-status');
+      statusObj.innerText = "Requesting orientation permissions...";
+
+      // iOS 13+ requires explicit user interaction to request accelerometer/compass data
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(permissionState => {
+            if (permissionState === 'granted') {
+              window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
+              initGPS(statusObj);
+            } else {
+              statusObj.innerText = "Compass permission denied. AR may be inaccurate.";
+              setTimeout(() => initGPS(statusObj), 2000);
+            }
+          })
+          .catch(console.error);
+      } else {
+        // Android & standard browsers
+        window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
+        initGPS(statusObj);
+      }
+    }
+
+    // 6. GEOLOCATION & GEOFENCE LOGIC
+    function initGPS(statusObj) {
+      statusObj.innerText = "Acquiring GPS lock...";
+
+      if ("geolocation" in navigator) {
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const acc = position.coords.accuracy;
+            
+            // Math against the Park Center for HUD distance
+            const distanceToPark = getDistanceInMeters(lat, lng, APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng);
+
+            // Update Debug HUD
+            document.getElementById('dbg-lat').innerText = lat.toFixed(5);
+            document.getElementById('dbg-lng').innerText = lng.toFixed(5);
+            document.getElementById('dbg-acc').innerText = `±${Math.round(acc)}m`;
+            document.getElementById('dbg-dist').innerText = `${Math.round(distanceToPark)}m to Park`;
+
+            // Geofence Engine Evaluation
+            evaluateGeofences(lat, lng);
+
+            // If AR container is empty, boot the A-Frame engine
+            if (document.getElementById('ar-container').innerHTML === "") {
+              document.getElementById('launch-overlay').style.display = 'none';
+              renderARScene();
+            }
+          },
+          (error) => {
+            statusObj.innerText = `GPS Error: ${error.message}`;
+          },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
+      } else {
+        statusObj.innerText = "Geolocation not supported by device.";
+      }
+    }
+
+    function evaluateGeofences(userLat, userLng) {
+      let activeZone = "Default (0m offset)";
+      let calculatedYOffset = 0;
+
+      // Loop through defined zones to see if user is inside a boundary box
+      for (const zone of GEOFENCES) {
+        if (userLat >= zone.bounds.minLat && userLat <= zone.bounds.maxLat && 
+            userLng >= zone.bounds.minLng && userLng <= zone.bounds.maxLng) {
+          activeZone = zone.id;
+          calculatedYOffset = zone.targetY;
+          break; // Stop at first matched zone
+        }
+      }
+
+      document.getElementById('dbg-zone').innerText = activeZone;
+
+      // Apply the calculated elevation offset to BOTH towers in the DOM
+      const parkModel = document.getElementById('park-tower');
+      const testModel = document.getElementById('test-tower');
+      
+      if (parkModel) parkModel.setAttribute('position', `0 ${calculatedYOffset} 0`);
+      if (testModel) testModel.setAttribute('position', `0 ${calculatedYOffset} 0`);
+    }
+
+    // 7. RENDER AR SCENE
+    function renderARScene() {
+      const container = document.getElementById('ar-container');
+      
+      // Inject both the Park and Test location calibration towers
+      const parkTower = buildCalibrationTowerHTML(APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng, "park-tower");
+      const testTower = buildCalibrationTowerHTML(APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng, "test-tower");
+
+      container.innerHTML = `
+        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+          <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
+          ${parkTower}
+          ${testTower}
+        </a-scene>
+      `;
+    }
+
+    // 8. MATH & UTILITIES
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
       const p1 = lat1 * Math.PI / 180;
@@ -86,37 +304,11 @@
       return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     }
 
-    function getHeadingText(deg) {
-      if (deg === null || deg === undefined || isNaN(deg)) return "Calibrating (Move phone)";
-      const directions = ["North", "North-East", "East", "South-East", "South", "South-West", "West", "North-West"];
-      const val = Math.floor((deg / 45) + 0.5);
-      return `${directions[(val % 8)]} (${Math.round(deg)}°)`;
-    }
-
-    // Live Compass Listener
-    let currentHeading = null;
-    function initCompass() {
-      // iOS 13+ permission request check
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission().then(response => {
-          if (response === 'granted') {
-            window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
-          }
-        }).catch(console.error);
-      } else {
-        // Android & standard browsers
-        window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
-      }
-    }
-
     function handleOrientation(event) {
       let compass = null;
-      // iOS provides alpha or webkitCompassHeading
       if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
         compass = event.webkitCompassHeading;
-      } 
-      // Android / W3C standard absolute orientation
-      else if (event.absolute && event.alpha !== null) {
+      } else if (event.absolute && event.alpha !== null) {
         compass = 360 - event.alpha;
       } else if (event.alpha !== null) {
         compass = 360 - event.alpha;
@@ -124,76 +316,10 @@
 
       if (compass !== null) {
         currentHeading = compass;
-        document.getElementById('debug-heading').innerHTML = getHeadingText(currentHeading);
+        const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+        const val = Math.floor((compass / 45) + 0.5);
+        document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(compass)}°)`;
       }
-    }
-
-    function renderParkAR() {
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('container').innerHTML = `
-        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-          <a-camera gps-camera="gpsMinDistance: 3" far="2000"></a-camera>
-          
-          <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
-            <a-entity gltf-model="url(${MODEL_URL})" 
-                      scale="5 5 5" 
-                      rotation="0 0 0" 
-                      position="0 20 0">
-            </a-entity>
-          </a-entity>
-        </a-scene>
-      `;
-    }
-
-    function renderOffsiteFallback() {
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('container').innerHTML = `
-        <model-viewer src="${MODEL_URL}" alt="Windmill Model" camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" style="width: 100%; height: 100%;"></model-viewer>
-      `;
-    }
-
-    const statusText = document.getElementById('loading');
-    const dbgStatus = document.getElementById('debug-status');
-    const dbgDist = document.getElementById('debug-dist');
-    const dbgCoords = document.getElementById('debug-coords');
-    const dbgAcc = document.getElementById('debug-acc');
-    const dbgHeading = document.getElementById('debug-heading');
-
-    let arStarted = false;
-
-    if ("geolocation" in navigator) {
-      navigator.geolocation.watchPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          const acc = position.coords.accuracy;
-          const distance = getDistanceInMeters(lat, lng, PARK_LAT, PARK_LNG);
-
-          dbgCoords.innerHTML = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-          dbgAcc.innerHTML = `±${Math.round(acc)}m`;
-          dbgDist.innerHTML = `${Math.round(distance)}m`;
-
-          if (!arStarted) {
-            if (distance <= MAX_DISTANCE_METERS) {
-              arStarted = true;
-              dbgStatus.innerHTML = "AR Active (Within Range)";
-              initCompass(); // Fire up orientation sensors when AR kicks off
-              renderParkAR();
-            } else {
-              dbgStatus.innerHTML = "Waiting for proximity...";
-              statusText.innerHTML = `You are ${Math.round(distance)}m away.<br>Get closer to launch AR.`;
-            }
-          }
-        },
-        (error) => {
-          dbgStatus.innerHTML = `GPS Error (${error.code}) - Fallback loading`;
-          setTimeout(() => renderOffsiteFallback(), 3000);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
-    } else {
-      dbgStatus.innerHTML = "GPS Not Supported";
-      setTimeout(() => renderOffsiteFallback(), 2000);
     }
   </script>
 </body>
