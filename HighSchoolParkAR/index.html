@@ -93,16 +93,13 @@
 
 <script>
     const APP_CONFIG = {
-      version: "3.0.1",
+      version: "3.0.2",
       parkCenter: { lat: 40.071238, lng: -75.124073 },
       farPlane: 5000 
     };
 
     let parkShowingModel = true;
     let currentHeading = 0;
-    let userLat = 0;
-    let userLng = 0;
-    let targetLocked = false;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
@@ -166,19 +163,18 @@
       if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
           (position) => {
-            userLat = position.coords.latitude;
-            userLng = position.coords.longitude;
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
             const acc = position.coords.accuracy;
             
-            const distance = getDistanceInMeters(userLat, userLng, APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng);
+            const distance = getDistanceInMeters(lat, lng, APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng);
 
-            document.getElementById('dbg-lat').innerText = userLat.toFixed(5);
-            document.getElementById('dbg-lng').innerText = userLng.toFixed(5);
+            document.getElementById('dbg-lat').innerText = lat.toFixed(5);
+            document.getElementById('dbg-lng').innerText = lng.toFixed(5);
             document.getElementById('dbg-acc').innerText = `±${Math.round(acc)}m`;
             document.getElementById('dbg-dist').innerText = `${Math.round(distance)}m`;
 
-            updateViewfinderStatus();
-
+            // This is the working logic that successfully loads your AR scene
             if (document.getElementById('ar-container').innerHTML === "" && acc < 150) {
               document.getElementById('center-launch').style.display = 'none';
               document.getElementById('toggle-content-btn').style.display = 'block';
@@ -190,7 +186,7 @@
           (error) => {
             statusObj.innerText = `GPS Error: ${error.message}`;
           },
-          { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 }
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
         );
       } else {
         statusObj.innerText = "Geolocation not supported.";
@@ -202,7 +198,7 @@
       
       container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-          <a-camera gps-camera="gpsMinDistance: 5" far="${APP_CONFIG.farPlane}"></a-camera>
+          <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
           
           <a-entity gps-entity-place="latitude: ${APP_CONFIG.parkCenter.lat}; longitude: ${APP_CONFIG.parkCenter.lng};">
             <a-entity id="park-model" gltf-model="url(HStest.glb)" scale="4 4 4" position="0 15 0" rotation="0 0 0" visible="true"></a-entity>
@@ -215,39 +211,6 @@
           </a-entity>
         </a-scene>
       `;
-    }
-
-    function updateViewfinderStatus() {
-      if (!userLat || !userLng) return;
-      
-      const targetLat = APP_CONFIG.parkCenter.lat;
-      const targetLng = APP_CONFIG.parkCenter.lng;
-      
-      const dLon = (targetLng - userLng) * Math.PI / 180;
-      const lat1 = userLat * Math.PI / 180;
-      const lat2 = targetLat * Math.PI / 180;
-      
-      const y = Math.sin(dLon) * Math.cos(lat2);
-      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-      let bearing = Math.atan2(y, x) * 180 / Math.PI;
-      bearing = (bearing + 360) % 360;
-
-      document.getElementById('dbg-bearing').innerText = `${Math.round(bearing)}°`;
-
-      const targetEl = document.getElementById('dbg-target');
-      const diff = Math.abs(currentHeading - bearing);
-      
-      // Hysteresis buffer to stop the UI flashing back and forth
-      const inWindow = (diff < 25 || diff > 335);
-      if (inWindow) {
-        targetLocked = true;
-        targetEl.innerText = "LOCKED ON TARGET ✓";
-        targetEl.style.color = "#00FF00";
-      } else {
-        targetLocked = false;
-        targetEl.innerText = "Searching (Pan Camera)...";
-        targetEl.style.color = "#ffc107";
-      }
     }
 
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -271,13 +234,10 @@
       }
 
       if (compass !== null) {
-        // Smooth out compass jitter using a 20/80 blend with the old heading
-        currentHeading = (currentHeading * 0.8) + (compass * 0.2);
-        
+        currentHeading = compass;
         const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-        const val = Math.floor((currentHeading / 45) + 0.5);
-        document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(currentHeading)}°)`;
-        updateViewfinderStatus();
+        const val = Math.floor((compass / 45) + 0.5);
+        document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(compass)}°)`;
       }
     }
   </script>
