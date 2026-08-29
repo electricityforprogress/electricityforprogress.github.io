@@ -188,8 +188,9 @@
     // ==========================================
     // CONFIGURATION & AR ROUTING
     // ==========================================
-    const PARK_LAT = 40.06699341903843; 
-    const PARK_LNG = -75.12395593472185;
+    //40.067205, -75.124025
+    const PARK_LAT = 40.067205,; 
+    const PARK_LNG = -75.124025;
     const MAX_DISTANCE_METERS = 2000;
     const MODEL_URL = 'old_building__lowpoly/scene.gltf'; 
     // Change this line:
@@ -225,8 +226,8 @@
             
             <!-- 2. The Child: Handles the 3D model, scale, height, and rotation -->
             <a-entity gltf-model="url(${MODEL_URL})"
-                      scale="1 1 1"
-                      rotation="0 45 0"
+                      scale="10 10 10"
+                      rotation="0 0 0"
                       position="0 -1.6 0">
             </a-entity>
 
