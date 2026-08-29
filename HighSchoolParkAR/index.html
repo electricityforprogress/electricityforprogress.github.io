@@ -218,8 +218,8 @@
           embedded 
           arjs="sourceType: webcam; debugUIEnabled: false;" 
           vr-mode-ui="enabled: false">
-          
-          <a-camera gps-camera far="2000"></a-camera>
+          <!-- Only update GPS position if the user moves 5 meters or more -->
+          <a-camera gps-camera="gpsMinDistance: 5" far="2000"></a-camera>
           
           <!-- 1. The Parent: Locks to the GPS coordinate -->
           <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
