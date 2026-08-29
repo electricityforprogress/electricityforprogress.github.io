@@ -11,51 +11,56 @@
 
   <style>
     body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #222; color: #333; }
-    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.2rem; color: white; z-index: 9999; text-align: center; }
+    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.2rem; color: white; z-index: 9999; text-align: center; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px;}
     #container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+    
     #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; display: flex; flex-direction: column; justify-content: space-between; }
     .ui-interactive { pointer-events: auto; }
-    #top-nav { display: flex; justify-content: center; gap: 10px; padding: 15px; background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0)); }
-    .nav-btn { background: rgba(255, 255, 255, 0.9); border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; color: #333; }
+
+    #top-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px; background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0)); }
+    .nav-btn { background: rgba(255, 255, 255, 0.9); border: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; color: #333; }
     .nav-btn.donate { background: #28a745; color: white; }
-    #bottom-panel { background: rgba(255, 255, 255, 0.95); margin: 15px; padding: 15px; border-radius: 8px; text-align: center; }
-    #bottom-panel h3 { margin: 0 0 8px 0; font-size: 16px; }
-    #bottom-panel p { margin: 0 0 12px 0; font-size: 13px; }
-    .action-btn { background: #0056b3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px; }
-    #history-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 500px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; pointer-events: auto; max-height: 70vh; overflow-y: auto; }
+    .nav-btn.contribute { background: #0056b3; color: white; }
+
+    /* Bottom Debug Telemetry Panel */
+    #bottom-panel { background: rgba(0, 0, 0, 0.85); color: white; margin: 15px; padding: 12px 15px; border-radius: 8px; font-family: monospace; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+    #bottom-panel div { margin-bottom: 3px; }
+
+    #history-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 500px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; pointer-events: auto; max-height: 70vh; overflow-y: auto; color: #333;}
     .close-modal { background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; float: right; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <!-- Changed the text to verify the new file is loading -->
-  <div id="loading">Loading AR engine...</div>
-  
+  <div id="loading">Requesting GPS permissions...</div>
   <div id="container"></div>
 
   <div id="ui-layer">
+    <!-- Top Navigation with Contribute, Website, Donate, History -->
     <div id="top-nav" class="ui-interactive">
       <button class="nav-btn" onclick="toggleHistory()">Park History</button>
       <a href="https://electricityforprogress.com" target="_blank" class="nav-btn">Our Website</a>
       <a href="https://electricityforprogress.com/donate" target="_blank" class="nav-btn donate">Donate</a>
-      <div id="distance-badge" class="nav-btn" style="background: #333; color: white; cursor: default;">--m away</div>
+      <a href="mailto:CHS_AR@hspark.org?subject=High%20School%20Park%20AR%20Contribution" class="nav-btn contribute">Contribute</a>
     </div>
 
+    <!-- Bottom Debug Telemetry Panel -->
     <div id="bottom-panel" class="ui-interactive">
-      <h3>Help Build the Archive</h3>
-      <p>This V1 prototype was built using 1927 architectural plans. Do you have historical photos or modeling skills to contribute?</p>
-      <a href="#" class="action-btn">Contribute Materials</a>
+      <div><strong>Status:</strong> <span id="debug-status">Initializing GPS...</span></div>
+      <div><strong>Distance:</strong> <span id="debug-dist">--</span></div>
+      <div><strong>GPS Lat/Lng:</strong> <span id="debug-coords">--</span></div>
+      <div><strong>GPS Accuracy:</strong> <span id="debug-acc">--</span></div>
+      <div><strong>Heading:</strong> <span id="debug-heading">--</span></div>
     </div>
   </div>
 
   <div id="history-modal">
     <button class="close-modal" onclick="toggleHistory()">Close</button>
     <h2>History of High School Park</h2>
-    <p>Insert historical text here.</p>
+    <p>Insert historical text here about the demolished high school and surrounding park grounds.</p>
   </div>
 
-<script>
-    // Safe error catcher for mobile debugging
+  <script>
     window.onerror = function(msg, url, line) {
       document.getElementById('loading').innerHTML = `JS Error: ${msg}<br>Line: ${line}`;
     };
@@ -65,13 +70,11 @@
       modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
     }
 
-// 40.067404, -75.124586
-    const PARK_LAT = 40.067404; 
-    const PARK_LNG = -75.124586;
+    //40.067356, -75.124541
+    const PARK_LAT = 40.067356; 
+    const PARK_LNG = -75.124541;
     const MAX_DISTANCE_METERS = 1000;
-    
-    // UPDATE THIS TO THE EXACT NAME OF YOUR .GLB FILE
-    const MODEL_URL = 'HStest.glb'; 
+    const MODEL_URL = 'HStest.glb'; // Update to your windmill file name
 
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
@@ -83,13 +86,30 @@
       return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     }
 
+    function getHeadingText(deg) {
+      if (deg === null || deg === undefined) return "N/A (Move to track)";
+      const directions = ["North", "North-East", "East", "South-East", "South", "South-West", "West", "North-West"];
+      const val = Math.floor((deg / 45) + 0.5);
+      return `${directions[(val % 8)]} (${Math.round(deg)}°)`;
+    }
+
     function renderParkAR() {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('container').innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-          <a-camera gps-camera="gpsMinDistance: 5" far="2000"></a-camera>
+          <a-camera gps-camera="gpsMinDistance: 3" far="2000"></a-camera>
+          
           <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
-            <a-entity gltf-model="url(${MODEL_URL})" scale="5 5 5" rotation="0 0 0" position="0 15 0"></a-entity>
+            <!-- 
+              WINDMILL POSITION FIX:
+              position="X Y Z" 
+              Y is vertical height (positive moves it up into the air, negative pushes it underground).
+            -->
+            <a-entity gltf-model="url(${MODEL_URL})" 
+                      scale="10 10 10" 
+                      rotation="0 0 0" 
+                      position="0 10 0">
+            </a-entity>
           </a-entity>
         </a-scene>
       `;
@@ -98,49 +118,53 @@
     function renderOffsiteFallback() {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('container').innerHTML = `
-        <model-viewer src="${MODEL_URL}" alt="3D Model" camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" style="width: 100%; height: 100%;"></model-viewer>
+        <model-viewer src="${MODEL_URL}" alt="Windmill Model" camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" style="width: 100%; height: 100%;"></model-viewer>
       `;
     }
-const statusText = document.getElementById('loading');
-    const distanceBadge = document.getElementById('distance-badge');
-    statusText.innerHTML = "Requesting GPS permissions...";
+
+    const statusText = document.getElementById('loading');
+    const dbgStatus = document.getElementById('debug-status');
+    const dbgDist = document.getElementById('debug-dist');
+    const dbgCoords = document.getElementById('debug-coords');
+    const dbgAcc = document.getElementById('debug-acc');
+    const dbgHeading = document.getElementById('debug-heading');
 
     let arStarted = false;
 
     if ("geolocation" in navigator) {
-      // watchPosition continuously updates as the user moves
       navigator.geolocation.watchPosition(
         (position) => {
-          const userLat = position.coords.latitude;
-          const userLng = position.coords.longitude;
-          const distance = getDistanceInMeters(userLat, userLng, PARK_LAT, PARK_LNG);
-          
-          // Update the distance badge in the top navigation live
-          distanceBadge.innerHTML = `${Math.round(distance)}m away`;
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const acc = position.coords.accuracy;
+          const heading = position.coords.heading;
+          const distance = getDistanceInMeters(lat, lng, PARK_LAT, PARK_LNG);
 
-          // If we haven't launched AR yet and user is close enough, trigger it
-          if (!arStarted && distance <= MAX_DISTANCE_METERS) {
-            arStarted = true;
-            statusText.style.display = 'none';
-            renderParkAR(); 
-          } else if (!arStarted && distance > MAX_DISTANCE_METERS) {
-            statusText.innerHTML = `You are ${Math.round(distance)}m away.<br>Get within ${MAX_DISTANCE_METERS}m to see AR.`;
-            // Optional: If you want to force fallback immediately when too far, call renderOffsiteFallback() here
+          // Update Debug HUD
+          dbgCoords.innerHTML = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          dbgAcc.innerHTML = `±${Math.round(acc)}m`;
+          dbgDist.innerHTML = `${Math.round(distance)}m`;
+          dbgHeading.innerHTML = getHeadingText(heading);
+
+          if (!arStarted) {
+            if (distance <= MAX_DISTANCE_METERS) {
+              arStarted = true;
+              dbgStatus.innerHTML = "AR Active (Within Range)";
+              renderParkAR();
+            } else {
+              dbgStatus.innerHTML = "Waiting for proximity...";
+              statusText.innerHTML = `You are ${Math.round(distance)}m away.<br>Get closer to launch AR.`;
+            }
           }
         },
         (error) => {
-          let errorMsg = "GPS Error";
-          if (error.code === 1) errorMsg = "Permission Denied";
-          if (error.code === 2) errorMsg = "Position Unavailable";
-          if (error.code === 3) errorMsg = "Timeout";
-          
-          statusText.innerHTML = `${errorMsg}<br>Loading fallback model...`;
-          setTimeout(() => renderOffsiteFallback(), 2500);
+          dbgStatus.innerHTML = `GPS Error (${error.code}) - Fallback loading`;
+          setTimeout(() => renderOffsiteFallback(), 3000);
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     } else {
-      statusText.innerHTML = "Geolocation not supported.<br>Loading fallback...";
+      dbgStatus.innerHTML = "GPS Not Supported";
       setTimeout(() => renderOffsiteFallback(), 2000);
     }
   </script>
