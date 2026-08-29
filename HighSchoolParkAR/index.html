@@ -32,10 +32,9 @@
     #bottom-bar { display: flex; flex-direction: column; align-items: flex-end; padding: 15px; width: 100%; box-sizing: border-box; }
     .bottom-buttons { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 
-    #debug-panel { display: none; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.5; border: 1px solid #333; min-width: 180px; text-align: left; margin-bottom: 10px; pointer-events: none; }
+    #debug-panel { display: none; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.5; border: 1px solid #333; min-width: 160px; text-align: left; margin-bottom: 10px; pointer-events: none; }
     .dbg-val { color: #FFF; }
 
-    /* Modals */
     .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 450px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-height: 75vh; overflow-y: auto; }
     .close-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; float: right; font-weight: bold; }
   </style>
@@ -62,9 +61,10 @@
       <div id="debug-panel">
         <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
         <div>Dist to Park: <span id="dbg-dist" class="dbg-val">--</span></div>
-        <div>Viewfinder: <span id="dbg-target" class="dbg-val" style="color: #ffc107;">Searching...</span></div>
-        <div>Bearing: <span id="dbg-bearing" class="dbg-val">--</span></div>
-        <div>Heading: <span id="dbg-heading" class="dbg-val">--</span></div>
+        <div>Lat: <span id="dbg-lat" class="dbg-val">--</span></div>
+        <div>Lng: <span id="dbg-lng" class="dbg-val">--</span></div>
+        <div>Acc: <span id="dbg-acc" class="dbg-val">--</span></div>
+        <div>Head: <span id="dbg-heading" class="dbg-val">--</span></div>
       </div>
 
       <div class="bottom-buttons interactive">
@@ -87,19 +87,18 @@
     <h2 style="margin-top:0;">Contribute to the Archive</h2>
     <p>We welcome historical photos and community contributions! Photos can be submitted directly for inclusion in our local archives.</p>
     <p>Additionally, our 3D models are fully open source. If you have custom models or reconstructions you would like to contribute, you can submit them to us for review.</p>
-    <p style="margin-bottom: 55px;"><strong>Contact & Submissions:</strong><br><a href="mailto:CHS_AR@hspark.org">CHS_AR@hspark.org</a></p>
+    <p style="margin-bottom: 15px;"><strong>Contact & Submissions:</strong><br><a href="mailto:CHS_AR@hspark.org">CHS_AR@hspark.org</a></p>
     <a href="mailto:CHS_AR@hspark.org?subject=Archive%20Submission" class="btn btn-primary btn-large" style="display: block; text-align: center;">Send Email Submission</a>
   </div>
 
-<script>
+  <script>
     const APP_CONFIG = {
-      version: "3.0.2",
+      version: "3.1.0",
       parkCenter: { lat: 40.071238, lng: -75.124073 },
       farPlane: 5000 
     };
 
     let parkShowingModel = true;
-    let currentHeading = 0;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
@@ -174,7 +173,6 @@
             document.getElementById('dbg-acc').innerText = `±${Math.round(acc)}m`;
             document.getElementById('dbg-dist').innerText = `${Math.round(distance)}m`;
 
-            // This is the working logic that successfully loads your AR scene
             if (document.getElementById('ar-container').innerHTML === "" && acc < 150) {
               document.getElementById('center-launch').style.display = 'none';
               document.getElementById('toggle-content-btn').style.display = 'block';
@@ -234,7 +232,6 @@
       }
 
       if (compass !== null) {
-        currentHeading = compass;
         const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
         const val = Math.floor((compass / 45) + 0.5);
         document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(compass)}°)`;
