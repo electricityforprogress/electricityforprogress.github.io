@@ -13,17 +13,16 @@
   <style>
     body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #222; color: #333; }
     
-    /* ar-container must have pointer-events: none so touch inputs pass through to UI buttons */
     #ar-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
     #3d-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 10; background: #222; display: none; }
     
-    /* UI Layer sits on top with pointer-events enabled for interactive elements */
     #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: flex; flex-direction: column; justify-content: space-between; }
     .interactive { pointer-events: auto; }
     
     .btn { background: rgba(255, 255, 255, 0.95); border: none; padding: 6px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111; box-shadow: 0 2px 4px rgba(0,0,0,0.2); white-space: nowrap; }
     .btn-primary { background: #0056b3; color: white; }
     .btn-success { background: #28a745; color: white; }
+    .btn-warning { background: #ffc107; color: #111; }
     .btn-large { font-size: 14px; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
     #top-bar { display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; background: rgba(0, 0, 0, 0.75); padding: 10px; box-sizing: border-box; backdrop-filter: blur(4px); border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -79,6 +78,7 @@
       </div>
 
       <div class="bottom-buttons interactive">
+        <button id="toggle-park-btn" class="btn btn-warning" style="display: none;" onclick="toggleParkContent()">Show Tower</button>
         <button class="btn btn-large" id="view-toggle" onclick="toggleViewMode()">View 3D Model</button>
         <button id="debug-toggle" class="btn" style="background: rgba(0,0,0,0.6); color: #FFF; border: 1px solid #444;" onclick="toggleDebug()">Debug Info</button>
       </div>
@@ -96,13 +96,14 @@
 
   <script>
     const APP_CONFIG = {
-      version: "2.8.1",
+      version: "2.9.0",
       parkCenter: { lat: 40.071238, lng: -75.124073 }, 
       testLocation: { lat: 40.066951, lng: -75.124436 }, 
       farPlane: 5000 
     };
 
     let currentMode = 'INIT'; 
+    let parkShowingModel = true;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
@@ -114,6 +115,25 @@
     function toggleDebug() {
       const panel = document.getElementById('debug-panel');
       panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function toggleParkContent() {
+      parkShowingModel = !parkShowingModel;
+      const modelEl = document.getElementById('park-model');
+      const towerEl = document.getElementById('park-tower');
+      const btn = document.getElementById('toggle-park-btn');
+      
+      if (modelEl && towerEl && btn) {
+        if (parkShowingModel) {
+          modelEl.setAttribute('visible', 'true');
+          towerEl.setAttribute('visible', 'false');
+          btn.innerText = "Show Tower";
+        } else {
+          modelEl.setAttribute('visible', 'false');
+          towerEl.setAttribute('visible', 'true');
+          btn.innerText = "Show HStest Model";
+        }
+      }
     }
 
     function toggleViewMode() {
@@ -188,10 +208,7 @@
             const lng = position.coords.longitude;
             const acc = position.coords.accuracy;
             
-            const targetLat = APP_CONFIG.parkCenter.lat;
-            const targetLng = APP_CONFIG.parkCenter.lng;
-            
-            const distance = getDistanceInMeters(lat, lng, targetLat, targetLng);
+            const distance = getDistanceInMeters(lat, lng, APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng);
 
             document.getElementById('dbg-lat').innerText = lat.toFixed(5);
             document.getElementById('dbg-lng').innerText = lng.toFixed(5);
@@ -200,7 +217,8 @@
 
             if (document.getElementById('ar-container').innerHTML === "" && acc < 150) {
               document.getElementById('center-launch').style.display = 'none';
-              renderARScene(targetLat, targetLng);
+              document.getElementById('toggle-park-btn').style.display = 'block';
+              renderARScene();
             } else if (document.getElementById('ar-container').innerHTML === "" && acc >= 150) {
               statusObj.innerText = `GPS weak (±${Math.round(acc)}m). Waiting...`;
             }
@@ -215,16 +233,29 @@
       }
     }
 
-    function renderARScene(lat, lng) {
+    function renderARScene() {
       const container = document.getElementById('ar-container');
       
-      // Drops your HStest.glb file right into the AR scene
+      // Renders BOTH the Park location (with toggleable Model/Tower content) AND the Backyard test tower simultaneously
       container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
           <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
           
-          <a-entity gps-entity-place="latitude: ${lat}; longitude: ${lng};">
-            <a-entity gltf-model="url(HStest.glb)" scale="1 1 1" position="0 0 0" rotation="0 0 0"></a-entity>
+          <!-- Park Location: Contains both HStest.glb and a Calibration Tower -->
+          <a-entity gps-entity-place="latitude: ${APP_CONFIG.parkCenter.lat}; longitude: ${APP_CONFIG.parkCenter.lng};">
+            <a-entity id="park-model" gltf-model="url(HStest.glb)" scale="1 1 1" position="0 0 0" rotation="0 0 0" visible="true"></a-entity>
+            <a-entity id="park-tower" visible="false">
+              <a-box position="0 5 0" width="20" height="10" depth="20" material="color: #FF3333; side: double"></a-box>
+              <a-box position="0 15 0" width="20" height="10" depth="20" material="color: #FFFFFF; side: double"></a-box>
+              <a-box position="0 25 0" width="20" height="10" depth="20" material="color: #3388FF; side: double"></a-box>
+              <a-box position="0 35 0" width="20" height="10" depth="20" material="color: #33FF57; side: double"></a-box>
+            </a-entity>
+          </a-entity>
+
+          <!-- Backyard Test Location: Shows a distinct yellow/orange calibration tower -->
+          <a-entity gps-entity-place="latitude: ${APP_CONFIG.testLocation.lat}; longitude: ${APP_CONFIG.testLocation.lng};">
+            <a-box position="0 5 0" width="8" height="10" depth="8" material="color: #FFFF00; side: double"></a-box>
+            <a-box position="0 15 0" width="8" height="10" depth="8" material="color: #FF8800; side: double"></a-box>
           </a-entity>
         </a-scene>
       `;
