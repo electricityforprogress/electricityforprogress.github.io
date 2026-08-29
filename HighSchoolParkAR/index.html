@@ -21,7 +21,6 @@
     #3d-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 10; background: #222; display: none; }
     #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: flex; flex-direction: column; justify-content: space-between; }
     
-    /* Shared Interactive class allows clicks to pass through the transparent overlay */
     .interactive { pointer-events: auto; }
     
     /* Buttons */
@@ -30,15 +29,14 @@
     .btn-success { background: #28a745; color: white; }
     .btn-large { font-size: 14px; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
-    /* Launch Screen Overlay */
-    #launch-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(17, 17, 17, 0.95); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(5px); }
-    #launch-overlay h1 { margin-bottom: 10px; font-size: 24px; }
-    #launch-status { margin-top: 15px; font-size: 13px; color: #AAA; height: 20px; }
-
     /* Compact Top Navigation */
     #top-bar { display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; background: rgba(0, 0, 0, 0.75); padding: 10px; box-sizing: border-box; backdrop-filter: blur(4px); border-bottom: 1px solid rgba(255,255,255,0.1); }
     #header-title { color: white; font-size: 16px; font-weight: bold; cursor: pointer; text-align: left; line-height: 1.2; flex-grow: 1; }
     #top-links { display: flex; gap: 8px; align-items: center; }
+
+    /* Center Launch Area */
+    #center-launch { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 105; text-align: center; }
+    #launch-status { margin-top: 15px; font-size: 13px; color: #FFF; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; display: none; }
 
     /* Bottom Navigation Elements - Right Justified */
     #bottom-bar { display: flex; flex-direction: column; align-items: flex-end; padding: 15px; width: 100%; box-sizing: border-box; }
@@ -55,17 +53,10 @@
 </head>
 <body>
 
-  <!-- LAUNCH SCREEN OVERLAY -->
-  <div id="launch-overlay" class="interactive">
-    <h1>High School Park AR</h1>
-    <p style="color: #CCC; font-size: 14px; margin-bottom: 30px; max-width: 300px;">Explore the historic footprint of Cheltenham High School using augmented reality.</p>
-    <button id="launch-btn" class="btn btn-success btn-large" onclick="startExperience()">Launch AR Camera</button>
-    <div id="launch-status"></div>
-  </div>
-
-  <!-- 3D MODEL VIEWER (Static Mode) linked to HStest.glb -->
+  <!-- 3D MODEL VIEWER (Static Mode) -->
+  <!-- Added environment-image and exposure to guarantee lighting is visible -->
   <div id="3d-container">
-    <model-viewer src="HStest.glb" alt="3D Model" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
+    <model-viewer src="HStest.glb" alt="3D Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
   </div>
 
   <!-- AR CAMERA CONTAINER -->
@@ -74,7 +65,7 @@
   <!-- MAIN UI OVERLAY -->
   <div id="ui-layer">
     
-    <!-- Top Nav: Title and Links -->
+    <!-- Top Nav -->
     <div id="top-bar" class="interactive">
       <div id="header-title" onclick="toggleModal('history-modal')">Cheltenham High School Park ⓘ</div>
       <div id="top-links">
@@ -83,9 +74,14 @@
       </div>
     </div>
     
-    <!-- Bottom Nav: Right-justified Model Toggle & Debug -->
+    <!-- Center Launch Button -->
+    <div id="center-launch" class="interactive">
+      <button id="launch-btn" class="btn btn-success btn-large" onclick="startExperience()">Launch AR Camera</button>
+      <div id="launch-status"></div>
+    </div>
+
+    <!-- Bottom Nav -->
     <div id="bottom-bar">
-      <!-- Debug HUD appears right above the toggle button when active -->
       <div id="debug-panel">
         <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
         <div>Zone: <span id="dbg-zone" class="dbg-val">None</span></div>
@@ -121,10 +117,10 @@
   <script>
     // 1. GLOBAL CONFIGURATION
     const APP_CONFIG = {
-      version: "2.4.0",
+      version: "2.5.0",
       parkCenter:  { lat: 40.071238, lng: -75.124073 }, 
       testLocation: { lat: 40.066951, lng: -75.124436 }, 
-      farPlane: 5000 // 5km visibility
+      farPlane: 5000 
     };
 
     // 2. GEOFENCE ENGINE
@@ -141,8 +137,7 @@
       }
     ];
 
-    let currentMode = 'AR'; 
-    let currentHeading = null;
+    let currentMode = 'INIT'; // Starts in neutral state
     let watchId = null;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
@@ -158,30 +153,50 @@
       panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
     }
 
-    // Completely suspends AR view to prevent z-index/transparency clipping
     function toggleViewMode() {
       const staticView = document.getElementById('3d-container');
       const arContainer = document.getElementById('ar-container');
-      const arVideo = document.getElementById('arjs-video'); // The background feed AR.js creates
+      const centerLaunch = document.getElementById('center-launch');
+      const arVideo = document.getElementById('arjs-video'); 
       const toggleBtn = document.getElementById('view-toggle');
 
-      if (currentMode === 'AR') {
+      if (currentMode !== '3D') {
+        // Switch to Static 3D Mode
         currentMode = '3D';
         staticView.style.display = 'block'; 
         arContainer.style.display = 'none';
+        centerLaunch.style.display = 'none'; // Hide center launch if visible
         if (arVideo) arVideo.style.display = 'none';
+        
         toggleBtn.innerText = "View Live AR";
+        
+        const arScene = document.querySelector('a-scene');
+        if (arScene) arScene.pause();
+        if (arVideo) arVideo.pause();
       } else {
+        // Switch back to AR
         currentMode = 'AR';
         staticView.style.display = 'none'; 
         arContainer.style.display = 'block';
         if (arVideo) arVideo.style.display = 'block';
+        
         toggleBtn.innerText = "View 3D Model";
+        
+        // If they never actually launched AR, trigger the launch sequence
+        if (document.getElementById('ar-container').innerHTML === "") {
+          centerLaunch.style.display = 'block';
+          startExperience();
+        } else {
+          const arScene = document.querySelector('a-scene');
+          if (arScene) arScene.play();
+          if (arVideo) arVideo.play();
+        }
       }
     }
 
     // 4. PROCEDURAL GEOMETRY GENERATOR
-    function buildCalibrationTowerHTML(lat, lng, elementId, sizeScale) {
+    // offsetZ pushes the geometry away from the exact GPS center so the user isn't trapped inside
+    function buildCalibrationTowerHTML(lat, lng, elementId, sizeScale, offsetZ = 0) {
       const w = 8 * sizeScale;
       const d = 8 * sizeScale;
       const pointerZOffset = (d / 2) + (w / 8);
@@ -189,23 +204,27 @@
 
       return `
         <a-entity id="${elementId}" gps-entity-place="latitude: ${lat}; longitude: ${lng};" position="0 0 0">
-          <a-box position="0 -2.5 0" width="${w}" height="5" depth="${d}" material="color: #333333; side: double" opacity="0.8"></a-box>
-          <a-box position="0 5 0" width="${w}" height="10" depth="${d}" material="color: #FF3333; side: double"></a-box>
-          <a-box position="0 15 0" width="${w}" height="10" depth="${d}" material="color: #FFFFFF; side: double"></a-box>
-          <a-box position="0 25 0" width="${w}" height="10" depth="${d}" material="color: #3388FF; side: double"></a-box>
-          <a-box position="0 35 0" width="${w}" height="10" depth="${d}" material="color: #33FF57; side: double"></a-box>
-          <a-box position="0 5 -${pointerZOffset}" width="${pointerSize}" height="10" depth="${pointerSize}" material="color: #FFFF00; side: double"></a-box>
+          <a-entity position="0 0 ${offsetZ}">
+            <a-box position="0 -2.5 0" width="${w}" height="5" depth="${d}" material="color: #333333; side: double" opacity="0.8"></a-box>
+            <a-box position="0 5 0" width="${w}" height="10" depth="${d}" material="color: #FF3333; side: double"></a-box>
+            <a-box position="0 15 0" width="${w}" height="10" depth="${d}" material="color: #FFFFFF; side: double"></a-box>
+            <a-box position="0 25 0" width="${w}" height="10" depth="${d}" material="color: #3388FF; side: double"></a-box>
+            <a-box position="0 35 0" width="${w}" height="10" depth="${d}" material="color: #33FF57; side: double"></a-box>
+            <a-box position="0 5 -${pointerZOffset}" width="${pointerSize}" height="10" depth="${pointerSize}" material="color: #FFFF00; side: double"></a-box>
+          </a-entity>
         </a-entity>
       `;
     }
 
     // 5. INITIALIZATION & SENSOR BOOT
     function startExperience() {
+      currentMode = 'AR';
       const launchBtn = document.getElementById('launch-btn');
       const statusObj = document.getElementById('launch-status');
       
       launchBtn.style.display = 'none';
-      statusObj.innerText = "Requesting orientation & GPS permissions...";
+      statusObj.style.display = 'inline-block';
+      statusObj.innerText = "Requesting permissions...";
 
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
@@ -246,13 +265,11 @@
 
             evaluateGeofences(lat, lng);
 
-            // Only launch the 3D scene if the container is empty AND accuracy is reasonable 
-            // (prevents the "spawn on top of user" bug caused by cell-tower triangulation bounce)
             if (document.getElementById('ar-container').innerHTML === "" && acc < 100) {
-              document.getElementById('launch-overlay').style.display = 'none';
+              document.getElementById('center-launch').style.display = 'none';
               renderARScene();
             } else if (document.getElementById('ar-container').innerHTML === "" && acc >= 100) {
-              statusObj.innerText = `GPS signal too weak (±${Math.round(acc)}m). Waiting for stronger lock...`;
+              statusObj.innerText = `GPS signal weak (±${Math.round(acc)}m). Waiting for lock...`;
             }
           },
           (error) => {
@@ -291,11 +308,12 @@
     function renderARScene() {
       const container = document.getElementById('ar-container');
       
-      // Park tower at scale 4 (32 meters wide)
-      const parkTower = buildCalibrationTowerHTML(APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng, "park-tower", 4);
+      // Park tower at scale 4
+      const parkTower = buildCalibrationTowerHTML(APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng, "park-tower", 4, 0);
       
-      // Backyard tower at scale 0.5 (4 meters wide) to prevent drawing inside the user's house
-      const testTower = buildCalibrationTowerHTML(APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng, "test-tower", 0.5);
+      // Backyard tower at scale 0.5. 
+      // The `-15` pushes the geometry 15 meters North/South from the GPS anchor so you are safely outside it.
+      const testTower = buildCalibrationTowerHTML(APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng, "test-tower", 0.5, -15);
 
       container.innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
@@ -328,7 +346,6 @@
       }
 
       if (compass !== null) {
-        currentHeading = compass;
         const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
         const val = Math.floor((compass / 45) + 0.5);
         document.getElementById('dbg-heading').innerText = `${directions[(val % 8)]} (${Math.round(compass)}°)`;
