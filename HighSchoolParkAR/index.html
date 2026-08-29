@@ -243,12 +243,15 @@
       `;
     }
 
-    if ("geolocation" in navigator) {
+   if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const userLat = position.coords.latitude;
           const userLng = position.coords.longitude;
           const distance = getDistanceInMeters(userLat, userLng, PARK_LAT, PARK_LNG);
+          
+          // Debug Alert 1: Shows you the exact math
+          alert(`GPS Locked! You are ${Math.round(distance)} meters from the target.`);
           
           if (distance <= MAX_DISTANCE_METERS) {
             renderParkAR(); 
@@ -257,12 +260,15 @@
           }
         },
         (error) => {
-          console.warn("Location access denied or failed.", error);
+          // Debug Alert 2: Tells you exactly why the phone blocked the GPS
+          alert(`GPS Error: ${error.message} (Code: ${error.code})`);
           renderOffsiteFallback();
         },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        // Increased timeout to 15 seconds for mobile hardware
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     } else {
+      alert("Geolocation is not supported by this browser.");
       renderOffsiteFallback();
     }
   </script>
