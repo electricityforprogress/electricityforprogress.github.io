@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>High School Park AR Prototype</title>
+  
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
+
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #222; color: #333; }
+    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.2rem; color: white; z-index: 9999; text-align: center; }
+    #container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; display: flex; flex-direction: column; justify-content: space-between; }
+    .ui-interactive { pointer-events: auto; }
+    #top-nav { display: flex; justify-content: center; gap: 10px; padding: 15px; background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0)); }
+    .nav-btn { background: rgba(255, 255, 255, 0.9); border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; color: #333; }
+    .nav-btn.donate { background: #28a745; color: white; }
+    #bottom-panel { background: rgba(255, 255, 255, 0.95); margin: 15px; padding: 15px; border-radius: 8px; text-align: center; }
+    #bottom-panel h3 { margin: 0 0 8px 0; font-size: 16px; }
+    #bottom-panel p { margin: 0 0 12px 0; font-size: 13px; }
+    .action-btn { background: #0056b3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px; }
+    #history-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 500px; background: white; padding: 20px; border-radius: 8px; z-index: 2000; pointer-events: auto; max-height: 70vh; overflow-y: auto; }
+    .close-modal { background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; float: right; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <!-- Changed the text to verify the new file is loading -->
+  <div id="loading">Loading AR engine...</div>
+  
+  <div id="container"></div>
+
+  <div id="ui-layer">
+    <div id="top-nav" class="ui-interactive">
+      <button class="nav-btn" onclick="toggleHistory()">Park History</button>
+      <a href="https://electricityforprogress.com" target="_blank" class="nav-btn">Our Website</a>
+      <a href="https://electricityforprogress.com/donate" target="_blank" class="nav-btn donate">Donate</a>
+    </div>
+
+    <div id="bottom-panel" class="ui-interactive">
+      <h3>Help Build the Archive</h3>
+      <p>This V1 prototype was built using 1927 architectural plans. Do you have historical photos or modeling skills to contribute?</p>
+      <a href="#" class="action-btn">Contribute Materials</a>
+    </div>
+  </div>
+
+  <div id="history-modal">
+    <button class="close-modal" onclick="toggleHistory()">Close</button>
+    <h2>History of High School Park</h2>
+    <p>Insert historical text here.</p>
+  </div>
+
+  <script>
+    function toggleHistory() {
+      const modal = document.getElementById('history-modal');
+      modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
+    }
+
+    //40.067305, -75.123882
+    const PARK_LAT = 40.067305; 
+    const PARK_LNG = -75.123882;
+    const MAX_DISTANCE_METERS = 1000;
+    const MODEL_URL = '/testAR.glb; // Make sure this matches your downloaded file
+
+    function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const p1 = lat1 * Math.PI / 180;
+      const p2 = lat2 * Math.PI / 180;
+      const dp = (lat2 - lat1) * Math.PI / 180;
+      const dl = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    }
+
+    function renderParkAR() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('container').innerHTML = `
+        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+          <a-camera gps-camera="gpsMinDistance: 5" far="2000"></a-camera>
+            <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
+            
+            <!-- DEBUGGING TOOL: A massive red pillar that is impossible to miss -->
+            <a-box color="red" scale="20 100 20" position="0 50 0"></a-box>
+
+            <!-- Your 3D Model -->
+            <a-entity gltf-model="url(${MODEL_URL})"
+                      scale="300 300 300"
+                      rotation="0 0 0"
+                      position="0 -1.6 0">
+            </a-entity>
+
+          </a-entity>
+        </a-scene>
+      `;
+    }
+
+    function renderOffsiteFallback() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('container').innerHTML = `
+        <model-viewer src="${MODEL_URL}" alt="3D Model" camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" style="width: 100%; height: 100%;"></model-viewer>
+      `;
+    }
+
+    const statusText = document.getElementById('loading');
+    statusText.innerHTML = "Requesting GPS permissions...";
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userLat = position.coords.latitude;
+          const userLng = position.coords.longitude;
+          const distance = getDistanceInMeters(userLat, userLng, PARK_LAT, PARK_LNG);
+          
+          statusText.innerHTML = `GPS Locked!<br>Distance: ${Math.round(distance)} meters.<br>Loading model...`;
+          
+          setTimeout(() => {
+            if (distance <= MAX_DISTANCE_METERS) {
+              renderParkAR(); 
+            } else {
+              renderOffsiteFallback(); 
+            }
+          }, 2000);
+        },
+        (error) => {
+          let errorMsg = "Unknown Error";
+          if (error.code === 1) errorMsg = "Permission Denied";
+          if (error.code === 2) errorMsg = "Position Unavailable";
+          if (error.code === 3) errorMsg = "Timeout";
+          
+          statusText.innerHTML = `GPS Failed: ${errorMsg}<br>Message: ${error.message}<br>Loading fallback...`;
+          setTimeout(() => renderOffsiteFallback(), 3000);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    } else {
+      statusText.innerHTML = "Geolocation not supported.<br>Loading fallback...";
+      setTimeout(() => renderOffsiteFallback(), 2000);
+    }
+  </script>
+</body>
+</html>
