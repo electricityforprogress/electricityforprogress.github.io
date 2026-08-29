@@ -27,6 +27,7 @@
     .btn { background: rgba(255, 255, 255, 0.95); border: none; padding: 6px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111; box-shadow: 0 2px 4px rgba(0,0,0,0.2); white-space: nowrap; }
     .btn-primary { background: #0056b3; color: white; }
     .btn-success { background: #28a745; color: white; }
+    .btn-warning { background: #ffc107; color: #111; }
     .btn-large { font-size: 14px; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
     /* Compact Top Navigation */
@@ -41,6 +42,9 @@
     /* Bottom Navigation Elements - Right Justified */
     #bottom-bar { display: flex; flex-direction: column; align-items: flex-end; padding: 15px; width: 100%; box-sizing: border-box; }
     .bottom-buttons { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+    
+    /* 3D Debug Overlay */
+    #viewer-debug { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: none; z-index: 200; }
 
     /* Debug HUD */
     #debug-panel { display: none; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.5; border: 1px solid #333; min-width: 160px; text-align: left; margin-bottom: 10px; pointer-events: none; }
@@ -54,9 +58,11 @@
 <body>
 
   <!-- 3D MODEL VIEWER (Static Mode) -->
-  <!-- Added environment-image and exposure to guarantee lighting is visible -->
   <div id="3d-container">
-    <model-viewer src="HStest.glb" alt="3D Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
+    <div id="viewer-debug" class="interactive">
+      <button class="btn btn-warning" onclick="loadSampleModel()">Test Viewer (Load Sample GLB)</button>
+    </div>
+    <model-viewer id="main-viewer" src="HStest.glb" alt="3D Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
   </div>
 
   <!-- AR CAMERA CONTAINER -->
@@ -94,6 +100,7 @@
       </div>
 
       <div class="bottom-buttons interactive">
+        <button id="toggle-test-btn" class="btn" style="background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; display: none;" onclick="toggleTestTower()">Hide Test Tower</button>
         <button class="btn btn-large" id="view-toggle" onclick="toggleViewMode()">View 3D Model</button>
         <button id="debug-toggle" class="btn" style="background: rgba(0,0,0,0.6); color: #FFF; border: 1px solid #444;" onclick="toggleDebug()">Debug Info</button>
       </div>
@@ -117,7 +124,7 @@
   <script>
     // 1. GLOBAL CONFIGURATION
     const APP_CONFIG = {
-      version: "2.5.0",
+      version: "2.6.0",
       parkCenter:  { lat: 40.071238, lng: -75.124073 }, 
       testLocation: { lat: 40.066951, lng: -75.124436 }, 
       farPlane: 5000 
@@ -137,8 +144,10 @@
       }
     ];
 
-    let currentMode = 'INIT'; // Starts in neutral state
+    let currentMode = 'INIT'; 
     let watchId = null;
+    let initialLockAchieved = false;
+    let testTowerEnabled = true;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
@@ -152,6 +161,30 @@
       const panel = document.getElementById('debug-panel');
       panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
     }
+    
+    function loadSampleModel() {
+      const viewer = document.getElementById('main-viewer');
+      viewer.src = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
+      alert("Loading Sample Astronaut Model.\n\nIf you can see the Astronaut but not your HStest.glb, your 3D file is corrupted or exported incorrectly.");
+    }
+
+    function toggleTestTower() {
+      const tower = document.getElementById('test-tower');
+      const btn = document.getElementById('toggle-test-btn');
+      if (!tower) return;
+      
+      testTowerEnabled = !testTowerEnabled;
+      
+      if (testTowerEnabled) {
+        tower.setAttribute('visible', 'true');
+        btn.innerText = "Hide Test Tower";
+        btn.style.background = "#e2e3e5";
+      } else {
+        tower.setAttribute('visible', 'false');
+        btn.innerText = "Show Test Tower";
+        btn.style.background = "#ffc107";
+      }
+    }
 
     function toggleViewMode() {
       const staticView = document.getElementById('3d-container');
@@ -159,13 +192,16 @@
       const centerLaunch = document.getElementById('center-launch');
       const arVideo = document.getElementById('arjs-video'); 
       const toggleBtn = document.getElementById('view-toggle');
+      const viewerDebugBtn = document.getElementById('viewer-debug');
+      const toggleTestBtn = document.getElementById('toggle-test-btn');
 
       if (currentMode !== '3D') {
-        // Switch to Static 3D Mode
         currentMode = '3D';
         staticView.style.display = 'block'; 
         arContainer.style.display = 'none';
-        centerLaunch.style.display = 'none'; // Hide center launch if visible
+        centerLaunch.style.display = 'none'; 
+        viewerDebugBtn.style.display = 'block';
+        if (toggleTestBtn.style.display === 'block') toggleTestBtn.style.display = 'none';
         if (arVideo) arVideo.style.display = 'none';
         
         toggleBtn.innerText = "View Live AR";
@@ -174,15 +210,15 @@
         if (arScene) arScene.pause();
         if (arVideo) arVideo.pause();
       } else {
-        // Switch back to AR
         currentMode = 'AR';
         staticView.style.display = 'none'; 
         arContainer.style.display = 'block';
+        viewerDebugBtn.style.display = 'none';
+        if (document.getElementById('ar-container').innerHTML !== "") toggleTestBtn.style.display = 'block';
         if (arVideo) arVideo.style.display = 'block';
         
         toggleBtn.innerText = "View 3D Model";
         
-        // If they never actually launched AR, trigger the launch sequence
         if (document.getElementById('ar-container').innerHTML === "") {
           centerLaunch.style.display = 'block';
           startExperience();
@@ -195,7 +231,7 @@
     }
 
     // 4. PROCEDURAL GEOMETRY GENERATOR
-    // offsetZ pushes the geometry away from the exact GPS center so the user isn't trapped inside
+    // Spawns with visible="false" to prevent origin-spawning glitches
     function buildCalibrationTowerHTML(lat, lng, elementId, sizeScale, offsetZ = 0) {
       const w = 8 * sizeScale;
       const d = 8 * sizeScale;
@@ -203,7 +239,7 @@
       const pointerSize = w / 4;
 
       return `
-        <a-entity id="${elementId}" gps-entity-place="latitude: ${lat}; longitude: ${lng};" position="0 0 0">
+        <a-entity id="${elementId}" gps-entity-place="latitude: ${lat}; longitude: ${lng};" position="0 0 0" visible="false">
           <a-entity position="0 0 ${offsetZ}">
             <a-box position="0 -2.5 0" width="${w}" height="5" depth="${d}" material="color: #333333; side: double" opacity="0.8"></a-box>
             <a-box position="0 5 0" width="${w}" height="10" depth="${d}" material="color: #FF3333; side: double"></a-box>
@@ -267,9 +303,19 @@
 
             if (document.getElementById('ar-container').innerHTML === "" && acc < 100) {
               document.getElementById('center-launch').style.display = 'none';
+              document.getElementById('toggle-test-btn').style.display = 'block';
               renderARScene();
             } else if (document.getElementById('ar-container').innerHTML === "" && acc >= 100) {
               statusObj.innerText = `GPS signal weak (±${Math.round(acc)}m). Waiting for lock...`;
+            }
+
+            // Reveal models only after first solid position update
+            if (!initialLockAchieved && document.getElementById('ar-container').innerHTML !== "") {
+               initialLockAchieved = true;
+               const pTower = document.getElementById('park-tower');
+               const tTower = document.getElementById('test-tower');
+               if (pTower) pTower.setAttribute('visible', 'true');
+               if (tTower && testTowerEnabled) tTower.setAttribute('visible', 'true');
             }
           },
           (error) => {
@@ -312,7 +358,6 @@
       const parkTower = buildCalibrationTowerHTML(APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng, "park-tower", 4, 0);
       
       // Backyard tower at scale 0.5. 
-      // The `-15` pushes the geometry 15 meters North/South from the GPS anchor so you are safely outside it.
       const testTower = buildCalibrationTowerHTML(APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng, "test-tower", 0.5, -15);
 
       container.innerHTML = `
