@@ -60,7 +60,7 @@
     <p>Insert historical text here about the demolished high school and surrounding park grounds.</p>
   </div>
 
-  <script>
+<script>
     window.onerror = function(msg, url, line) {
       document.getElementById('loading').innerHTML = `JS Error: ${msg}<br>Line: ${line}`;
     };
@@ -70,11 +70,11 @@
       modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
     }
 
-    //40.067356, -75.124541
+  //40.067356, -75.124541
     const PARK_LAT = 40.067356; 
     const PARK_LNG = -75.124541;
-    const MAX_DISTANCE_METERS = 1000;
-    const MODEL_URL = 'HStest.glb'; // Update to your windmill file name
+    const MAX_DISTANCE_METERS = 500;
+    const MODEL_URL = 'HStest.glb';
 
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
@@ -87,10 +87,45 @@
     }
 
     function getHeadingText(deg) {
-      if (deg === null || deg === undefined) return "N/A (Move to track)";
+      if (deg === null || deg === undefined || isNaN(deg)) return "Calibrating (Move phone)";
       const directions = ["North", "North-East", "East", "South-East", "South", "South-West", "West", "North-West"];
       const val = Math.floor((deg / 45) + 0.5);
       return `${directions[(val % 8)]} (${Math.round(deg)}°)`;
+    }
+
+    // Live Compass Listener
+    let currentHeading = null;
+    function initCompass() {
+      // iOS 13+ permission request check
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(response => {
+          if (response === 'granted') {
+            window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
+          }
+        }).catch(console.error);
+      } else {
+        // Android & standard browsers
+        window.addEventListener('deviceorientationabsolute', handleOrientation, true) || window.addEventListener('deviceorientation', handleOrientation, true);
+      }
+    }
+
+    function handleOrientation(event) {
+      let compass = null;
+      // iOS provides alpha or webkitCompassHeading
+      if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+        compass = event.webkitCompassHeading;
+      } 
+      // Android / W3C standard absolute orientation
+      else if (event.absolute && event.alpha !== null) {
+        compass = 360 - event.alpha;
+      } else if (event.alpha !== null) {
+        compass = 360 - event.alpha;
+      }
+
+      if (compass !== null) {
+        currentHeading = compass;
+        document.getElementById('debug-heading').innerHTML = getHeadingText(currentHeading);
+      }
     }
 
     function renderParkAR() {
@@ -100,15 +135,10 @@
           <a-camera gps-camera="gpsMinDistance: 3" far="2000"></a-camera>
           
           <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
-            <!-- 
-              WINDMILL POSITION FIX:
-              position="X Y Z" 
-              Y is vertical height (positive moves it up into the air, negative pushes it underground).
-            -->
             <a-entity gltf-model="url(${MODEL_URL})" 
-                      scale="10 10 10" 
+                      scale="5 5 5" 
                       rotation="0 0 0" 
-                      position="0 10 0">
+                      position="0 5 0">
             </a-entity>
           </a-entity>
         </a-scene>
@@ -137,19 +167,17 @@
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
           const acc = position.coords.accuracy;
-          const heading = position.coords.heading;
           const distance = getDistanceInMeters(lat, lng, PARK_LAT, PARK_LNG);
 
-          // Update Debug HUD
           dbgCoords.innerHTML = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
           dbgAcc.innerHTML = `±${Math.round(acc)}m`;
           dbgDist.innerHTML = `${Math.round(distance)}m`;
-          dbgHeading.innerHTML = getHeadingText(heading);
 
           if (!arStarted) {
             if (distance <= MAX_DISTANCE_METERS) {
               arStarted = true;
               dbgStatus.innerHTML = "AR Active (Within Range)";
+              initCompass(); // Fire up orientation sensors when AR kicks off
               renderParkAR();
             } else {
               dbgStatus.innerHTML = "Waiting for proximity...";
