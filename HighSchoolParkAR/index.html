@@ -102,20 +102,25 @@
     };
     
 // Catch model-viewer loading events and display errors on-screen
-    window.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('DOMContentLoaded', () => {
       const viewer = document.getElementById('main-viewer');
       const errLog = document.getElementById('model-error-log');
 
       if (viewer) {
         viewer.addEventListener('error', (event) => {
           errLog.style.display = 'block';
-          errLog.innerHTML = `<strong>Model Error:</strong> ${JSON.stringify(event.detail)}<br>Check if 'HStest.glb' exists in root.`;
-          console.error("Model-viewer error:", event.detail);
+          errLog.style.background = 'rgba(255,0,0,0.8)';
+          errLog.innerHTML = `<strong>Model Error:</strong> ${JSON.stringify(event.detail)}`;
         });
 
         viewer.addEventListener('load', () => {
-          errLog.style.display = 'none';
-          console.log("Model loaded successfully!");
+          errLog.style.display = 'block';
+          errLog.style.background = 'rgba(40,167,69,0.9)'; // Green success box
+          errLog.innerHTML = `<strong>Success!</strong> HStest.glb loaded into viewer.<br>If screen is blank, the model geometry is likely out of frame.`;
+          
+          // Force camera to reset and auto-frame the loaded model
+          viewer.cameraTarget = 'auto';
+          viewer.jumpCameraToGoal();
         });
       }
     });
