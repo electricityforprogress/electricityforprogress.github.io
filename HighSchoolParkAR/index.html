@@ -25,18 +25,19 @@
     .interactive { pointer-events: auto; }
     .btn { background: rgba(255, 255, 255, 0.95); border: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     .btn-primary { background: #0056b3; color: white; }
+    .btn-success { background: #28a745; color: white; }
 
     /* Top Navigation Elements */
     #top-bar { display: flex; flex-direction: column; width: 100%; }
-    #header-title { background: rgba(0, 0, 0, 0.75); color: white; padding: 15px; text-align: center; font-size: 18px; font-weight: bold; cursor: pointer; letter-spacing: 0.5px; backdrop-filter: blur(4px); }
-    #top-links { display: flex; justify-content: center; gap: 10px; padding: 10px; }
+    #header-title { background: rgba(0, 0, 0, 0.75); color: white; padding: 15px; text-align: center; font-size: 18px; font-weight: bold; cursor: pointer; letter-spacing: 0.5px; backdrop-filter: blur(4px); border-bottom: 1px solid rgba(255,255,255,0.1); }
+    #top-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 10px; background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0)); }
 
-    /* Bottom Navigation Elements */
-    #bottom-bar { display: flex; flex-direction: column; align-items: center; padding-bottom: 25px; width: 100%; }
-    .bottom-buttons { display: flex; gap: 10px; margin-top: 10px; }
+    /* Bottom Navigation Elements - Right Justified */
+    #bottom-bar { display: flex; flex-direction: column; align-items: flex-end; padding: 15px; width: 100%; box-sizing: border-box; }
+    .bottom-buttons { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 
     /* Debug HUD */
-    #debug-panel { display: none; position: absolute; bottom: 80px; left: 15px; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.6; border: 1px solid #333; max-width: 250px; z-index: 200; }
+    #debug-panel { display: none; background: rgba(0, 0, 0, 0.85); color: #00FF00; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 11px; line-height: 1.6; border: 1px solid #333; min-width: 150px; text-align: left; margin-bottom: 10px; pointer-events: none; }
     .dbg-val { color: #FFF; }
 
     /* Modals */
@@ -46,9 +47,9 @@
 </head>
 <body>
 
-  <!-- 3D MODEL VIEWER (Fallback/Static Mode) -->
+  <!-- 3D MODEL VIEWER (Static Mode) linked to HStest.glb -->
   <div id="3d-container">
-    <model-viewer src="placeholder.glb" alt="3D Model" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
+    <model-viewer src="HStest.glb" alt="3D Model" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
   </div>
 
   <!-- AR CAMERA CONTAINER -->
@@ -57,37 +58,36 @@
   <!-- MAIN UI OVERLAY -->
   <div id="ui-layer">
     
-    <!-- Top Nav: Header acts as History button, followed by Submit/Friends links -->
+    <!-- Top Nav: Header, Launch Button, and Links -->
     <div id="top-bar">
       <div id="header-title" class="interactive" onclick="toggleModal('history-modal')">Cheltenham High School Park</div>
       <div id="top-links" class="interactive">
+        <button id="launch-btn" class="btn btn-success" onclick="startExperience()">Launch AR Camera</button>
         <a href="https://fhsp.org/" target="_blank" class="btn">fhsp.org</a>
         <a href="mailto:CHS_AR@hspark.org?subject=Archive%20Submission" class="btn btn-primary">Submit</a>
       </div>
+      <div id="launch-status" style="display: none; background: rgba(0,0,0,0.7); color: white; padding: 5px; text-align: center; font-size: 12px;"></div>
     </div>
 
-    <!-- Bottom Nav: Launch button is integrated here, vanishes when AR starts -->
+    <!-- Bottom Nav: Right-justified Model Toggle & Debug -->
     <div id="bottom-bar">
-      <div id="launch-status" style="display: none; background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; margin-bottom: 10px;"></div>
-      <button id="launch-btn" class="interactive btn btn-primary" style="font-size: 16px; padding: 12px 24px; background: #28a745; margin-bottom: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);" onclick="startExperience()">Launch AR Camera</button>
-      
+      <!-- Debug HUD appears right above the toggle button when active -->
+      <div id="debug-panel">
+        <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
+        <div>Zone: <span id="dbg-zone" class="dbg-val">None</span></div>
+        <div>Dist: <span id="dbg-dist" class="dbg-val">--</span></div>
+        <div>Lat: <span id="dbg-lat" class="dbg-val">--</span></div>
+        <div>Lng: <span id="dbg-lng" class="dbg-val">--</span></div>
+        <div>Acc: <span id="dbg-acc" class="dbg-val">--</span></div>
+        <div>Head: <span id="dbg-heading" class="dbg-val">--</span></div>
+      </div>
+
       <div class="bottom-buttons interactive">
-        <button class="btn" id="view-toggle" onclick="toggleViewMode()">View 3D Model</button>
-        <button id="debug-toggle" class="btn" onclick="toggleDebug()">Debug</button>
+        <button class="btn" id="view-toggle" onclick="toggleViewMode()" style="box-shadow: 0 4px 10px rgba(0,0,0,0.5);">View 3D Model</button>
+        <button id="debug-toggle" class="btn" style="background: rgba(0,0,0,0.6); color: #FFF; border: 1px solid #444;" onclick="toggleDebug()">Debug Info</button>
       </div>
     </div>
 
-  </div>
-
-  <!-- DEBUG HUD -->
-  <div id="debug-panel" class="interactive">
-    <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
-    <div>Zone: <span id="dbg-zone" class="dbg-val">None</span></div>
-    <div>Dist: <span id="dbg-dist" class="dbg-val">--</span></div>
-    <div>Lat: <span id="dbg-lat" class="dbg-val">--</span></div>
-    <div>Lng: <span id="dbg-lng" class="dbg-val">--</span></div>
-    <div>Acc: <span id="dbg-acc" class="dbg-val">--</span></div>
-    <div>Head: <span id="dbg-heading" class="dbg-val">--</span></div>
   </div>
 
   <!-- HISTORY MODAL -->
@@ -99,38 +99,38 @@
     <p>On July 3, 1995, the remains of the building were demolished and imploded. Following the demolition, the 11-acre site was transformed into High School Park to preserve the native ecosystem where the school once stood.</p>
   </div>
 
+
   <!-- =========================================
        APPLICATION LOGIC
        ========================================= -->
   <script>
     // 1. GLOBAL CONFIGURATION
     const APP_CONFIG = {
-      version: "2.1.0",
+      version: "2.2.0",
       parkCenter:  { lat: 40.071238, lng: -75.124073 }, // Actual Park Center
       testLocation: { lat: 40.067356, lng: -75.124541 }, // Backyard Test Site
-      farPlane: 5000 // 5km visibility to see towers across the neighborhood
+      farPlane: 5000 // 5km visibility
     };
 
     // 2. GEOFENCE ENGINE
     const GEOFENCES = [
       {
         id: "Creek Hollow",
-        bounds: { minLat: 40.066000, maxLat: 40.068000, minLng: -75.126000, maxLng: -75.123000 },
-        targetY: 15.0 // Push models 15m up if user is standing in a deep hollow
+        // TIGHTENED BOUNDS so it doesn't accidentally trigger in your backyard testing
+        bounds: { minLat: 40.070000, maxLat: 40.071000, minLng: -75.126000, maxLng: -75.123000 },
+        targetY: 15.0 
       },
       {
         id: "Upper Plateau",
-        bounds: { minLat: 40.070000, maxLat: 40.072000, minLng: -75.125000, maxLng: -75.123000 },
-        targetY: -2.0 // Drop models 2m down if user is on a high ridge
+        bounds: { minLat: 40.071001, maxLat: 40.072000, minLng: -75.125000, maxLng: -75.123000 },
+        targetY: -2.0
       }
     ];
 
-    // State Variables
     let currentMode = 'AR'; 
     let currentHeading = null;
     let watchId = null;
 
-    // Set Version in Debug HUD
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
     // 3. UI MANAGEMENT
@@ -161,22 +161,21 @@
     }
 
     // 4. PROCEDURAL GEOMETRY GENERATOR
-    // sizeScale multiplies the width/depth so distant towers remain visible
+    // ADDED `material="side: double"` so you can see the box even if you are standing inside it!
     function buildCalibrationTowerHTML(lat, lng, elementId, sizeScale) {
       const w = 8 * sizeScale;
       const d = 8 * sizeScale;
-      // Front pointer math based on scale
       const pointerZOffset = (d / 2) + (w / 8);
       const pointerSize = w / 4;
 
       return `
         <a-entity id="${elementId}" gps-entity-place="latitude: ${lat}; longitude: ${lng};" position="0 0 0">
-          <a-box position="0 -2.5 0" width="${w}" height="5" depth="${d}" color="#333333" opacity="0.8"></a-box>
-          <a-box position="0 5 0" width="${w}" height="10" depth="${d}" color="#FF3333"></a-box>
-          <a-box position="0 15 0" width="${w}" height="10" depth="${d}" color="#FFFFFF"></a-box>
-          <a-box position="0 25 0" width="${w}" height="10" depth="${d}" color="#3388FF"></a-box>
-          <a-box position="0 35 0" width="${w}" height="10" depth="${d}" color="#33FF57"></a-box>
-          <a-box position="0 5 -${pointerZOffset}" width="${pointerSize}" height="10" depth="${pointerSize}" color="#FFFF00"></a-box>
+          <a-box position="0 -2.5 0" width="${w}" height="5" depth="${d}" material="color: #333333; side: double" opacity="0.8"></a-box>
+          <a-box position="0 5 0" width="${w}" height="10" depth="${d}" material="color: #FF3333; side: double"></a-box>
+          <a-box position="0 15 0" width="${w}" height="10" depth="${d}" material="color: #FFFFFF; side: double"></a-box>
+          <a-box position="0 25 0" width="${w}" height="10" depth="${d}" material="color: #3388FF; side: double"></a-box>
+          <a-box position="0 35 0" width="${w}" height="10" depth="${d}" material="color: #33FF57; side: double"></a-box>
+          <a-box position="0 5 -${pointerZOffset}" width="${pointerSize}" height="10" depth="${pointerSize}" material="color: #FFFF00; side: double"></a-box>
         </a-entity>
       `;
     }
@@ -228,7 +227,7 @@
             evaluateGeofences(lat, lng);
 
             if (document.getElementById('ar-container').innerHTML === "") {
-              statusObj.style.display = 'none'; // Hide status once AR boots
+              statusObj.style.display = 'none';
               renderARScene();
             }
           },
@@ -268,10 +267,10 @@
     function renderARScene() {
       const container = document.getElementById('ar-container');
       
-      // Inject Park tower with scale multiplier 4 (32 meters wide) so it's visible from 500m away
+      // Park tower at scale 4 (32 meters wide)
       const parkTower = buildCalibrationTowerHTML(APP_CONFIG.parkCenter.lat, APP_CONFIG.parkCenter.lng, "park-tower", 4);
       
-      // Inject Backyard tower at normal scale (8 meters wide)
+      // Backyard tower at scale 1 (8 meters wide)
       const testTower = buildCalibrationTowerHTML(APP_CONFIG.testLocation.lat, APP_CONFIG.testLocation.lng, "test-tower", 1);
 
       container.innerHTML = `
