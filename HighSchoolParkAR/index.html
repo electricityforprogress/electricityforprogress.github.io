@@ -64,9 +64,9 @@
       modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
     }
 
-// 40.067140, -75.124159
-    const PARK_LAT = 40.067140; 
-    const PARK_LNG = -75.124159;
+// 40.067404, -75.124586
+    const PARK_LAT = 40.067404; 
+    const PARK_LNG = -75.124586;
     const MAX_DISTANCE_METERS = 1000;
     
     // UPDATE THIS TO THE EXACT NAME OF YOUR .GLB FILE
@@ -88,7 +88,7 @@
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
           <a-camera gps-camera="gpsMinDistance: 5" far="2000"></a-camera>
           <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
-            <a-entity gltf-model="url(${MODEL_URL})" scale="10 10 10" rotation="0 0 0" position="0 -1.6 0"></a-entity>
+            <a-entity gltf-model="url(${MODEL_URL})" scale="10 10 10" rotation="0 0 0" position="0 0 0"></a-entity>
           </a-entity>
         </a-scene>
       `;
