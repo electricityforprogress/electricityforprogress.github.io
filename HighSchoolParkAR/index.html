@@ -44,8 +44,9 @@
 <body>
 
   <!-- Static 3D Viewer for your HStest.glb file -->
-  <div id="3d-container">
-    <model-viewer src="HStest.glb" alt="HStest Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
+<div id="3d-container" style="position: relative;">
+    <div id="model-error-log" style="position: absolute; top: 20px; left: 20px; background: rgba(255,0,0,0.8); color: white; padding: 10px; font-family: monospace; font-size: 11px; z-index: 20; max-width: 80%; border-radius: 4px; display: none;"></div>
+    <model-viewer id="main-viewer" src="HStest.glb" alt="HStest Model" environment-image="neutral" exposure="1" shadow-intensity="1" camera-controls auto-rotate style="width: 100%; height: 100%;"></model-viewer>
   </div>
 
   <!-- AR Camera Container -->
@@ -69,7 +70,7 @@
     <div id="bottom-bar">
       <div id="debug-panel">
         <div>Ver: <span id="dbg-ver" class="dbg-val"></span></div>
-        <div>Dist to Park: <span id="dbg-dist" class="dbg-val">--</span></div>
+        <div>Dist: <span id="dbg-dist" class="dbg-val">--</span></div>
         <div>Lat: <span id="dbg-lat" class="dbg-val">--</span></div>
         <div>Lng: <span id="dbg-lng" class="dbg-val">--</span></div>
         <div>Acc: <span id="dbg-acc" class="dbg-val">--</span></div>
@@ -99,7 +100,26 @@
       testLocation: { lat: 40.066951, lng: -75.124436 }, 
       farPlane: 5000 
     };
+    
+// Catch model-viewer loading events and display errors on-screen
+    window.addEventListener('DOMContentLoaded', () => {
+      const viewer = document.getElementById('main-viewer');
+      const errLog = document.getElementById('model-error-log');
 
+      if (viewer) {
+        viewer.addEventListener('error', (event) => {
+          errLog.style.display = 'block';
+          errLog.innerHTML = `<strong>Model Error:</strong> ${JSON.stringify(event.detail)}<br>Check if 'HStest.glb' exists in root.`;
+          console.error("Model-viewer error:", event.detail);
+        });
+
+        viewer.addEventListener('load', () => {
+          errLog.style.display = 'none';
+          console.log("Model loaded successfully!");
+        });
+      }
+    });
+    
     let currentMode = 'INIT'; 
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
