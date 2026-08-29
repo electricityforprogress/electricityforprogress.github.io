@@ -16,6 +16,13 @@
     #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; display: flex; flex-direction: column; justify-content: space-between; }
     .ui-interactive { pointer-events: auto; }
     #top-nav { display: flex; justify-content: center; gap: 10px; padding: 15px; background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0)); }
+    <div id="top-nav" class="ui-interactive">
+      <button class="nav-btn" onclick="toggleHistory()">Park History</button>
+      <a href="https://electricityforprogress.com" target="_blank" class="nav-btn">Our Website</a>
+      <a href="https://electricityforprogress.com/donate" target="_blank" class="nav-btn donate">Donate</a>
+      <!-- Live Distance Badge -->
+      <div id="distance-badge" class="nav-btn" style="background: #333; color: white; cursor: default;">--m away</div>
+    </div>
     .nav-btn { background: rgba(255, 255, 255, 0.9); border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; color: #333; }
     .nav-btn.donate { background: #28a745; color: white; }
     #bottom-panel { background: rgba(255, 255, 255, 0.95); margin: 15px; padding: 15px; border-radius: 8px; text-align: center; }
@@ -100,34 +107,40 @@
         <model-viewer src="${MODEL_URL}" alt="3D Model" camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" style="width: 100%; height: 100%;"></model-viewer>
       `;
     }
-
-    const statusText = document.getElementById('loading');
+const statusText = document.getElementById('loading');
+    const distanceBadge = document.getElementById('distance-badge');
     statusText.innerHTML = "Requesting GPS permissions...";
 
+    let arStarted = false;
+
     if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
+      // watchPosition continuously updates as the user moves
+      navigator.geolocation.watchPosition(
         (position) => {
           const userLat = position.coords.latitude;
           const userLng = position.coords.longitude;
           const distance = getDistanceInMeters(userLat, userLng, PARK_LAT, PARK_LNG);
           
-          statusText.innerHTML = `GPS Locked!<br>Distance: ${Math.round(distance)} meters.<br>Loading model...`;
-          
-          setTimeout(() => {
-            if (distance <= MAX_DISTANCE_METERS) {
-              renderParkAR(); 
-            } else {
-              renderOffsiteFallback(); 
-            }
-          }, 1500);
+          // Update the distance badge in the top navigation live
+          distanceBadge.innerHTML = `${Math.round(distance)}m away`;
+
+          // If we haven't launched AR yet and user is close enough, trigger it
+          if (!arStarted && distance <= MAX_DISTANCE_METERS) {
+            arStarted = true;
+            statusText.style.display = 'none';
+            renderParkAR(); 
+          } else if (!arStarted && distance > MAX_DISTANCE_METERS) {
+            statusText.innerHTML = `You are ${Math.round(distance)}m away.<br>Get within ${MAX_DISTANCE_METERS}m to see AR.`;
+            // Optional: If you want to force fallback immediately when too far, call renderOffsiteFallback() here
+          }
         },
         (error) => {
-          let errorMsg = "Unknown Error";
+          let errorMsg = "GPS Error";
           if (error.code === 1) errorMsg = "Permission Denied";
           if (error.code === 2) errorMsg = "Position Unavailable";
           if (error.code === 3) errorMsg = "Timeout";
           
-          statusText.innerHTML = `GPS Failed: ${errorMsg}<br>Loading fallback...`;
+          statusText.innerHTML = `${errorMsg}<br>Loading fallback model...`;
           setTimeout(() => renderOffsiteFallback(), 2500);
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
