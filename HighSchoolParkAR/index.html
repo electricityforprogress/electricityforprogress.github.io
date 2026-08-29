@@ -59,9 +59,10 @@
       modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
     }
 
-    const PARK_LAT = 39.12345; 
-    const PARK_LNG = -75.12345;
-    const MAX_DISTANCE_METERS = 500;
+    //40.067305, -75.123882
+    const PARK_LAT = 40.067305; 
+    const PARK_LNG = -75.123882;
+    const MAX_DISTANCE_METERS = 1000;
     const MODEL_URL = 'school_model.glb'; // Make sure this matches your downloaded file
 
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
