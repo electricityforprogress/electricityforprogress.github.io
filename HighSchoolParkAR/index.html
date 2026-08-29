@@ -219,8 +219,10 @@
           vr-mode-ui="enabled: false">
           <a-camera gps-camera far="2000"></a-camera>
           <a-entity gltf-model="url(${MODEL_URL})"
-                    gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};"
-                    scale="1 1 1">
+             gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};"
+             scale="1 1 1"
+             rotation="0 45 0"
+             position="0 -1.6 0">
           </a-entity>
         </a-scene>
       `;
