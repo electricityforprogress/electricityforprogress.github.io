@@ -80,8 +80,18 @@
       document.getElementById('container').innerHTML = `
         <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
           <a-camera gps-camera="gpsMinDistance: 5" far="2000"></a-camera>
-          <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
-            <a-entity gltf-model="url(${MODEL_URL})" scale="500 500 500" rotation="0 0 0" position="0 -1.6 0"></a-entity>
+            <a-entity gps-entity-place="latitude: ${PARK_LAT}; longitude: ${PARK_LNG};">
+            
+            <!-- DEBUGGING TOOL: A massive red pillar that is impossible to miss -->
+            <a-box color="red" scale="20 100 20" position="0 50 0"></a-box>
+
+            <!-- Your 3D Model -->
+            <a-entity gltf-model="url(${MODEL_URL})"
+                      scale="300 300 300"
+                      rotation="0 0 0"
+                      position="0 -1.6 0">
+            </a-entity>
+
           </a-entity>
         </a-scene>
       `;
