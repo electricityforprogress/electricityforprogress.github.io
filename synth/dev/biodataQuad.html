@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biodata Studio - Advanced Synthesis</title>
+    <title>Biodata Studio - Biorhythm & Synth</title>
     <style>
         :root { --bg: #0d1117; --panel: #161b22; --cyan: #00f0ff; --red: #ff0055; --green: #39ff14; --text: #c9d1d9; --border: #30363d; --knob-bg: #21262d; }
         body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
@@ -15,18 +15,31 @@
         button:hover { background: var(--cyan); color: var(--bg); }
         select { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px; font-family: inherit; }
         
+        /* Biorhythm & Scaling Panel */
+        .biorhythm-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; padding: 15px; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-start; }
+        .bio-section { border: 1px solid var(--border); padding: 15px; border-radius: 4px; background: #0a0d12; flex: 1; min-width: 250px; text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
+        .bio-section h3 { margin: 0 0 15px 0; font-size: 0.85em; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; text-transform: uppercase; }
+        
+        /* Piano Editor */
+        .piano-ui { display: flex; height: 75px; margin-top: 10px; border: 1px solid var(--border); background: #000; padding: 2px; gap: 2px; border-radius: 2px;}
+        .piano-key { flex: 1; border-radius: 2px; cursor: pointer; transition: 0.1s; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-size: 0.65em; font-weight: bold; color: #666; user-select: none;}
+        .piano-key.white { background: #1a1a1a; border: 1px solid #333; }
+        .piano-key.black { background: #000; border: 1px solid #222; }
+        .piano-key.active.white { background: var(--cyan); color: #000; box-shadow: inset 0 0 5px rgba(255,255,255,0.5); }
+        .piano-key.active.black { background: var(--cyan); color: #000; box-shadow: inset 0 0 5px rgba(255,255,255,0.5); filter: brightness(0.8); }
+
         /* Synth Inspector */
         .synth-inspector { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; display: none; }
         .synth-tabs { display: flex; border-bottom: 1px solid var(--border); background: #000; }
         .synth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; }
         .synth-tab.active { background: var(--panel); color: var(--cyan); border-bottom: 2px solid var(--cyan); }
         
-        /* Fading LEDs */
+        /* LEDs */
         .led { width: 12px; height: 12px; border-radius: 50%; background: #222; box-shadow: inset 0px 2px 4px rgba(0,0,0,0.8); }
         .led.active { background: var(--green); box-shadow: 0 0 10px var(--green), inset 0px 1px 2px rgba(255,255,255,0.8); }
-        .lfo-led { width: 14px; height: 14px; border-radius: 50%; background: var(--cyan); margin: 0 auto 10px auto; opacity: 0.1; box-shadow: 0 0 10px var(--cyan); }
+        .lfo-led { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); margin-left: 8px; opacity: 0.1; box-shadow: 0 0 8px var(--cyan); }
         
-        /* Synth UI Modules */
+        /* UI Modules */
         .synth-controls { display: flex; flex-wrap: wrap; padding: 15px; gap: 15px; justify-content: space-between; align-items: flex-start;}
         .synth-module { border: 1px solid var(--border); padding: 15px; border-radius: 4px; background: #0a0d12; flex: 1; min-width: 140px; text-align: center; display:flex; flex-direction: column; justify-content: space-between;}
         .synth-module h3 { margin: 0 0 15px 0; font-size: 0.85em; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; text-transform: uppercase;}
@@ -38,7 +51,7 @@
         .knob-indicator { width: 4px; height: 12px; background: var(--cyan); margin: 2px auto 0 auto; border-radius: 2px; }
         .knob-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
         
-        /* ADSR Sliders - Fixed Alignment */
+        /* ADSR Sliders */
         .slider-group { display: flex; justify-content: space-evenly; height: 120px; align-items: flex-start; padding-top:10px;}
         .slider-col { position: relative; width: 20px; height: 100%; }
         .v-slider { -webkit-appearance: none; position: absolute; width: 100px; height: 4px; background: var(--border); top: 45px; left: -40px; transform: rotate(-90deg); outline: none; cursor: pointer;}
@@ -68,16 +81,55 @@
     <div class="control-group">
         <label style="font-size:0.9em">MIDI Out:</label>
         <select id="midi-out-select"><option value="none">No Output</option></select>
-        <label style="font-size:0.9em">Scale:</label>
-        <select id="scale-root">
-            <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
-        </select>
-        <select id="scale-type">
-            <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor" selected>Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option>
-        </select>
     </div>
 </div>
 
+<!-- NEW BIORHYTHM & SCALING ENGINE -->
+<div class="biorhythm-panel">
+    
+    <div class="bio-section">
+        <h3>CLOCK & GROOVE</h3>
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+            <select id="clk-source" class="routing-select" style="margin:0;"><option value="raw">RAW (Unquantized)</option><option value="biobpm">BioBPM (Plant)</option><option value="manual">Manual</option><option value="midi">MIDI Clock In</option></select>
+            <select id="clk-div" class="routing-select" style="margin:0;"><option value="1">/1 (16ths)</option><option value="2">/2 (8ths)</option><option value="4">/4 (Quarters)</option></select>
+        </div>
+        <div style="display:flex; justify-content:space-around;">
+            <div class="knob-container"><div class="knob-track" data-param="bpm" data-min="60" data-max="200" data-val="120"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">TEMPO</div></div>
+            <div class="knob-container"><div class="knob-track" data-param="elasticity" data-min="0" data-max="100" data-val="15"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">ELASTICITY</div></div>
+            <div class="knob-container"><div class="knob-track" data-param="influence" data-min="0" data-max="100" data-val="50"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">INFLUENCE</div></div>
+        </div>
+    </div>
+
+    <div class="bio-section" style="flex:2;">
+        <h3>PITCH & SCALING ENGINE</h3>
+        <div style="display:flex; gap:15px; align-items:flex-start;">
+            <div style="flex:1;">
+                <div style="display:flex; gap:5px; margin-bottom:10px;">
+                    <select id="scale-root" class="routing-select" style="margin:0; width:40%;" onchange="applyScalePreset()">
+                        <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
+                    </select>
+                    <select id="scale-type" class="routing-select" style="margin:0; width:60%;" onchange="applyScalePreset()">
+                        <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor" selected>Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <div class="knob-container"><div class="knob-track" data-param="octRange" data-min="1" data-max="5" data-val="3"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RANGE</div></div>
+                    <div class="knob-container"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SPREAD</div></div>
+                    <div class="knob-container"><div class="knob-track" data-param="density" data-min="0" data-max="100" data-val="100"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DENSITY</div></div>
+                </div>
+            </div>
+            <div style="flex:1.5;">
+                <div class="piano-ui" id="piano-keys">
+                    <!-- JS Generated Piano -->
+                </div>
+                <div style="text-align:right; font-size:0.7em; color:#666; margin-top:5px;">CUSTOM SCALE EDITOR</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- SYNTH INSPECTOR -->
 <div class="synth-inspector" id="synth-inspector">
     <div class="synth-tabs">
         <div class="synth-tab active" onclick="selectTab(0)"><div class="led" id="led-0"></div>CH 1</div>
@@ -87,18 +139,13 @@
     </div>
     
     <div class="synth-controls">
-        
         <div class="synth-module" style="flex: 1.2;">
             <h3>VOICING & OSC</h3>
             <select id="ui-mode" class="routing-select" onchange="updateActiveSynth('mode', this.value)">
-                <option value="poly">Polyphonic (5-Voice)</option>
-                <option value="mono">Monophonic</option>
-                <option value="303">303 Legato Slide</option>
+                <option value="poly">Polyphonic (5-Voice)</option><option value="mono">Monophonic</option><option value="303">303 Legato Slide</option>
             </select>
             <select id="ui-wave" class="routing-select" onchange="updateActiveSynth('wave', this.value)">
-                <option value="sawtooth">Sawtooth</option>
-                <option value="square">Square</option>
-                <option value="triangle">Triangle</option>
+                <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option>
             </select>
             <div>
                 <div class="knob-container"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">GLIDE</div></div>
@@ -113,19 +160,14 @@
         </div>
 
         <div class="synth-module">
-            <h3>LFO</h3>
-            <div class="lfo-led" id="ui-lfo-led"></div>
+            <h3 style="display:flex; justify-content:center; align-items:center;">
+                LFO <div class="lfo-led" id="ui-lfo-led"></div>
+            </h3>
             <select id="ui-lfo-shape" class="routing-select" onchange="updateActiveSynth('lfoShape', this.value)">
-                <option value="sine">Sine</option>
-                <option value="square">Square</option>
-                <option value="triangle">Triangle</option>
-                <option value="sawtooth">Ramp Up</option>
-                <option value="rampdown">Ramp Down</option>
+                <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sawtooth">Ramp Up</option><option value="rampdown">Ramp Down</option>
             </select>
             <select id="ui-lfo-dest" class="routing-select" onchange="updateActiveSynth('lfoDest', this.value)">
-                <option value="pitch">Pitch</option>
-                <option value="filter">Filter Cutoff</option>
-                <option value="volume">Volume (Tremolo)</option>
+                <option value="pitch">Pitch</option><option value="filter">Filter Cutoff</option><option value="volume">Volume (Tremolo)</option>
             </select>
             <div>
                 <div class="knob-container"><div class="knob-track" data-param="lfoRate" data-min="0.1" data-max="20" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RATE</div></div>
@@ -138,9 +180,7 @@
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="width:40%;">
                     <select id="ui-adsr-dest" class="routing-select" onchange="updateActiveSynth('adsrDest', this.value)">
-                        <option value="filter">Filter Cutoff</option>
-                        <option value="volume">Volume (VCA)</option>
-                        <option value="pitch">Pitch</option>
+                        <option value="filter">Filter Cutoff</option><option value="volume">Volume (VCA)</option><option value="pitch">Pitch</option>
                     </select>
                     <div class="knob-container"><div class="knob-track" data-param="adsrAmt" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
                 </div>
@@ -163,7 +203,6 @@
     const synthChannels = [];
     let rampDownWave; 
 
-    // Generate Custom Fourier Wave for Ramp Down (Reverse Sawtooth)
     function initCustomWaves() {
         const numHarms = 32;
         const real = new Float32Array(numHarms);
@@ -172,7 +211,70 @@
         rampDownWave = audioCtx.createPeriodicWave(real, imag);
     }
 
-    // --- Advanced Polyphonic Synthesizer Engine ---
+    // --- Dynamic Piano & Scale Engine ---
+    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const IS_BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
+    
+    const SCALES = {
+        chromatic: [0,1,2,3,4,5,6,7,8,9,10,11], major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], 
+        pentatonic_major: [0, 2, 4, 7, 9], pentatonic_minor: [0, 3, 5, 7, 10], hirajoshi: [0, 2, 3, 7, 8]
+    };
+
+    let activeScaleBits = new Array(12).fill(true);
+
+    function initPiano() {
+        const p = document.getElementById('piano-keys');
+        p.innerHTML = '';
+        for(let i=0; i<12; i++) {
+            let k = document.createElement('div');
+            k.className = `piano-key ${IS_BLACK[i] ? 'black' : 'white'} active`;
+            k.innerText = NOTE_NAMES[i];
+            k.id = `pkey-${i}`;
+            k.onclick = () => {
+                activeScaleBits[i] = !activeScaleBits[i];
+                document.getElementById('scale-type').value = 'custom';
+                k.classList.toggle('active', activeScaleBits[i]);
+            };
+            p.appendChild(k);
+        }
+        applyScalePreset();
+    }
+
+    function applyScalePreset() {
+        const type = document.getElementById('scale-type').value;
+        if (type === 'custom') return; // Do not overwrite user edits
+        
+        const root = parseInt(document.getElementById('scale-root').value);
+        const scalePattern = SCALES[type];
+        
+        activeScaleBits.fill(false);
+        scalePattern.forEach(deg => {
+            activeScaleBits[(root + deg) % 12] = true;
+        });
+
+        for(let i=0; i<12; i++) {
+            document.getElementById(`pkey-${i}`).classList.toggle('active', activeScaleBits[i]);
+        }
+    }
+
+    // Dynamic Quantizer using the live boolean array
+    function quantizePitch(rawPitch) {
+        let noteInOctave = rawPitch % 12;
+        let octaveBase = rawPitch - noteInOctave;
+        
+        if (activeScaleBits[noteInOctave]) return rawPitch; // Perfect match
+        
+        // Search radially for closest active key
+        for (let offset = 1; offset <= 6; offset++) {
+            let up = (noteInOctave + offset) % 12;
+            let down = (noteInOctave - offset + 12) % 12;
+            if (activeScaleBits[up]) return octaveBase + up;
+            if (activeScaleBits[down]) return octaveBase + down;
+        }
+        return rawPitch; // Fallback 
+    }
+
+    // --- Polyphonic Synthesizer Engine ---
     class PolyChannel {
         constructor(id) {
             this.id = id;
@@ -191,72 +293,42 @@
 
             this.channelOut = audioCtx.createGain();
             this.channelOut.gain.value = this.masterVolume;
-            
             this.tremoloGain = audioCtx.createGain();
             this.channelOut.connect(this.tremoloGain);
             this.tremoloGain.connect(audioCtx.destination);
 
-            // Channel-Global LFO
             this.lfo = audioCtx.createOscillator();
             this.lfoGain = audioCtx.createGain();
             this.lfo.connect(this.lfoGain);
             this.lfo.start();
 
-            // Allocate 5 Sub-Voices
             this.voices = [];
             for (let i = 0; i < 5; i++) {
-                let v = {
-                    vco: audioCtx.createOscillator(),
-                    sub: audioCtx.createOscillator(),
-                    subGain: audioCtx.createGain(),
-                    vcf: audioCtx.createBiquadFilter(),
-                    vca: audioCtx.createGain()
-                };
-                v.sub.type = 'square';
-                v.vcf.type = 'lowpass';
-                v.vca.gain.value = 0;
-                
-                v.vco.connect(v.vcf);
-                v.sub.connect(v.subGain);
-                v.subGain.connect(v.vcf);
-                v.vcf.connect(v.vca);
-                v.vca.connect(this.channelOut);
-                
-                v.vco.start();
-                v.sub.start();
+                let v = { vco: audioCtx.createOscillator(), sub: audioCtx.createOscillator(), subGain: audioCtx.createGain(), vcf: audioCtx.createBiquadFilter(), vca: audioCtx.createGain() };
+                v.sub.type = 'square'; v.vcf.type = 'lowpass'; v.vca.gain.value = 0;
+                v.vco.connect(v.vcf); v.sub.connect(v.subGain); v.subGain.connect(v.vcf); v.vcf.connect(v.vca); v.vca.connect(this.channelOut);
+                v.vco.start(); v.sub.start();
                 this.voices.push(v);
             }
             this.applyParams();
         }
 
-        setVolume(val) {
-            this.masterVolume = parseFloat(val);
-            this.channelOut.gain.value = this.muted ? 0 : this.masterVolume;
-        }
-
+        setVolume(val) { this.masterVolume = parseFloat(val); this.channelOut.gain.value = this.muted ? 0 : this.masterVolume; }
         toggleMute() {
-            this.muted = !this.muted;
-            this.channelOut.gain.value = this.muted ? 0 : this.masterVolume;
+            this.muted = !this.muted; this.channelOut.gain.value = this.muted ? 0 : this.masterVolume;
             const btn = document.getElementById(`mute-btn-${this.id}`);
-            btn.style.borderColor = this.muted ? 'var(--red)' : 'var(--border)';
-            btn.style.color = this.muted ? 'var(--red)' : 'var(--text)';
+            btn.style.borderColor = this.muted ? 'var(--red)' : 'var(--border)'; btn.style.color = this.muted ? 'var(--red)' : 'var(--text)';
         }
 
         applyParams() {
             const p = this.params;
-            
-            // LFO Shape Handling
-            if (p.lfoShape === 'rampdown' && rampDownWave) {
-                this.lfo.setPeriodicWave(rampDownWave);
-            } else {
-                this.lfo.type = p.lfoShape;
-            }
+            if (p.lfoShape === 'rampdown' && rampDownWave) this.lfo.setPeriodicWave(rampDownWave);
+            else this.lfo.type = p.lfoShape;
             this.lfo.frequency.value = p.lfoRate;
             
-            // LFO Routing Decoder
             this.lfoGain.disconnect();
             if (p.lfoDest === 'pitch') {
-                this.lfoGain.gain.value = p.lfoDepth * 200; // Cents
+                this.lfoGain.gain.value = p.lfoDepth * 200;
                 this.voices.forEach(v => { this.lfoGain.connect(v.vco.detune); this.lfoGain.connect(v.sub.detune); });
             } else if (p.lfoDest === 'filter') {
                 this.lfoGain.gain.value = p.lfoDepth * 2000; 
@@ -265,115 +337,62 @@
                 this.lfoGain.gain.value = p.lfoDepth; 
                 this.lfoGain.connect(this.tremoloGain.gain);
             }
-
-            // Sync Voice Base Params
-            this.voices.forEach(v => {
-                v.vco.type = p.wave;
-                v.subGain.gain.value = p.subLvl;
-                v.vcf.Q.value = p.res;
-            });
+            this.voices.forEach(v => { v.vco.type = p.wave; v.subGain.gain.value = p.subLvl; v.vcf.Q.value = p.res; });
         }
         
         play(pitch, velocity, durationMs) {
             if (this.muted) return;
-            const now = audioCtx.currentTime;
-            const freq = 440 * Math.pow(2, (pitch - 69) / 12);
-            const p = this.params;
-            
-            // 303 Legato Logic
-            let overlapping = false;
-            if (p.mode === '303' && now < this.lastTriggerTime + this.lastDuration) {
-                overlapping = true;
-            }
-            
-            // Voice Allocation
-            let vIndex = 0;
-            if (p.mode === 'poly') {
-                vIndex = this.voiceIndex;
-                this.voiceIndex = (this.voiceIndex + 1) % 5;
-            }
+            const now = audioCtx.currentTime, freq = 440 * Math.pow(2, (pitch - 69) / 12), p = this.params;
+            let overlapping = (p.mode === '303' && now < this.lastTriggerTime + this.lastDuration);
+            let vIndex = p.mode === 'poly' ? (this.voiceIndex = (this.voiceIndex + 1) % 5) : 0;
             let voice = this.voices[vIndex];
             
-            this.lastTriggerTime = now;
-            this.lastDuration = durationMs / 1000;
+            this.lastTriggerTime = now; this.lastDuration = durationMs / 1000;
 
             if (overlapping) {
-                // 303 Glide - Do not retrigger envelopes
                 voice.vco.frequency.linearRampToValueAtTime(freq, now + p.glide);
                 voice.sub.frequency.linearRampToValueAtTime(freq / 2, now + p.glide);
                 return;
             }
 
-            // Standard Note Trigger (Mono/Poly or Disconnected 303)
-            voice.vco.frequency.cancelScheduledValues(now);
-            voice.vco.frequency.setValueAtTime(freq, now);
-            voice.sub.frequency.cancelScheduledValues(now);
-            voice.sub.frequency.setValueAtTime(freq / 2, now);
+            voice.vco.frequency.cancelScheduledValues(now); voice.vco.frequency.setValueAtTime(freq, now);
+            voice.sub.frequency.cancelScheduledValues(now); voice.sub.frequency.setValueAtTime(freq / 2, now);
             
-            const peakVCA = velocity / 127;
-            const amt = p.adsrAmt;
-
-            // BASE AMP ENVELOPE (Always fires so note doesn't stick)
-            voice.vca.gain.cancelScheduledValues(now);
-            voice.vca.gain.setValueAtTime(voice.vca.gain.value, now);
+            const peakVCA = velocity / 127, amt = p.adsrAmt;
+            voice.vca.gain.cancelScheduledValues(now); voice.vca.gain.setValueAtTime(voice.vca.gain.value, now);
             
             if (p.adsrDest === 'volume') {
-                // Mod envelope takes over Amp
                 voice.vca.gain.linearRampToValueAtTime(peakVCA * amt, now + p.atk);
                 voice.vca.gain.exponentialRampToValueAtTime(Math.max(peakVCA * amt * p.sus, 0.01), now + p.atk + p.dec);
             } else {
-                // Fast transient gate for Amp
-                voice.vca.gain.linearRampToValueAtTime(peakVCA, now + 0.02);
-                voice.vca.gain.setValueAtTime(peakVCA, now + p.atk + p.dec); 
+                voice.vca.gain.linearRampToValueAtTime(peakVCA, now + 0.02); voice.vca.gain.setValueAtTime(peakVCA, now + p.atk + p.dec); 
             }
             
-            // FILTER MODULATION
             voice.vcf.frequency.cancelScheduledValues(now);
             if (p.adsrDest === 'filter') {
                 const targetCutoff = p.cutoff + (5000 * amt);
                 voice.vcf.frequency.setValueAtTime(p.cutoff, now);
                 voice.vcf.frequency.exponentialRampToValueAtTime(targetCutoff, now + p.atk);
                 voice.vcf.frequency.exponentialRampToValueAtTime(p.cutoff + ((targetCutoff - p.cutoff) * p.sus), now + p.atk + p.dec);
-            } else {
-                voice.vcf.frequency.setValueAtTime(p.cutoff, now);
-            }
+            } else { voice.vcf.frequency.setValueAtTime(p.cutoff, now); }
 
-            // PITCH MODULATION
-            voice.vco.detune.cancelScheduledValues(now);
-            voice.sub.detune.cancelScheduledValues(now);
+            voice.vco.detune.cancelScheduledValues(now); voice.sub.detune.cancelScheduledValues(now);
             if (p.adsrDest === 'pitch') {
-                const detunePeak = 2400 * amt; // Up to 2 octaves
-                voice.vco.detune.setValueAtTime(0, now);
-                voice.vco.detune.linearRampToValueAtTime(detunePeak, now + p.atk);
-                voice.vco.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
-                voice.sub.detune.setValueAtTime(0, now);
-                voice.sub.detune.linearRampToValueAtTime(detunePeak, now + p.atk);
-                voice.sub.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
-            } else {
-                voice.vco.detune.setValueAtTime(0, now);
-                voice.sub.detune.setValueAtTime(0, now);
-            }
+                const detunePeak = 2400 * amt;
+                voice.vco.detune.setValueAtTime(0, now); voice.vco.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.vco.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
+                voice.sub.detune.setValueAtTime(0, now); voice.sub.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.sub.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
+            } else { voice.vco.detune.setValueAtTime(0, now); voice.sub.detune.setValueAtTime(0, now); }
             
-            // NOTE OFF SCHEDULE
             const stopTime = now + this.lastDuration;
-            voice.vca.gain.cancelScheduledValues(stopTime);
-            voice.vca.gain.setValueAtTime(voice.vca.gain.value, stopTime);
+            voice.vca.gain.cancelScheduledValues(stopTime); voice.vca.gain.setValueAtTime(voice.vca.gain.value, stopTime);
             voice.vca.gain.linearRampToValueAtTime(0.001, stopTime + p.rel);
         }
     }
 
-    // --- UI State Management & Global Hooks ---
+    // --- UI State Management ---
     let activeSynthIndex = 0;
-
-    function selectTab(index) {
-        activeSynthIndex = index;
-        document.querySelectorAll('.synth-tab').forEach((t, i) => t.classList.toggle('active', i === index));
-        syncUI();
-    }
-    function triggerLED(index) {
-        const led = document.getElementById(`led-${index}`);
-        if (led) { led.classList.add('active'); setTimeout(() => led.classList.remove('active'), 100); }
-    }
+    function selectTab(index) { activeSynthIndex = index; document.querySelectorAll('.synth-tab').forEach((t, i) => t.classList.toggle('active', i === index)); syncUI(); }
+    function triggerLED(index) { const led = document.getElementById(`led-${index}`); if (led) { led.classList.add('active'); setTimeout(() => led.classList.remove('active'), 100); } }
     function setVolume(ch, val) { if (synthChannels[ch]) synthChannels[ch].setVolume(val); }
     function toggleMute(ch) { if (synthChannels[ch]) synthChannels[ch].toggleMute(); }
 
@@ -406,7 +425,15 @@
                 } else {
                     newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min)));
                 }
-                knob.dataset.val = newVal; updateDial(newVal); updateActiveSynth(knob.dataset.param, newVal);
+                knob.dataset.val = newVal; updateDial(newVal); 
+                
+                // Route param logic depending on if it's a global Biorhythm knob or a per-synth knob
+                const param = knob.dataset.param;
+                if (['bpm', 'elasticity', 'influence', 'octRange', 'spread', 'density'].includes(param)) {
+                    // Global logic hook placeholder
+                } else {
+                    updateActiveSynth(param, newVal);
+                }
             });
             window.addEventListener('mouseup', () => isDragging = false);
         });
@@ -415,14 +442,9 @@
     function syncUI() {
         if (!synthChannels[activeSynthIndex]) return;
         const p = synthChannels[activeSynthIndex].params;
-        
-        ['ui-mode', 'ui-wave', 'ui-lfo-shape', 'ui-lfo-dest', 'ui-adsr-dest', 'ui-atk', 'ui-dec', 'ui-sus', 'ui-rel'].forEach(id => {
-            document.getElementById(id).value = p[id.replace('ui-', '')];
-        });
-        
-        document.querySelectorAll('.knob-track').forEach(knob => {
-            const param = knob.dataset.param;
-            knob.dataset.val = p[param];
+        ['ui-mode', 'ui-wave', 'ui-lfo-shape', 'ui-lfo-dest', 'ui-adsr-dest', 'ui-atk', 'ui-dec', 'ui-sus', 'ui-rel'].forEach(id => { document.getElementById(id).value = p[id.replace('ui-', '')]; });
+        document.querySelectorAll('.synth-inspector .knob-track').forEach(knob => {
+            const param = knob.dataset.param; knob.dataset.val = p[param];
             const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
             let pct = isLog ? (Math.log(p[param]) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (p[param] - min) / (max - min);
             knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
@@ -430,21 +452,11 @@
     }
 
     // --- MIDI & BLE Ecosystem ---
-    const SCALES = { chromatic: [0,1,2,3,4,5,6,7,8,9,10,11], major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], pentatonic_major: [0, 2, 4, 7, 9], pentatonic_minor: [0, 3, 5, 7, 10], hirajoshi: [0, 2, 3, 7, 8] };
-    function quantizePitch(rawPitch) {
-        const rootOffset = parseInt(document.getElementById('scale-root').value), scale = SCALES[document.getElementById('scale-type').value];
-        const octave = Math.floor(rawPitch / 12) * 12;
-        let relativeNote = ((rawPitch % 12) - rootOffset + 12) % 12;
-        let closestDegree = scale.reduce((prev, curr) => Math.abs(curr - relativeNote) < Math.abs(prev - relativeNote) ? curr : prev);
-        return octave + rootOffset + closestDegree;
-    }
-
     let midiOutput = null;
     navigator.requestMIDIAccess({ sysex: false }).then(access => {
         const select = document.getElementById('midi-out-select');
         const pop = () => { select.innerHTML = '<option value="none">No Output</option>'; Array.from(access.outputs.values()).forEach(p => { let opt = document.createElement('option'); opt.value = p.id; opt.text = p.name; select.appendChild(opt); }); }
-        pop(); access.onstatechange = pop;
-        select.addEventListener('change', (e) => midiOutput = access.outputs.get(e.target.value) || null);
+        pop(); access.onstatechange = pop; select.addEventListener('change', (e) => midiOutput = access.outputs.get(e.target.value) || null);
     }).catch(()=>{});
 
     function sendMidiNote(channel, pitch, velocity, duration) {
@@ -462,6 +474,7 @@
     async function connectBLE() {
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         if (!rampDownWave) initCustomWaves();
+        if (document.getElementById('piano-keys').innerHTML.trim() === "") initPiano();
         
         if (synthChannels.length === 0) {
             for(let i=0; i<4; i++) synthChannels.push(new PolyChannel(i));
@@ -536,8 +549,6 @@
 
     function renderLoop() {
         const now = Date.now();
-        
-        // Render LFO LED (reads true phase from active channel's context time)
         if (synthChannels[activeSynthIndex]) {
             const p = synthChannels[activeSynthIndex].params;
             let phase = (audioCtx.currentTime * p.lfoRate) % 1.0;
@@ -572,6 +583,9 @@
         }
         requestAnimationFrame(renderLoop);
     }
+    
+    // Auto-init Piano keys if BLE is not yet connected to ensure scaling UI works upfront
+    window.onload = () => { initPiano(); initKnobs(); };
     requestAnimationFrame(renderLoop);
 </script>
 </body>
