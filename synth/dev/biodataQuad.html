@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biodata Studio - Biorhythm & Synth</title>
+    <title>Biodata Studio - Biovoice & Biorhythm</title>
     <style>
         :root { --bg: #0d1117; --panel: #161b22; --cyan: #00f0ff; --red: #ff0055; --green: #39ff14; --text: #c9d1d9; --border: #30363d; --knob-bg: #21262d; }
         body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
@@ -15,30 +15,18 @@
         button:hover { background: var(--cyan); color: var(--bg); }
         select { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px; font-family: inherit; }
         
-        /* Biorhythm & Scaling Panel */
-        .biorhythm-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; padding: 15px; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-start; }
-        .bio-section { border: 1px solid var(--border); padding: 15px; border-radius: 4px; background: #0a0d12; flex: 1; min-width: 250px; text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
-        .bio-section h3 { margin: 0 0 15px 0; font-size: 0.85em; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; text-transform: uppercase; }
-        
-        /* Piano Editor */
-        .piano-ui { display: flex; height: 75px; margin-top: 10px; border: 1px solid var(--border); background: #000; padding: 2px; gap: 2px; border-radius: 2px;}
-        .piano-key { flex: 1; border-radius: 2px; cursor: pointer; transition: 0.1s; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-size: 0.65em; font-weight: bold; color: #666; user-select: none;}
-        .piano-key.white { background: #1a1a1a; border: 1px solid #333; }
-        .piano-key.black { background: #000; border: 1px solid #222; }
-        .piano-key.active.white { background: var(--cyan); color: #000; box-shadow: inset 0 0 5px rgba(255,255,255,0.5); }
-        .piano-key.active.black { background: var(--cyan); color: #000; box-shadow: inset 0 0 5px rgba(255,255,255,0.5); filter: brightness(0.8); }
-
         /* Synth Inspector */
         .synth-inspector { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; display: none; }
         .synth-tabs { display: flex; border-bottom: 1px solid var(--border); background: #000; }
         .synth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; }
         .synth-tab.active { background: var(--panel); color: var(--cyan); border-bottom: 2px solid var(--cyan); }
         
-        /* LEDs */
+        /* LEDs & Displays */
         .led { width: 12px; height: 12px; border-radius: 50%; background: #222; box-shadow: inset 0px 2px 4px rgba(0,0,0,0.8); }
         .led.active { background: var(--green); box-shadow: 0 0 10px var(--green), inset 0px 1px 2px rgba(255,255,255,0.8); }
         .lfo-led { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); margin-left: 8px; opacity: 0.1; box-shadow: 0 0 8px var(--cyan); }
-        
+        .digital-display { background: #000; color: var(--red); font-family: monospace; font-size: 1.1em; padding: 2px 6px; border: 1px solid #333; border-radius: 2px; text-align: center; margin: 0 auto 5px auto; width: 35px; }
+
         /* UI Modules */
         .synth-controls { display: flex; flex-wrap: wrap; padding: 15px; gap: 15px; justify-content: space-between; align-items: flex-start;}
         .synth-module { border: 1px solid var(--border); padding: 15px; border-radius: 4px; background: #0a0d12; flex: 1; min-width: 140px; text-align: center; display:flex; flex-direction: column; justify-content: space-between;}
@@ -57,8 +45,14 @@
         .v-slider { -webkit-appearance: none; position: absolute; width: 100px; height: 4px; background: var(--border); top: 45px; left: -40px; transform: rotate(-90deg); outline: none; cursor: pointer;}
         .v-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 20px; background: var(--text); border-radius: 2px; }
         .slider-label { position: absolute; bottom: 0; width: 100%; text-align: center; font-size: 0.75em; color: #888; font-weight: bold;}
-        
         .routing-select { width: 100%; margin-bottom: 10px; background: var(--knob-bg); color: var(--text); font-size: 0.75em; border: 1px solid var(--border); padding: 4px;}
+
+        /* Classic Piano UI */
+        .piano-wrapper { position: relative; width: 100%; height: 75px; display: flex; margin-bottom: 5px; }
+        .key-w { flex: 1; background: #eee; border: 1px solid #999; border-radius: 0 0 3px 3px; cursor: pointer; position: relative; z-index: 1; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2); }
+        .key-w.active { background: var(--cyan); box-shadow: inset 0 0 15px rgba(0,0,0,0.3); border-color: #0099aa;}
+        .key-b { position: absolute; width: 9%; height: 60%; background: #222; border-radius: 0 0 2px 2px; cursor: pointer; z-index: 2; margin-left: -4.5%; box-shadow: inset 0 -2px 3px rgba(255,255,255,0.2), 2px 2px 5px rgba(0,0,0,0.8); }
+        .key-b.active { background: var(--cyan); filter: brightness(0.7); border: 1px solid #000; box-shadow: 0 0 10px var(--cyan); }
 
         /* 4-Channel Grid */
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
@@ -79,57 +73,11 @@
         <span id="ble-status" style="color:var(--red); font-size:0.9em; font-weight:bold;">OFFLINE</span>
     </div>
     <div class="control-group">
-        <label style="font-size:0.9em">MIDI Out:</label>
+        <label style="font-size:0.9em">Global MIDI Out:</label>
         <select id="midi-out-select"><option value="none">No Output</option></select>
     </div>
 </div>
 
-<!-- NEW BIORHYTHM & SCALING ENGINE -->
-<div class="biorhythm-panel">
-    
-    <div class="bio-section">
-        <h3>CLOCK & GROOVE</h3>
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-            <select id="clk-source" class="routing-select" style="margin:0;"><option value="raw">RAW (Unquantized)</option><option value="biobpm">BioBPM (Plant)</option><option value="manual">Manual</option><option value="midi">MIDI Clock In</option></select>
-            <select id="clk-div" class="routing-select" style="margin:0;"><option value="1">/1 (16ths)</option><option value="2">/2 (8ths)</option><option value="4">/4 (Quarters)</option></select>
-        </div>
-        <div style="display:flex; justify-content:space-around;">
-            <div class="knob-container"><div class="knob-track" data-param="bpm" data-min="60" data-max="200" data-val="120"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">TEMPO</div></div>
-            <div class="knob-container"><div class="knob-track" data-param="elasticity" data-min="0" data-max="100" data-val="15"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">ELASTICITY</div></div>
-            <div class="knob-container"><div class="knob-track" data-param="influence" data-min="0" data-max="100" data-val="50"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">INFLUENCE</div></div>
-        </div>
-    </div>
-
-    <div class="bio-section" style="flex:2;">
-        <h3>PITCH & SCALING ENGINE</h3>
-        <div style="display:flex; gap:15px; align-items:flex-start;">
-            <div style="flex:1;">
-                <div style="display:flex; gap:5px; margin-bottom:10px;">
-                    <select id="scale-root" class="routing-select" style="margin:0; width:40%;" onchange="applyScalePreset()">
-                        <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
-                    </select>
-                    <select id="scale-type" class="routing-select" style="margin:0; width:60%;" onchange="applyScalePreset()">
-                        <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor" selected>Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
-                    </select>
-                </div>
-                <div style="display:flex; justify-content:space-between;">
-                    <div class="knob-container"><div class="knob-track" data-param="octRange" data-min="1" data-max="5" data-val="3"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RANGE</div></div>
-                    <div class="knob-container"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SPREAD</div></div>
-                    <div class="knob-container"><div class="knob-track" data-param="density" data-min="0" data-max="100" data-val="100"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DENSITY</div></div>
-                </div>
-            </div>
-            <div style="flex:1.5;">
-                <div class="piano-ui" id="piano-keys">
-                    <!-- JS Generated Piano -->
-                </div>
-                <div style="text-align:right; font-size:0.7em; color:#666; margin-top:5px;">CUSTOM SCALE EDITOR</div>
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<!-- SYNTH INSPECTOR -->
 <div class="synth-inspector" id="synth-inspector">
     <div class="synth-tabs">
         <div class="synth-tab active" onclick="selectTab(0)"><div class="led" id="led-0"></div>CH 1</div>
@@ -138,6 +86,49 @@
         <div class="synth-tab" onclick="selectTab(3)"><div class="led" id="led-3"></div>CH 4</div>
     </div>
     
+    <!-- ROW 1: BIORHYTHM & SCALING -->
+    <div class="synth-controls" style="border-bottom: 1px solid var(--border); padding-bottom: 5px;">
+        <div class="synth-module">
+            <h3>CLOCK & GROOVE</h3>
+            <select id="ui-clkSource" class="routing-select" onchange="updateActiveSynth('clkSource', this.value)">
+                <option value="raw">RAW (Unquantized)</option><option value="biobpm">BioBPM (Plant)</option><option value="manual">Manual</option>
+            </select>
+            <div style="display:flex; justify-content:space-around;">
+                <div class="knob-container">
+                    <div class="digital-display" id="ui-bpm-display">120</div>
+                    <div class="knob-track" data-param="bpm" data-min="60" data-max="240" data-val="120"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">TEMPO</div>
+                </div>
+                <div class="knob-container"><div class="knob-track" data-param="elasticity" data-min="0" data-max="100" data-val="15"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">ELASTICITY</div></div>
+            </div>
+        </div>
+
+        <div class="synth-module" style="flex:2;">
+            <h3>PITCH & SCALING ENGINE</h3>
+            <div style="display:flex; gap:15px;">
+                <div style="flex:1;">
+                    <div style="display:flex; gap:5px;">
+                        <select id="ui-scaleRoot" class="routing-select" onchange="updateActiveSynth('scaleRoot', this.value); applyScalePreset();">
+                            <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
+                        </select>
+                        <select id="ui-scaleType" class="routing-select" onchange="updateActiveSynth('scaleType', this.value); applyScalePreset();">
+                            <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor">Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-top:5px;">
+                        <div class="knob-container"><div class="knob-track" data-param="octRange" data-min="1" data-max="5" data-val="3"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RANGE</div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SPREAD</div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="density" data-min="0" data-max="100" data-val="100"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DENSITY</div></div>
+                    </div>
+                </div>
+                <div style="flex:1.5;">
+                    <div class="piano-wrapper" id="piano-keys"></div>
+                    <div style="text-align:right; font-size:0.7em; color:#666;">CUSTOM SCALE EDITOR</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROW 2: AUDIO ENGINE -->
     <div class="synth-controls">
         <div class="synth-module" style="flex: 1.2;">
             <h3>VOICING & OSC</h3>
@@ -160,9 +151,7 @@
         </div>
 
         <div class="synth-module">
-            <h3 style="display:flex; justify-content:center; align-items:center;">
-                LFO <div class="lfo-led" id="ui-lfo-led"></div>
-            </h3>
+            <h3 style="display:flex; justify-content:center; align-items:center;">LFO <div class="lfo-led" id="ui-lfo-led"></div></h3>
             <select id="ui-lfo-shape" class="routing-select" onchange="updateActiveSynth('lfoShape', this.value)">
                 <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sawtooth">Ramp Up</option><option value="rampdown">Ramp Down</option>
             </select>
@@ -176,7 +165,7 @@
         </div>
 
         <div class="synth-module" style="flex: 1.5;">
-            <h3>MOD ENVELOPE (ADSR)</h3>
+            <h3>MOD ENVELOPE</h3>
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="width:40%;">
                     <select id="ui-adsr-dest" class="routing-select" onchange="updateActiveSynth('adsrDest', this.value)">
@@ -192,7 +181,6 @@
                 </div>
             </div>
         </div>
-        
     </div>
 </div>
 
@@ -202,123 +190,132 @@
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const synthChannels = [];
     let rampDownWave; 
+    let activeSynthIndex = 0;
 
+    // --- Audio Init ---
     function initCustomWaves() {
-        const numHarms = 32;
-        const real = new Float32Array(numHarms);
-        const imag = new Float32Array(numHarms);
+        const numHarms = 32; const real = new Float32Array(numHarms), imag = new Float32Array(numHarms);
         for (let i = 1; i < numHarms; i++) imag[i] = -(2 / (i * Math.PI)); 
         rampDownWave = audioCtx.createPeriodicWave(real, imag);
     }
 
-    // --- Dynamic Piano & Scale Engine ---
-    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const IS_BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
-    
-    const SCALES = {
-        chromatic: [0,1,2,3,4,5,6,7,8,9,10,11], major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], 
-        pentatonic_major: [0, 2, 4, 7, 9], pentatonic_minor: [0, 3, 5, 7, 10], hirajoshi: [0, 2, 3, 7, 8]
-    };
-
-    let activeScaleBits = new Array(12).fill(true);
+    // --- Dynamic Piano Engine ---
+    const SCALES = { chromatic: [0,1,2,3,4,5,6,7,8,9,10,11], major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], pentatonic_major: [0, 2, 4, 7, 9], pentatonic_minor: [0, 3, 5, 7, 10], hirajoshi: [0, 2, 3, 7, 8] };
 
     function initPiano() {
-        const p = document.getElementById('piano-keys');
-        p.innerHTML = '';
-        for(let i=0; i<12; i++) {
-            let k = document.createElement('div');
-            k.className = `piano-key ${IS_BLACK[i] ? 'black' : 'white'} active`;
-            k.innerText = NOTE_NAMES[i];
-            k.id = `pkey-${i}`;
-            k.onclick = () => {
-                activeScaleBits[i] = !activeScaleBits[i];
-                document.getElementById('scale-type').value = 'custom';
-                k.classList.toggle('active', activeScaleBits[i]);
-            };
-            p.appendChild(k);
-        }
-        applyScalePreset();
+        const p = document.getElementById('piano-keys'); p.innerHTML = '';
+        const whiteKeys = [0, 2, 4, 5, 7, 9, 11], blackKeys = [1, 3, null, 6, 8, 10]; 
+        
+        whiteKeys.forEach(noteIdx => {
+            let k = document.createElement('div'); k.className = 'key-w active'; k.id = `pkey-${noteIdx}`;
+            k.onclick = () => togglePianoKey(noteIdx); p.appendChild(k);
+        });
+        
+        blackKeys.forEach((noteIdx, i) => {
+            if (noteIdx !== null) {
+                let k = document.createElement('div'); k.className = 'key-b active'; k.id = `pkey-${noteIdx}`;
+                k.style.left = `${(i + 1) * 14.28}%`; k.onclick = () => togglePianoKey(noteIdx); p.appendChild(k);
+            }
+        });
+    }
+
+    function togglePianoKey(noteIdx) {
+        if(!synthChannels[activeSynthIndex]) return;
+        let bits = synthChannels[activeSynthIndex].params.activeScaleBits;
+        bits[noteIdx] = !bits[noteIdx];
+        document.getElementById('ui-scaleType').value = 'custom';
+        updateActiveSynth('scaleType', 'custom');
+        syncPianoUI();
     }
 
     function applyScalePreset() {
-        const type = document.getElementById('scale-type').value;
-        if (type === 'custom') return; // Do not overwrite user edits
+        if(!synthChannels[activeSynthIndex]) return;
+        const p = synthChannels[activeSynthIndex].params;
+        if (p.scaleType === 'custom') return; 
         
-        const root = parseInt(document.getElementById('scale-root').value);
-        const scalePattern = SCALES[type];
-        
-        activeScaleBits.fill(false);
-        scalePattern.forEach(deg => {
-            activeScaleBits[(root + deg) % 12] = true;
-        });
+        p.activeScaleBits.fill(false);
+        SCALES[p.scaleType].forEach(deg => { p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; });
+        syncPianoUI();
+    }
 
+    function syncPianoUI() {
+        if(!synthChannels[activeSynthIndex]) return;
+        const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
         for(let i=0; i<12; i++) {
-            document.getElementById(`pkey-${i}`).classList.toggle('active', activeScaleBits[i]);
+            let k = document.getElementById(`pkey-${i}`);
+            if(k) k.classList.toggle('active', bits[i]);
         }
     }
 
-    // Dynamic Quantizer using the live boolean array
-    function quantizePitch(rawPitch) {
-        let noteInOctave = rawPitch % 12;
-        let octaveBase = rawPitch - noteInOctave;
+    // --- Pitch Modulator Intercept ---
+    function applyPitchMods(chIndex, rawPitch) {
+        const p = synthChannels[chIndex].params;
         
-        if (activeScaleBits[noteInOctave]) return rawPitch; // Perfect match
+        // 1. DENSITY (Probability Pruning)
+        if ((Math.random() * 100) > p.density) return null; 
         
-        // Search radially for closest active key
+        // 2. SPREAD (Compression to center)
+        const centerPitch = 60 + parseInt(p.scaleRoot); 
+        const spreadFactor = p.spread / 100;
+        let note = centerPitch + (rawPitch - centerPitch) * spreadFactor;
+        
+        // 3. RANGE (Octave Clamping)
+        const halfRange = (p.octRange * 12) / 2;
+        note = Math.max(centerPitch - halfRange, Math.min(centerPitch + halfRange, note));
+        
+        // 4. QUANTIZATION (Snap to active bits)
+        let n = Math.round(note);
+        let noteInOctave = n % 12;
+        let octaveBase = n - noteInOctave;
+        
+        if (p.activeScaleBits[noteInOctave]) return n;
         for (let offset = 1; offset <= 6; offset++) {
-            let up = (noteInOctave + offset) % 12;
-            let down = (noteInOctave - offset + 12) % 12;
-            if (activeScaleBits[up]) return octaveBase + up;
-            if (activeScaleBits[down]) return octaveBase + down;
+            let up = (noteInOctave + offset) % 12, down = (noteInOctave - offset + 12) % 12;
+            if (p.activeScaleBits[up]) return octaveBase + up;
+            if (p.activeScaleBits[down]) return octaveBase + down;
         }
-        return rawPitch; // Fallback 
+        return n; 
     }
 
     // --- Polyphonic Synthesizer Engine ---
     class PolyChannel {
         constructor(id) {
             this.id = id;
-            this.muted = false;
-            this.masterVolume = 0.8;
-            this.lastTriggerTime = 0;
-            this.lastDuration = 0;
-            this.voiceIndex = 0;
+            this.muted = false; this.masterVolume = 0.8;
+            this.lastTriggerTime = 0; this.lastDuration = 0; this.voiceIndex = 0;
             
             this.params = {
+                // Biorhythm & Scale State
+                clkSource: 'raw', bpm: 120, elasticity: 15,
+                scaleRoot: '0', scaleType: 'pentatonic_minor', activeScaleBits: new Array(12).fill(true),
+                octRange: 3, spread: 75, density: 100,
+                // Synth State
                 mode: 'poly', wave: 'sawtooth', glide: 0.1, subLvl: 0.5,
                 cutoff: 2000, res: 6.0,
                 lfoShape: 'sine', lfoRate: 2.0, lfoDepth: 0, lfoDest: 'pitch',
                 adsrDest: 'filter', adsrAmt: 0.5, atk: 0.05, dec: 0.2, sus: 0.4, rel: 0.6
             };
+            
+            // Apply initial scale pattern
+            this.params.activeScaleBits.fill(false);
+            SCALES[this.params.scaleType].forEach(deg => { this.params.activeScaleBits[(parseInt(this.params.scaleRoot) + deg) % 12] = true; });
 
-            this.channelOut = audioCtx.createGain();
-            this.channelOut.gain.value = this.masterVolume;
-            this.tremoloGain = audioCtx.createGain();
-            this.channelOut.connect(this.tremoloGain);
-            this.tremoloGain.connect(audioCtx.destination);
-
-            this.lfo = audioCtx.createOscillator();
-            this.lfoGain = audioCtx.createGain();
-            this.lfo.connect(this.lfoGain);
-            this.lfo.start();
+            this.channelOut = audioCtx.createGain(); this.channelOut.gain.value = this.masterVolume;
+            this.tremoloGain = audioCtx.createGain(); this.channelOut.connect(this.tremoloGain); this.tremoloGain.connect(audioCtx.destination);
+            this.lfo = audioCtx.createOscillator(); this.lfoGain = audioCtx.createGain(); this.lfo.connect(this.lfoGain); this.lfo.start();
 
             this.voices = [];
             for (let i = 0; i < 5; i++) {
                 let v = { vco: audioCtx.createOscillator(), sub: audioCtx.createOscillator(), subGain: audioCtx.createGain(), vcf: audioCtx.createBiquadFilter(), vca: audioCtx.createGain() };
                 v.sub.type = 'square'; v.vcf.type = 'lowpass'; v.vca.gain.value = 0;
                 v.vco.connect(v.vcf); v.sub.connect(v.subGain); v.subGain.connect(v.vcf); v.vcf.connect(v.vca); v.vca.connect(this.channelOut);
-                v.vco.start(); v.sub.start();
-                this.voices.push(v);
+                v.vco.start(); v.sub.start(); this.voices.push(v);
             }
             this.applyParams();
         }
 
         setVolume(val) { this.masterVolume = parseFloat(val); this.channelOut.gain.value = this.muted ? 0 : this.masterVolume; }
-        toggleMute() {
-            this.muted = !this.muted; this.channelOut.gain.value = this.muted ? 0 : this.masterVolume;
-            const btn = document.getElementById(`mute-btn-${this.id}`);
-            btn.style.borderColor = this.muted ? 'var(--red)' : 'var(--border)'; btn.style.color = this.muted ? 'var(--red)' : 'var(--text)';
-        }
+        toggleMute() { this.muted = !this.muted; this.channelOut.gain.value = this.muted ? 0 : this.masterVolume; const btn = document.getElementById(`mute-btn-${this.id}`); btn.style.borderColor = this.muted ? 'var(--red)' : 'var(--border)'; btn.style.color = this.muted ? 'var(--red)' : 'var(--text)'; }
 
         applyParams() {
             const p = this.params;
@@ -327,16 +324,9 @@
             this.lfo.frequency.value = p.lfoRate;
             
             this.lfoGain.disconnect();
-            if (p.lfoDest === 'pitch') {
-                this.lfoGain.gain.value = p.lfoDepth * 200;
-                this.voices.forEach(v => { this.lfoGain.connect(v.vco.detune); this.lfoGain.connect(v.sub.detune); });
-            } else if (p.lfoDest === 'filter') {
-                this.lfoGain.gain.value = p.lfoDepth * 2000; 
-                this.voices.forEach(v => this.lfoGain.connect(v.vcf.detune));
-            } else if (p.lfoDest === 'volume') {
-                this.lfoGain.gain.value = p.lfoDepth; 
-                this.lfoGain.connect(this.tremoloGain.gain);
-            }
+            if (p.lfoDest === 'pitch') { this.lfoGain.gain.value = p.lfoDepth * 200; this.voices.forEach(v => { this.lfoGain.connect(v.vco.detune); this.lfoGain.connect(v.sub.detune); }); } 
+            else if (p.lfoDest === 'filter') { this.lfoGain.gain.value = p.lfoDepth * 2000; this.voices.forEach(v => this.lfoGain.connect(v.vcf.detune)); } 
+            else if (p.lfoDest === 'volume') { this.lfoGain.gain.value = p.lfoDepth; this.lfoGain.connect(this.tremoloGain.gain); }
             this.voices.forEach(v => { v.vco.type = p.wave; v.subGain.gain.value = p.subLvl; v.vcf.Q.value = p.res; });
         }
         
@@ -350,9 +340,7 @@
             this.lastTriggerTime = now; this.lastDuration = durationMs / 1000;
 
             if (overlapping) {
-                voice.vco.frequency.linearRampToValueAtTime(freq, now + p.glide);
-                voice.sub.frequency.linearRampToValueAtTime(freq / 2, now + p.glide);
-                return;
+                voice.vco.frequency.linearRampToValueAtTime(freq, now + p.glide); voice.sub.frequency.linearRampToValueAtTime(freq / 2, now + p.glide); return;
             }
 
             voice.vco.frequency.cancelScheduledValues(now); voice.vco.frequency.setValueAtTime(freq, now);
@@ -362,24 +350,18 @@
             voice.vca.gain.cancelScheduledValues(now); voice.vca.gain.setValueAtTime(voice.vca.gain.value, now);
             
             if (p.adsrDest === 'volume') {
-                voice.vca.gain.linearRampToValueAtTime(peakVCA * amt, now + p.atk);
-                voice.vca.gain.exponentialRampToValueAtTime(Math.max(peakVCA * amt * p.sus, 0.01), now + p.atk + p.dec);
-            } else {
-                voice.vca.gain.linearRampToValueAtTime(peakVCA, now + 0.02); voice.vca.gain.setValueAtTime(peakVCA, now + p.atk + p.dec); 
-            }
+                voice.vca.gain.linearRampToValueAtTime(peakVCA * amt, now + p.atk); voice.vca.gain.exponentialRampToValueAtTime(Math.max(peakVCA * amt * p.sus, 0.01), now + p.atk + p.dec);
+            } else { voice.vca.gain.linearRampToValueAtTime(peakVCA, now + 0.02); voice.vca.gain.setValueAtTime(peakVCA, now + p.atk + p.dec); }
             
             voice.vcf.frequency.cancelScheduledValues(now);
             if (p.adsrDest === 'filter') {
-                const targetCutoff = p.cutoff + (5000 * amt);
-                voice.vcf.frequency.setValueAtTime(p.cutoff, now);
-                voice.vcf.frequency.exponentialRampToValueAtTime(targetCutoff, now + p.atk);
-                voice.vcf.frequency.exponentialRampToValueAtTime(p.cutoff + ((targetCutoff - p.cutoff) * p.sus), now + p.atk + p.dec);
+                const targetCutoff = p.cutoff + (5000 * amt); voice.vcf.frequency.setValueAtTime(p.cutoff, now);
+                voice.vcf.frequency.exponentialRampToValueAtTime(targetCutoff, now + p.atk); voice.vcf.frequency.exponentialRampToValueAtTime(p.cutoff + ((targetCutoff - p.cutoff) * p.sus), now + p.atk + p.dec);
             } else { voice.vcf.frequency.setValueAtTime(p.cutoff, now); }
 
             voice.vco.detune.cancelScheduledValues(now); voice.sub.detune.cancelScheduledValues(now);
             if (p.adsrDest === 'pitch') {
-                const detunePeak = 2400 * amt;
-                voice.vco.detune.setValueAtTime(0, now); voice.vco.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.vco.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
+                const detunePeak = 2400 * amt; voice.vco.detune.setValueAtTime(0, now); voice.vco.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.vco.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
                 voice.sub.detune.setValueAtTime(0, now); voice.sub.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.sub.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
             } else { voice.vco.detune.setValueAtTime(0, now); voice.sub.detune.setValueAtTime(0, now); }
             
@@ -389,8 +371,7 @@
         }
     }
 
-    // --- UI State Management ---
-    let activeSynthIndex = 0;
+    // --- UI State Management & Presets ---
     function selectTab(index) { activeSynthIndex = index; document.querySelectorAll('.synth-tab').forEach((t, i) => t.classList.toggle('active', i === index)); syncUI(); }
     function triggerLED(index) { const led = document.getElementById(`led-${index}`); if (led) { led.classList.add('active'); setTimeout(() => led.classList.remove('active'), 100); } }
     function setVolume(ch, val) { if (synthChannels[ch]) synthChannels[ch].setVolume(val); }
@@ -399,6 +380,7 @@
     function updateActiveSynth(param, value) {
         if (!synthChannels[activeSynthIndex]) return;
         synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+        if (param === 'bpm') document.getElementById('ui-bpm-display').innerText = Math.round(value).toString().padStart(3, '0');
         synthChannels[activeSynthIndex].applyParams();
     }
 
@@ -411,29 +393,17 @@
                 knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
             };
             updateDial(parseFloat(knob.dataset.val));
-
             knob.addEventListener('mousedown', (e) => { isDragging = true; startY = e.clientY; startVal = parseFloat(knob.dataset.val); e.preventDefault(); });
             window.addEventListener('mousemove', (e) => {
                 if (!isDragging) return;
                 const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
-                let deltaY = startY - e.clientY; 
-                let newVal;
+                let deltaY = startY - e.clientY, newVal;
                 if (isLog) {
                     let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
                     pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
                     newVal = Math.exp(Math.log(min) + pct * (Math.log(max) - Math.log(min)));
-                } else {
-                    newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min)));
-                }
-                knob.dataset.val = newVal; updateDial(newVal); 
-                
-                // Route param logic depending on if it's a global Biorhythm knob or a per-synth knob
-                const param = knob.dataset.param;
-                if (['bpm', 'elasticity', 'influence', 'octRange', 'spread', 'density'].includes(param)) {
-                    // Global logic hook placeholder
-                } else {
-                    updateActiveSynth(param, newVal);
-                }
+                } else { newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); }
+                knob.dataset.val = newVal; updateDial(newVal); updateActiveSynth(knob.dataset.param, newVal);
             });
             window.addEventListener('mouseup', () => isDragging = false);
         });
@@ -442,16 +412,49 @@
     function syncUI() {
         if (!synthChannels[activeSynthIndex]) return;
         const p = synthChannels[activeSynthIndex].params;
-        ['ui-mode', 'ui-wave', 'ui-lfo-shape', 'ui-lfo-dest', 'ui-adsr-dest', 'ui-atk', 'ui-dec', 'ui-sus', 'ui-rel'].forEach(id => { document.getElementById(id).value = p[id.replace('ui-', '')]; });
+        ['ui-clkSource', 'ui-scaleRoot', 'ui-scaleType', 'ui-mode', 'ui-wave', 'ui-lfo-shape', 'ui-lfo-dest', 'ui-adsr-dest', 'ui-atk', 'ui-dec', 'ui-sus', 'ui-rel'].forEach(id => { document.getElementById(id).value = p[id.replace('ui-', '')]; });
+        document.getElementById('ui-bpm-display').innerText = Math.round(p.bpm).toString().padStart(3, '0');
         document.querySelectorAll('.synth-inspector .knob-track').forEach(knob => {
             const param = knob.dataset.param; knob.dataset.val = p[param];
             const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
             let pct = isLog ? (Math.log(p[param]) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (p[param] - min) / (max - min);
             knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
         });
+        syncPianoUI();
     }
 
-    // --- MIDI & BLE Ecosystem ---
+    // Presets Architecture
+    function populatePresetDropdowns() {
+        let presets = JSON.parse(localStorage.getItem('bioPresets') || '{"Init": null}');
+        document.querySelectorAll('.preset-select').forEach(sel => {
+            let current = sel.value; sel.innerHTML = '<option value="">Load Biovoice...</option>';
+            Object.keys(presets).forEach(k => { let opt = document.createElement('option'); opt.value = k; opt.text = k; sel.appendChild(opt); });
+            if (presets[current]) sel.value = current;
+        });
+    }
+
+    function savePreset(ch) {
+        let name = prompt("Name this Biovoice Preset:"); if (!name) return;
+        let presets = JSON.parse(localStorage.getItem('bioPresets') || '{"Init": null}');
+        presets[name] = synthChannels[ch].params;
+        localStorage.setItem('bioPresets', JSON.stringify(presets));
+        populatePresetDropdowns();
+    }
+
+    function loadPreset(ch, name) {
+        if (!name) return;
+        if (name === "Init") { synthChannels[ch] = new PolyChannel(ch); } 
+        else {
+            let presets = JSON.parse(localStorage.getItem('bioPresets') || '{}');
+            if (presets[name]) {
+                synthChannels[ch].params = JSON.parse(JSON.stringify(presets[name])); // Deep copy
+                synthChannels[ch].applyParams();
+            }
+        }
+        if (ch === activeSynthIndex) syncUI();
+    }
+
+    // --- MIDI & BLE ---
     let midiOutput = null;
     navigator.requestMIDIAccess({ sysex: false }).then(access => {
         const select = document.getElementById('midi-out-select');
@@ -460,26 +463,21 @@
     }).catch(()=>{});
 
     function sendMidiNote(channel, pitch, velocity, duration) {
-        const quantizedPitch = quantizePitch(pitch);
         triggerLED(channel);
-        if (synthChannels[channel]) synthChannels[channel].play(quantizedPitch, velocity, duration);
-        if (midiOutput) {
-            midiOutput.send([0x90 + channel, quantizedPitch, velocity]);
-            setTimeout(() => { if (midiOutput) midiOutput.send([0x80 + channel, quantizedPitch, 0]); }, duration);
-        }
-        return quantizedPitch; 
+        if (synthChannels[channel]) synthChannels[channel].play(pitch, velocity, duration);
+        if (midiOutput) { midiOutput.send([0x90 + channel, pitch, velocity]); setTimeout(() => { if (midiOutput) midiOutput.send([0x80 + channel, pitch, 0]); }, duration); }
+        return pitch; 
     }
 
     let bleTxCharacteristic = null, bleBuffer = "";
     async function connectBLE() {
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         if (!rampDownWave) initCustomWaves();
-        if (document.getElementById('piano-keys').innerHTML.trim() === "") initPiano();
         
         if (synthChannels.length === 0) {
             for(let i=0; i<4; i++) synthChannels.push(new PolyChannel(i));
             document.getElementById('synth-inspector').style.display = 'block';
-            initKnobs(); syncUI();
+            initKnobs(); syncUI(); populatePresetDropdowns();
         }
 
         try {
@@ -500,11 +498,7 @@
             document.getElementById('ble-status').innerText = 'ONLINE'; document.getElementById('ble-status').style.color = 'var(--green)';
         } catch (error) { document.getElementById('ble-status').innerText = 'FAILED'; }
     }
-
-    function sendThresholdBLE(ch, val) {
-        document.getElementById(`t-val-${ch}`).innerText = val;
-        if (bleTxCharacteristic) bleTxCharacteristic.writeValueWithoutResponse(new TextEncoder().encode(`T${ch}:${val}\n`));
-    }
+    function sendThresholdBLE(ch, val) { document.getElementById(`t-val-${ch}`).innerText = val; if (bleTxCharacteristic) bleTxCharacteristic.writeValueWithoutResponse(new TextEncoder().encode(`T${ch}:${val}\n`)); }
 
     // --- Visualization Engine ---
     const dash = document.getElementById('dashboard');
@@ -516,7 +510,9 @@
             <div class="card-header">
                 <span class="ch-title" style="color:hsl(${i*90}, 100%, 60%)">CHANNEL ${i+1}</span>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <button id="mute-btn-${i}" onclick="toggleMute(${i})" style="padding: 2px 6px; font-size: 0.7em;">MUTE</button>
+                    <select class="preset-select routing-select" style="margin:0; width:120px;" onchange="loadPreset(${i}, this.value)"></select>
+                    <button onclick="savePreset(${i})" style="padding: 2px 6px; font-size: 0.7em;">SAVE</button>
+                    <button id="mute-btn-${i}" onclick="toggleMute(${i})" style="padding: 2px 6px; font-size: 0.7em; margin-left:10px;">MUTE</button>
                     <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setVolume(${i}, this.value)" style="width: 50px;">
                     <span style="font-size:0.75em; margin-left:5px;">Thresh (<span id="t-val-${i}">2.0</span>x)</span>
                     <input type="range" min="0.5" max="5.0" step="0.1" value="2.0" onchange="sendThresholdBLE(${i}, this.value)" style="width:50px">
@@ -537,10 +533,14 @@
             let i = p.c;
             let cond_uS = (p.p * 1.0e-6 / (0.693147 * 4.2e-9)) - 3900.0;
             cond_uS = (cond_uS > 1.0) ? ((1.0 / cond_uS) * 1000000.0) : 0.0;
+            
             let finalPitch = p.n;
-            if (p.e === 1) {
-                finalPitch = sendMidiNote(i, p.n, p.v, p.d);
-                chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+            if (p.e === 1 && synthChannels[i]) {
+                let modifiedPitch = applyPitchMods(i, p.n);
+                if (modifiedPitch !== null) { // Note survived the Density Probability Gate!
+                    finalPitch = sendMidiNote(i, modifiedPitch, p.v, p.d);
+                    chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+                }
             }
             chData[i].waveBuffer.push({ g: cond_uS, evt: p.e, n: finalPitch });
             if (chData[i].waveBuffer.length > 60) chData[i].waveBuffer.shift();
@@ -584,8 +584,7 @@
         requestAnimationFrame(renderLoop);
     }
     
-    // Auto-init Piano keys if BLE is not yet connected to ensure scaling UI works upfront
-    window.onload = () => { initPiano(); initKnobs(); };
+    window.onload = () => { initPiano(); initKnobs(); populatePresetDropdowns(); };
     requestAnimationFrame(renderLoop);
 </script>
 </body>
