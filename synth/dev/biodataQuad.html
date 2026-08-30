@@ -485,6 +485,22 @@
 
     // --- Core Loops & Data Reception ---
     let bleTxCharacteristic = null, bleBuffer = "";
+    
+    // MIDI output connection
+    let midiOutput = null;
+    navigator.requestMIDIAccess({ sysex: false }).then(access => {
+        const select = document.getElementById('midi-out-select');
+        const pop = () => { select.innerHTML = '<option value="none">No Output</option>'; Array.from(access.outputs.values()).forEach(p => { let opt = document.createElement('option'); opt.value = p.id; opt.text = p.name; select.appendChild(opt); }); }
+        pop(); access.onstatechange = pop; select.addEventListener('change', (e) => midiOutput = access.outputs.get(e.target.value) || null);
+    }).catch(()=>{});
+
+    function sendMidiNote(channel, pitch, velocity, duration) {
+        triggerLED(channel);
+        if (synthChannels[channel]) synthChannels[channel].play(pitch, velocity, duration);
+        if (midiOutput) { midiOutput.send([0x90 + channel, pitch, velocity]); setTimeout(() => { if (midiOutput) midiOutput.send([0x80 + channel, pitch, 0]); }, duration); }
+        return pitch; 
+    }
+
     async function connectBLE() {
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         if (!rampDownWave) initCustomWaves();
@@ -509,6 +525,53 @@
             });
             document.getElementById('ble-status').innerText = 'ONLINE'; document.getElementById('ble-status').style.color = 'var(--green)';
         } catch (error) { document.getElementById('ble-status').innerText = 'FAILED'; }
+    }
+    
+    function sendThresholdBLE(ch, val) { document.getElementById(`t-val-${ch}`).innerText = val; if (bleTxCharacteristic) bleTxCharacteristic.writeValueWithoutResponse(new TextEncoder().encode(`T${ch}:${val}\n`)); }
+
+    // Dashboard initialization
+    const dash = document.getElementById('dashboard');
+    let chData = [];
+    for(let i=0; i<4; i++) {
+        chData.push({ waveBuffer: [], notes: [] });
+        dash.innerHTML += `
+        <div class="card">
+            <div class="card-header">
+                <span class="ch-title" style="color:hsl(${i*90}, 100%, 60%)">CHANNEL ${i+1}</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button id="mute-btn-${i}" onclick="toggleMute(${i})" style="padding: 2px 6px; font-size: 0.7em; margin-left:10px;">MUTE</button>
+                    <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setVolume(${i}, this.value)" style="width: 50px;">
+                    <span style="font-size:0.75em; margin-left:5px;">Thresh (<span id="t-val-${i}">2.0</span>x)</span>
+                    <input type="range" min="0.5" max="5.0" step="0.1" value="2.0" onchange="sendThresholdBLE(${i}, this.value)" style="width:50px">
+                </div>
+            </div>
+            <canvas class="scope" id="scope-${i}"></canvas>
+            <canvas class="roll" id="roll-${i}"></canvas>
+        </div>`;
+    }
+
+    const sCtxs = [0,1,2,3].map(i => document.getElementById(`scope-${i}`).getContext('2d'));
+    const rCtxs = [0,1,2,3].map(i => document.getElementById(`roll-${i}`).getContext('2d'));
+    function resize() { for(let i=0; i<4; i++) { sCtxs[i].canvas.width = sCtxs[i].canvas.clientWidth; sCtxs[i].canvas.height = sCtxs[i].canvas.clientHeight; rCtxs[i].canvas.width = rCtxs[i].canvas.clientWidth; rCtxs[i].canvas.height = rCtxs[i].canvas.clientHeight; } }
+    window.addEventListener('resize', resize); resize();
+
+    function processBiodata(payload) {
+        payload.ch.forEach(p => {
+            let i = p.c;
+            let cond_uS = (p.p * 1.0e-6 / (0.693147 * 4.2e-9)) - 3900.0;
+            cond_uS = (cond_uS > 1.0) ? ((1.0 / cond_uS) * 1000000.0) : 0.0;
+            
+            let finalPitch = p.n;
+            if (p.e === 1 && synthChannels[i]) {
+                let modifiedPitch = applyPitchMods(i, p.n);
+                if (modifiedPitch !== null) { 
+                    finalPitch = sendMidiNote(i, modifiedPitch, p.v, p.d);
+                    chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+                }
+            }
+            chData[i].waveBuffer.push({ g: cond_uS, evt: p.e, n: finalPitch });
+            if (chData[i].waveBuffer.length > 60) chData[i].waveBuffer.shift();
+        });
     }
 
     let lastBeatCount = 0;
@@ -553,14 +616,34 @@
                 }
             }
         });
+        
+        // Data Visualization Scopes
+        for(let i=0; i<4; i++) {
+            let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
+            sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
+            let buf = chData[i].waveBuffer;
+            if(buf.length > 1) {
+                let min = Math.min(...buf.map(b => b.g)), max = Math.max(...buf.map(b => b.g)), range = max - min || 1;
+                let pts = buf.map((b, idx) => ({ x: idx * (sw / 59), y: sh - ((b.g - min) / range * (sh * 0.8)) - (sh * 0.1), e: b.evt, n: b.n }));
+                pts.forEach(p => { if(p.e === 1) { sCtx.strokeStyle = `hsla(${(p.n % 12) * 30}, 100%, 50%, 0.7)`; sCtx.lineWidth = 1; sCtx.beginPath(); sCtx.moveTo(p.x, 0); sCtx.lineTo(p.x, sh); sCtx.stroke(); } });
+                sCtx.strokeStyle = '#39ff14'; sCtx.lineWidth = 2; sCtx.beginPath(); sCtx.moveTo(pts[0].x, pts[0].y);
+                for (let j = 0; j < pts.length - 1; j++) sCtx.lineTo(pts[j].x, pts[j].y); sCtx.stroke();
+            }
+            rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
+            rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
+            for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
+            chData[i].notes = chData[i].notes.filter(n => Date.now() - n.t < 4000);
+            chData[i].notes.forEach(note => {
+                rCtx.fillStyle = `hsla(${(note.n % 12) * 30}, 100%, 50%, ${Math.max(0.3, note.v / 127)})`; 
+                rCtx.fillRect(rw - ((Date.now() - note.t) / 4000 * rw) - ((note.dur / 4000) * rw), Math.max(0, rh - ((note.n / 127) * rh) - 4), ((note.dur / 4000) * rw), 8); 
+            });
+        }
+        
         requestAnimationFrame(renderLoop);
     }
 
     window.onload = () => { initPiano(); initKnobs(); };
     requestAnimationFrame(renderLoop);
-    
-    // (Omitted the duplicate scope/roll dashboard code for brevity, assumes implementation matches previous iterations)
-    function processBiodata(payload) { /* Same as Phase 2.1 Implementation */ }
 </script>
 </body>
 </html>
