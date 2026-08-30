@@ -74,6 +74,71 @@
 <div class="grid" id="dashboard"></div>
 
 <script>
+    // --- Web Audio API: First Synth Voice (Lead & Bass Engine) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const synthVoices = [];
+
+    class BioVoice {
+        constructor() {
+            // Dual Oscillators[cite: 1]
+            this.vco = audioCtx.createOscillator();
+            this.vco.type = 'sawtooth'; 
+            
+            this.sub = audioCtx.createOscillator();
+            this.sub.type = 'square'; 
+            
+            // Resonant Filter & VCA[cite: 1]
+            this.vcf = audioCtx.createBiquadFilter();
+            this.vcf.type = 'lowpass'; 
+            this.vcf.Q.value = 6.0; 
+            
+            this.vca = audioCtx.createGain(); 
+            this.vca.gain.value = 0;
+            
+            // Signal Routing: Osc + Sub -> VCF -> VCA -> Master[cite: 1]
+            this.vco.connect(this.vcf);
+            this.sub.connect(this.vcf);
+            this.vcf.connect(this.vca);
+            this.vca.connect(audioCtx.destination);
+            
+            this.vco.start();
+            this.sub.start();
+        }
+        
+        play(pitch, velocity, durationMs) {
+            const now = audioCtx.currentTime;
+            const freq = 440 * Math.pow(2, (pitch - 69) / 12);
+            
+            this.vco.frequency.setValueAtTime(freq, now);
+            this.sub.frequency.setValueAtTime(freq / 2, now); // -1 Octave Sub[cite: 1]
+            
+            // ADSR Envelopes[cite: 1]
+            const attack = 0.05;
+            const decay = 0.2;
+            const sustain = 0.4;
+            const release = 0.6;
+            const peakGain = velocity / 127;
+            
+            // VCA Envelope[cite: 1]
+            this.vca.gain.cancelScheduledValues(now);
+            this.vca.gain.setValueAtTime(this.vca.gain.value, now);
+            this.vca.gain.linearRampToValueAtTime(peakGain, now + attack);
+            this.vca.gain.exponentialRampToValueAtTime(Math.max(peakGain * sustain, 0.01), now + attack + decay);
+            
+            // VCF Envelope tracking[cite: 1]
+            this.vcf.frequency.cancelScheduledValues(now);
+            this.vcf.frequency.setValueAtTime(freq, now);
+            this.vcf.frequency.exponentialRampToValueAtTime(Math.min(freq * 8, 20000), now + attack);
+            this.vcf.frequency.exponentialRampToValueAtTime(freq * 2, now + attack + decay);
+            
+            // Scheduled Note Off
+            const stopTime = now + (durationMs / 1000);
+            this.vca.gain.cancelScheduledValues(stopTime);
+            this.vca.gain.setValueAtTime(this.vca.gain.value, stopTime);
+            this.vca.gain.linearRampToValueAtTime(0.001, stopTime + release);
+        }
+    }
+
     // --- Scale & Quantization Engine ---
     const SCALES = {
         chromatic: [0,1,2,3,4,5,6,7,8,9,10,11],
@@ -89,14 +154,10 @@
         const scaleName = document.getElementById('scale-type').value;
         const scale = SCALES[scaleName];
         
-        // Base math off middle C (60)
         const octave = Math.floor(rawPitch / 12) * 12;
         const noteInOctave = rawPitch % 12;
-        
-        // Shift requested note down by the root to find the relative degree
         let relativeNote = (noteInOctave - rootOffset + 12) % 12;
         
-        // Snap to nearest scale degree
         let closestDegree = scale.reduce((prev, curr) => 
             Math.abs(curr - relativeNote) < Math.abs(prev - relativeNote) ? curr : prev
         );
@@ -106,47 +167,64 @@
 
     // --- Web MIDI Routing ---
     let midiOutput = null;
-    navigator.requestMIDIAccess().then(access => {
+    navigator.requestMIDIAccess({ sysex: false }).then(access => {
         const select = document.getElementById('midi-out-select');
-        const outputs = Array.from(access.outputs.values());
         
-        outputs.forEach(port => {
-            let opt = document.createElement('option');
-            opt.value = port.id;
-            opt.text = port.name;
-            select.appendChild(opt);
-        });
+        function populateMIDI() {
+            select.innerHTML = '<option value="none">No Output</option>';
+            const outputs = Array.from(access.outputs.values());
+            outputs.forEach(port => {
+                let opt = document.createElement('option');
+                opt.value = port.id;
+                opt.text = port.name;
+                select.appendChild(opt);
+            });
+        }
+        
+        populateMIDI();
+        access.onstatechange = () => populateMIDI(); // Catches IAC bus enabling on the fly
 
         select.addEventListener('change', (e) => {
             midiOutput = access.outputs.get(e.target.value) || null;
         });
-    });
+    }).catch(err => console.warn("Web MIDI API not supported or blocked", err));
 
     function sendMidiNote(channel, pitch, velocity, duration) {
-        if (!midiOutput) return;
         const quantizedPitch = quantizePitch(pitch);
         
-        // Note On
-        midiOutput.send([0x90 + channel, quantizedPitch, velocity]);
-        
-        // Note Off scheduled via Web MIDI timestamp (or setTimeout)
-        setTimeout(() => {
-            if (midiOutput) midiOutput.send([0x80 + channel, quantizedPitch, 0]);
-        }, duration);
+        // Always trigger internal Web Audio Synth
+        if (synthVoices[channel]) {
+            synthVoices[channel].play(quantizedPitch, velocity, duration);
+        }
 
-        return quantizedPitch; // Return the snapped pitch to render correctly on the UI
+        // Trigger External MIDI if connected
+        if (midiOutput) {
+            midiOutput.send([0x90 + channel, quantizedPitch, velocity]);
+            setTimeout(() => {
+                if (midiOutput) midiOutput.send([0x80 + channel, quantizedPitch, 0]);
+            }, duration);
+        }
+
+        return quantizedPitch; 
     }
 
     // --- Web Bluetooth (BLE) Telemetry ---
-    // Utilizing Nordic UART standard UUIDs for high-throughput JSON string streaming
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-    const UART_TX_CHAR = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // Web app writes to this
-    const UART_RX_CHAR = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // ESP32 writes JSON to this
+    const UART_TX_CHAR = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; 
+    const UART_RX_CHAR = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; 
     
     let bleTxCharacteristic = null;
     let bleBuffer = "";
 
     async function connectBLE() {
+        // Resume audio context on user gesture
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        
+        // Initialize 4 independent synth voices
+        if (synthVoices.length === 0) {
+            for(let i=0; i<4; i++) synthVoices.push(new BioVoice());
+        }
+
         try {
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: "Biodata" }],
@@ -177,24 +255,22 @@
         }
     }
 
-    // BLE MTU fragmentation requires accumulating the string until a newline is hit
     function handleBLEStream(event) {
         const chunk = new TextDecoder().decode(event.target.value);
         bleBuffer += chunk;
         
         let lines = bleBuffer.split('\n');
-        bleBuffer = lines.pop(); // Retain the last incomplete fragment in the buffer
+        bleBuffer = lines.pop(); 
         
         for (let line of lines) {
             if (line.trim().startsWith('{')) {
                 try {
                     processBiodata(JSON.parse(line));
-                } catch (e) { console.error("JSON parse error:", e); }
+                } catch (e) {}
             }
         }
     }
 
-    // Send threshold updates back to the ESP32
     function sendThresholdBLE(ch, val) {
         document.getElementById(`t-val-${ch}`).innerText = val;
         if (bleTxCharacteristic) {
@@ -222,7 +298,6 @@
     let chData = [];
     const dash = document.getElementById('dashboard');
     
-    // Generate 4-Channel Grid
     for(let i=0; i<4; i++) {
         chData.push({ waveBuffer: [], notes: [] });
         dash.innerHTML += `
@@ -270,9 +345,7 @@
             document.getElementById(`s-${i}`).innerText = p.s.toFixed(1);
             
             if (p.e === 1) {
-                // Intercept hardware note -> Scale Quantizer -> Web MIDI Out
                 finalPitch = sendMidiNote(i, p.n, p.v, p.d);
-                
                 document.getElementById(`e-${i}`).innerHTML = `<span style="color:${getPitchColor(finalPitch)}">Note ${finalPitch}</span> | Vel: ${p.v}`;
                 chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
             }
@@ -291,7 +364,6 @@
             let sw = sCtx.canvas.width, sh = sCtx.canvas.height;
             let rw = rCtx.canvas.width, rh = rCtx.canvas.height;
             
-            // Render Scope
             sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
             let buf = chData[i].waveBuffer;
             if(buf.length > 1) {
@@ -316,7 +388,6 @@
                 sCtx.stroke();
             }
 
-            // Render Piano Roll
             rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
             rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
             for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
