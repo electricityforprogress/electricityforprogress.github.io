@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biodata Studio - BLE & Web MIDI</title>
+    <style>
+        :root { --bg: #0d1117; --panel: #161b22; --cyan: #00f0ff; --red: #ff0055; --green: #39ff14; --text: #c9d1d9; --border: #30363d; }
+        body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
+        
+        /* Top Navigation & Controls */
+        .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; }
+        .control-group { display: flex; gap: 10px; align-items: center; }
+        button { background: var(--border); color: var(--text); border: 1px solid var(--cyan); padding: 8px 15px; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 3px; transition: 0.2s; }
+        button:hover { background: var(--cyan); color: var(--bg); }
+        select { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px; font-family: inherit; }
+        
+        /* Pitch & Scaling Engine */
+        .scale-engine { display: flex; gap: 15px; border-left: 2px solid var(--border); padding-left: 15px; }
+        
+        .global-stats { color: var(--cyan); font-weight: bold; font-size: 0.9em; }
+        
+        /* 4-Channel Grid */
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .card { background: var(--panel); border: 1px solid var(--border); padding: 10px; border-radius: 4px; display: flex; flex-direction: column;}
+        .card-header { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 10px; align-items: center;}
+        .ch-title { font-weight: bold; font-size: 1.1em; }
+        .metrics { display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 10px; }
+        .metrics div { width: 33%; }
+        .evt-text { color: var(--text); font-weight: bold; min-height: 1.2em; font-size: 0.9em; text-align: right; }
+        
+        canvas { width: 100%; background: #000; border: 1px solid var(--border); margin-bottom: 10px; border-radius: 2px; }
+        .scope { height: 80px; }
+        .roll { height: 120px; flex-grow: 1;}
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="toolbar">
+    <div class="control-group">
+        <button id="btn-ble" onclick="connectBLE()">CONNECT BIODATA BLE</button>
+        <span id="ble-status" style="color:var(--red)">DISCONNECTED</span>
+    </div>
+
+    <div class="control-group scale-engine">
+        <label>MIDI Out:</label>
+        <select id="midi-out-select">
+            <option value="none">No Output</option>
+        </select>
+        
+        <label>Root:</label>
+        <select id="scale-root">
+            <option value="0">C</option><option value="1">C#</option><option value="2">D</option>
+            <option value="3">D#</option><option value="4">E</option><option value="5">F</option>
+            <option value="6">F#</option><option value="7">G</option><option value="8">G#</option>
+            <option value="9">A</option><option value="10">A#</option><option value="11">B</option>
+        </select>
+
+        <label>Scale:</label>
+        <select id="scale-type">
+            <option value="chromatic">Chromatic</option>
+            <option value="major">Major</option>
+            <option value="minor">Minor</option>
+            <option value="pentatonic_major">Major Pentatonic</option>
+            <option value="pentatonic_minor" selected>Minor Pentatonic</option>
+            <option value="hirajoshi">Hirajoshi</option>
+        </select>
+    </div>
+
+    <div class="global-stats">T: <span id="env-t">--</span>&deg;F | H: <span id="env-h">--</span>%</div>
+</div>
+
+<div class="grid" id="dashboard"></div>
+
+<script>
+    // --- Scale & Quantization Engine ---
+    const SCALES = {
+        chromatic: [0,1,2,3,4,5,6,7,8,9,10,11],
+        major: [0, 2, 4, 5, 7, 9, 11],
+        minor: [0, 2, 3, 5, 7, 8, 10],
+        pentatonic_major: [0, 2, 4, 7, 9],
+        pentatonic_minor: [0, 3, 5, 7, 10],
+        hirajoshi: [0, 2, 3, 7, 8]
+    };
+
+    function quantizePitch(rawPitch) {
+        const rootOffset = parseInt(document.getElementById('scale-root').value);
+        const scaleName = document.getElementById('scale-type').value;
+        const scale = SCALES[scaleName];
+        
+        // Base math off middle C (60)
+        const octave = Math.floor(rawPitch / 12) * 12;
+        const noteInOctave = rawPitch % 12;
+        
+        // Shift requested note down by the root to find the relative degree
+        let relativeNote = (noteInOctave - rootOffset + 12) % 12;
+        
+        // Snap to nearest scale degree
+        let closestDegree = scale.reduce((prev, curr) => 
+            Math.abs(curr - relativeNote) < Math.abs(prev - relativeNote) ? curr : prev
+        );
+        
+        return octave + rootOffset + closestDegree;
+    }
+
+    // --- Web MIDI Routing ---
+    let midiOutput = null;
+    navigator.requestMIDIAccess().then(access => {
+        const select = document.getElementById('midi-out-select');
+        const outputs = Array.from(access.outputs.values());
+        
+        outputs.forEach(port => {
+            let opt = document.createElement('option');
+            opt.value = port.id;
+            opt.text = port.name;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', (e) => {
+            midiOutput = access.outputs.get(e.target.value) || null;
+        });
+    });
+
+    function sendMidiNote(channel, pitch, velocity, duration) {
+        if (!midiOutput) return;
+        const quantizedPitch = quantizePitch(pitch);
+        
+        // Note On
+        midiOutput.send([0x90 + channel, quantizedPitch, velocity]);
+        
+        // Note Off scheduled via Web MIDI timestamp (or setTimeout)
+        setTimeout(() => {
+            if (midiOutput) midiOutput.send([0x80 + channel, quantizedPitch, 0]);
+        }, duration);
+
+        return quantizedPitch; // Return the snapped pitch to render correctly on the UI
+    }
+
+    // --- Web Bluetooth (BLE) Telemetry ---
+    // Utilizing Nordic UART standard UUIDs for high-throughput JSON string streaming
+    const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+    const UART_TX_CHAR = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // Web app writes to this
+    const UART_RX_CHAR = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // ESP32 writes JSON to this
+    
+    let bleTxCharacteristic = null;
+    let bleBuffer = "";
+
+    async function connectBLE() {
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ namePrefix: "Biodata" }],
+                optionalServices: [UART_SERVICE]
+            });
+            
+            document.getElementById('ble-status').innerText = 'CONNECTING...';
+            
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(UART_SERVICE);
+            bleTxCharacteristic = await service.getCharacteristic(UART_TX_CHAR);
+            const rxChar = await service.getCharacteristic(UART_RX_CHAR);
+            
+            device.addEventListener('gattserverdisconnected', () => {
+                document.getElementById('ble-status').innerText = 'DISCONNECTED';
+                document.getElementById('ble-status').style.color = 'var(--red)';
+                bleTxCharacteristic = null;
+            });
+
+            await rxChar.startNotifications();
+            rxChar.addEventListener('characteristicvaluechanged', handleBLEStream);
+            
+            document.getElementById('ble-status').innerText = 'CONNECTED';
+            document.getElementById('ble-status').style.color = 'var(--green)';
+        } catch (error) {
+            console.error(error);
+            document.getElementById('ble-status').innerText = 'FAILED';
+        }
+    }
+
+    // BLE MTU fragmentation requires accumulating the string until a newline is hit
+    function handleBLEStream(event) {
+        const chunk = new TextDecoder().decode(event.target.value);
+        bleBuffer += chunk;
+        
+        let lines = bleBuffer.split('\n');
+        bleBuffer = lines.pop(); // Retain the last incomplete fragment in the buffer
+        
+        for (let line of lines) {
+            if (line.trim().startsWith('{')) {
+                try {
+                    processBiodata(JSON.parse(line));
+                } catch (e) { console.error("JSON parse error:", e); }
+            }
+        }
+    }
+
+    // Send threshold updates back to the ESP32
+    function sendThresholdBLE(ch, val) {
+        document.getElementById(`t-val-${ch}`).innerText = val;
+        if (bleTxCharacteristic) {
+            const cmd = new TextEncoder().encode(`T${ch}:${val}\n`);
+            bleTxCharacteristic.writeValueWithoutResponse(cmd);
+        }
+    }
+
+    // --- Visualization & UI Core ---
+    const RA_OHMS = 3900.0;
+    const C_FARADS = 4.2e-9;
+    const LN2_C = 0.693147 * C_FARADS;
+
+    function calcConductance(pulse_us) {
+        let t_sec = pulse_us * 1.0e-6;
+        let r = (t_sec / LN2_C) - RA_OHMS;
+        return (r > 1.0) ? ((1.0 / r) * 1000000.0) : 0.0;
+    }
+    
+    function getPitchColor(pitch, alpha = 1.0) {
+        return `hsla(${(pitch % 12) * 30}, 100%, 50%, ${alpha})`;
+    }
+
+    const MAX_PTS = 60; 
+    let chData = [];
+    const dash = document.getElementById('dashboard');
+    
+    // Generate 4-Channel Grid
+    for(let i=0; i<4; i++) {
+        chData.push({ waveBuffer: [], notes: [] });
+        dash.innerHTML += `
+        <div class="card">
+            <div class="card-header">
+                <span class="ch-title" style="color:hsl(${i*90}, 100%, 60%)">CHANNEL ${i+1}</span>
+                <span>
+                    <label style="font-size:0.8em">Thresh (<span id="t-val-${i}">2.0</span>x)</label>
+                    <input type="range" min="0.5" max="5.0" step="0.1" value="2.0" onchange="sendThresholdBLE(${i}, this.value)" style="width:70px">
+                </span>
+            </div>
+            <div class="metrics">
+                <div>Pulse: <span id="p-${i}" style="color:var(--cyan)">0</span>us</div>
+                <div>Cond: <span id="g-${i}" style="color:var(--green)">0.00</span>uS</div>
+                <div>StdDev: <span id="s-${i}">0.0</span></div>
+            </div>
+            <div class="evt-text" id="e-${i}"></div>
+            <canvas class="scope" id="scope-${i}"></canvas>
+            <canvas class="roll" id="roll-${i}"></canvas>
+        </div>`;
+    }
+
+    const sCtxs = [0,1,2,3].map(i => document.getElementById(`scope-${i}`).getContext('2d'));
+    const rCtxs = [0,1,2,3].map(i => document.getElementById(`roll-${i}`).getContext('2d'));
+
+    function resize() {
+        for(let i=0; i<4; i++) {
+            let s = document.getElementById(`scope-${i}`); s.width = s.clientWidth; s.height = s.clientHeight;
+            let r = document.getElementById(`roll-${i}`); r.width = r.clientWidth; r.height = r.clientHeight;
+        }
+    }
+    window.addEventListener('resize', resize); resize();
+
+    function processBiodata(payload) {
+        if (payload.t) document.getElementById('env-t').innerText = payload.t.toFixed(1);
+        if (payload.h) document.getElementById('env-h').innerText = payload.h.toFixed(1);
+        
+        payload.ch.forEach(p => {
+            let i = p.c;
+            let cond_uS = calcConductance(p.p);
+            let finalPitch = p.n;
+            
+            document.getElementById(`p-${i}`).innerText = p.p;
+            document.getElementById(`g-${i}`).innerText = cond_uS.toFixed(2);
+            document.getElementById(`s-${i}`).innerText = p.s.toFixed(1);
+            
+            if (p.e === 1) {
+                // Intercept hardware note -> Scale Quantizer -> Web MIDI Out
+                finalPitch = sendMidiNote(i, p.n, p.v, p.d);
+                
+                document.getElementById(`e-${i}`).innerHTML = `<span style="color:${getPitchColor(finalPitch)}">Note ${finalPitch}</span> | Vel: ${p.v}`;
+                chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+            }
+            
+            chData[i].waveBuffer.push({ g: cond_uS, evt: p.e, n: finalPitch });
+            if (chData[i].waveBuffer.length > MAX_PTS) chData[i].waveBuffer.shift();
+        });
+    }
+
+    function renderLoop() {
+        const now = Date.now();
+        const timeWindow = 4000; 
+
+        for(let i=0; i<4; i++) {
+            let sCtx = sCtxs[i]; let rCtx = rCtxs[i];
+            let sw = sCtx.canvas.width, sh = sCtx.canvas.height;
+            let rw = rCtx.canvas.width, rh = rCtx.canvas.height;
+            
+            // Render Scope
+            sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
+            let buf = chData[i].waveBuffer;
+            if(buf.length > 1) {
+                let min = Math.min(...buf.map(b => b.g)), max = Math.max(...buf.map(b => b.g));
+                let range = max - min || 1;
+                
+                let pts = buf.map((b, idx) => ({
+                    x: idx * (sw / (MAX_PTS - 1)),
+                    y: sh - ((b.g - min) / range * (sh * 0.8)) - (sh * 0.1), 
+                    e: b.evt, n: b.n
+                }));
+
+                pts.forEach(p => {
+                    if(p.e === 1) {
+                        sCtx.strokeStyle = getPitchColor(p.n, 0.7); 
+                        sCtx.lineWidth = 1; sCtx.beginPath(); sCtx.moveTo(p.x, 0); sCtx.lineTo(p.x, sh); sCtx.stroke();
+                    }
+                });
+
+                sCtx.strokeStyle = '#39ff14'; sCtx.lineWidth = 2; sCtx.beginPath(); sCtx.moveTo(pts[0].x, pts[0].y);
+                for (let j = 0; j < pts.length - 1; j++) sCtx.lineTo(pts[j].x, pts[j].y);
+                sCtx.stroke();
+            }
+
+            // Render Piano Roll
+            rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
+            rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
+            for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
+            
+            chData[i].notes = chData[i].notes.filter(n => now - n.t < timeWindow);
+            chData[i].notes.forEach(note => {
+                let x = rw - ((now - note.t) / timeWindow * rw);
+                let y = rh - ((note.n / 127) * rh); 
+                let noteW = (note.dur / timeWindow) * rw;
+                
+                rCtx.fillStyle = getPitchColor(note.n, Math.max(0.3, note.v / 127)); 
+                rCtx.fillRect(x - noteW, Math.max(0, y - 4), noteW, 8); 
+            });
+        }
+        requestAnimationFrame(renderLoop);
+    }
+    requestAnimationFrame(renderLoop);
+</script>
+</body>
+</html>
