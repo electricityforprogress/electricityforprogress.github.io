@@ -8,38 +8,34 @@
         :root { --bg: #0d1117; --panel: #161b22; --cyan: #00f0ff; --red: #ff0055; --green: #39ff14; --text: #c9d1d9; --border: #30363d; --knob-bg: #21262d; }
         body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
         
-        /* Top Navigation */
         .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; }
         .control-group { display: flex; gap: 10px; align-items: center; }
         button { background: var(--border); color: var(--text); border: 1px solid var(--cyan); padding: 6px 12px; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 3px; transition: 0.2s; }
         button:hover { background: var(--cyan); color: var(--bg); }
+        button.danger { border-color: var(--red); color: var(--red); }
+        button.danger:hover { background: var(--red); color: var(--bg); }
         select { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px; font-family: inherit; }
         
-        /* Synth Inspector */
         .synth-inspector { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; display: none; }
         .synth-tabs { display: flex; border-bottom: 1px solid var(--border); background: #000; }
         .synth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; }
         .synth-tab.active { background: var(--panel); color: var(--cyan); border-bottom: 2px solid var(--cyan); }
         
-        /* LEDs & Displays */
         .led { width: 12px; height: 12px; border-radius: 50%; background: #222; box-shadow: inset 0px 2px 4px rgba(0,0,0,0.8); }
         .led.active { background: var(--green); box-shadow: 0 0 10px var(--green), inset 0px 1px 2px rgba(255,255,255,0.8); }
         .lfo-led { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); margin-left: 8px; opacity: 0.1; box-shadow: 0 0 8px var(--cyan); }
         .digital-display { background: #000; color: var(--red); font-family: monospace; font-size: 1.1em; padding: 2px 6px; border: 1px solid #333; border-radius: 2px; text-align: center; margin: 0 auto 5px auto; width: 35px; }
 
-        /* UI Modules */
         .synth-controls { display: flex; flex-wrap: wrap; padding: 15px; gap: 15px; justify-content: space-between; align-items: flex-start;}
         .synth-module { border: 1px solid var(--border); padding: 15px; border-radius: 4px; background: #0a0d12; flex: 1; min-width: 140px; text-align: center; display:flex; flex-direction: column; justify-content: space-between;}
         .synth-module h3 { margin: 0 0 15px 0; font-size: 0.85em; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; text-transform: uppercase;}
         
-        /* Rotary Knobs */
         .knob-container { display: inline-block; margin: 0 5px 10px 5px; text-align: center; }
         .knob-track { width: 40px; height: 40px; border-radius: 50%; background: var(--knob-bg); border: 2px solid var(--border); position: relative; margin: 0 auto 5px auto; cursor: ns-resize; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
         .knob-dial { width: 100%; height: 100%; position: absolute; transform: rotate(-135deg); pointer-events: none;}
         .knob-indicator { width: 4px; height: 12px; background: var(--cyan); margin: 2px auto 0 auto; border-radius: 2px; }
         .knob-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
         
-        /* ADSR Sliders */
         .slider-group { display: flex; justify-content: space-evenly; height: 120px; align-items: flex-start; padding-top:10px;}
         .slider-col { position: relative; width: 20px; height: 100%; }
         .v-slider { -webkit-appearance: none; position: absolute; width: 100px; height: 4px; background: var(--border); top: 45px; left: -40px; transform: rotate(-90deg); outline: none; cursor: pointer;}
@@ -47,14 +43,12 @@
         .slider-label { position: absolute; bottom: 0; width: 100%; text-align: center; font-size: 0.75em; color: #888; font-weight: bold;}
         .routing-select { width: 100%; margin-bottom: 10px; background: var(--knob-bg); color: var(--text); font-size: 0.75em; border: 1px solid var(--border); padding: 4px;}
 
-        /* Classic Piano UI */
         .piano-wrapper { position: relative; width: 100%; height: 75px; display: flex; margin-bottom: 5px; }
         .key-w { flex: 1; background: #eee; border: 1px solid #999; border-radius: 0 0 3px 3px; cursor: pointer; position: relative; z-index: 1; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2); }
         .key-w.active { background: var(--cyan); box-shadow: inset 0 0 15px rgba(0,0,0,0.3); border-color: #0099aa;}
         .key-b { position: absolute; width: 9%; height: 60%; background: #222; border-radius: 0 0 2px 2px; cursor: pointer; z-index: 2; margin-left: -4.5%; box-shadow: inset 0 -2px 3px rgba(255,255,255,0.2), 2px 2px 5px rgba(0,0,0,0.8); }
         .key-b.active { background: var(--cyan); filter: brightness(0.7); border: 1px solid #000; box-shadow: 0 0 10px var(--cyan); }
 
-        /* 4-Channel Grid */
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
         .card { background: var(--panel); border: 1px solid var(--border); padding: 10px; border-radius: 4px; display: flex; flex-direction: column;}
         .card-header { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 10px; align-items: center;}
@@ -73,7 +67,8 @@
         <span id="ble-status" style="color:var(--red); font-size:0.9em; font-weight:bold;">OFFLINE</span>
     </div>
     <div class="control-group">
-        <label style="font-size:0.9em">Global MIDI Out:</label>
+        <button id="btn-master-mute" class="danger" onclick="toggleMasterMute()">MUTE ALL AUDIO</button>
+        <label style="font-size:0.9em; margin-left:15px;">Global MIDI Out:</label>
         <select id="midi-out-select"><option value="none">No Output</option></select>
     </div>
 </div>
@@ -103,7 +98,7 @@
         </div>
 
         <div class="synth-module" style="flex:2;">
-            <h3>PITCH & SCALING ENGINE</h3>
+            <h3>MIDI FILTRATION & SCALING</h3>
             <div style="display:flex; gap:15px;">
                 <div style="flex:1;">
                     <div style="display:flex; gap:5px;">
@@ -115,7 +110,8 @@
                         </select>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-top:5px;">
-                        <div class="knob-container"><div class="knob-track" data-param="octRange" data-min="1" data-max="5" data-val="3"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RANGE</div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="minNote" data-min="0" data-max="127" data-val="36"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">MIN NOTE</div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="maxNote" data-min="0" data-max="127" data-val="84"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">MAX NOTE</div></div>
                         <div class="knob-container"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SPREAD</div></div>
                         <div class="knob-container"><div class="knob-track" data-param="density" data-min="0" data-max="100" data-val="100"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DENSITY</div></div>
                     </div>
@@ -188,6 +184,23 @@
 
 <script>
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Global Master Routing for Mute & FX
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1.0;
+    masterGain.connect(audioCtx.destination);
+    // TODO: Add FX Nodes (Delay, Reverb, Distortion) between masterGain and destination here
+    
+    let isMasterMuted = false;
+    function toggleMasterMute() {
+        isMasterMuted = !isMasterMuted;
+        masterGain.gain.value = isMasterMuted ? 0 : 1.0;
+        const btn = document.getElementById('btn-master-mute');
+        btn.innerText = isMasterMuted ? 'AUDIO MUTED (LOGGING ACTIVE)' : 'MUTE ALL AUDIO';
+        btn.style.backgroundColor = isMasterMuted ? 'var(--red)' : 'var(--border)';
+        btn.style.color = isMasterMuted ? 'var(--bg)' : 'var(--text)';
+    }
+
     const synthChannels = [];
     let rampDownWave; 
     let activeSynthIndex = 0;
@@ -247,33 +260,54 @@
         }
     }
 
-    // --- Pitch Modulator Intercept ---
+    // --- MIDI Filtration & Pitch Modulator Intercept ---
     function applyPitchMods(chIndex, rawPitch) {
         const p = synthChannels[chIndex].params;
         
-        // 1. DENSITY (Probability Pruning)
-        if ((Math.random() * 100) > p.density) return null; 
+        // 1. DENSITY: Probability gate (drops the note entirely if it fails)
+        if ((Math.random() * 100) > p.density) return null;
         
-        // 2. SPREAD (Compression to center)
-        const centerPitch = 60 + parseInt(p.scaleRoot); 
-        const spreadFactor = p.spread / 100;
-        let note = centerPitch + (rawPitch - centerPitch) * spreadFactor;
+        // 2. BOUNDARY WRAPPING (Min / Max Range)
+        const rangeSize = p.maxNote - p.minNote + 1;
+        if (rangeSize <= 0) return p.minNote; 
         
-        // 3. RANGE (Octave Clamping)
-        const halfRange = (p.octRange * 12) / 2;
-        note = Math.max(centerPitch - halfRange, Math.min(centerPitch + halfRange, note));
+        let boundedPitch = p.minNote + (rawPitch % rangeSize);
         
-        // 4. QUANTIZATION (Snap to active bits)
-        let n = Math.round(note);
-        let noteInOctave = n % 12;
+        // 3. SPREAD SHAPING (Center Cluster vs. Edge Scatter)
+        const centerNote = (p.maxNote + p.minNote) / 2;
+        const halfRange = (p.maxNote - p.minNote) / 2;
+        
+        // Normalize boundedPitch to a -1.0 to 1.0 scale relative to the center
+        let x = (boundedPitch - centerNote) / halfRange;
+        
+        // Map the 0-100 spread knob to a warping exponent 'k'
+        let k = 1.0;
+        if (p.spread < 50) {
+            k = 3.0 - ((p.spread / 50) * 2.0); 
+        } else if (p.spread > 50) {
+            k = 1.0 - (((p.spread - 50) / 50) * 0.67);
+        }
+        
+        let y = Math.sign(x) * Math.pow(Math.abs(x), k);
+        let shapedPitch = centerNote + (y * halfRange);
+        
+        // 4. QUANTIZATION
+        let n = Math.round(shapedPitch);
+        n = Math.max(p.minNote, Math.min(p.maxNote, n)); // Hard clamp for safety
+        
+        let noteInOctave = ((n % 12) + 12) % 12;
         let octaveBase = n - noteInOctave;
         
         if (p.activeScaleBits[noteInOctave]) return n;
+        
+        // Snap to nearest active degree if it lands on a dead key
         for (let offset = 1; offset <= 6; offset++) {
-            let up = (noteInOctave + offset) % 12, down = (noteInOctave - offset + 12) % 12;
-            if (p.activeScaleBits[up]) return octaveBase + up;
-            if (p.activeScaleBits[down]) return octaveBase + down;
+            let up = (noteInOctave + offset) % 12;
+            let down = (noteInOctave - offset + 12) % 12;
+            if (p.activeScaleBits[up]) return Math.min(p.maxNote, octaveBase + up);
+            if (p.activeScaleBits[down]) return Math.max(p.minNote, octaveBase + down);
         }
+        
         return n; 
     }
 
@@ -285,28 +319,34 @@
             this.lastTriggerTime = 0; this.lastDuration = 0; this.voiceIndex = 0;
             
             this.params = {
-                // Biorhythm & Scale State
                 clkSource: 'raw', bpm: 120, elasticity: 15,
                 scaleRoot: '0', scaleType: 'pentatonic_minor', activeScaleBits: new Array(12).fill(true),
-                octRange: 3, spread: 75, density: 100,
-                // Synth State
+                minNote: 36, maxNote: 84, spread: 75, density: 100,
                 mode: 'poly', wave: 'sawtooth', glide: 0.1, subLvl: 0.5,
                 cutoff: 2000, res: 6.0,
                 lfoShape: 'sine', lfoRate: 2.0, lfoDepth: 0, lfoDest: 'pitch',
                 adsrDest: 'filter', adsrAmt: 0.5, atk: 0.05, dec: 0.2, sus: 0.4, rel: 0.6
             };
             
-            // Apply initial scale pattern
             this.params.activeScaleBits.fill(false);
             SCALES[this.params.scaleType].forEach(deg => { this.params.activeScaleBits[(parseInt(this.params.scaleRoot) + deg) % 12] = true; });
 
             this.channelOut = audioCtx.createGain(); this.channelOut.gain.value = this.masterVolume;
-            this.tremoloGain = audioCtx.createGain(); this.channelOut.connect(this.tremoloGain); this.tremoloGain.connect(audioCtx.destination);
+            this.tremoloGain = audioCtx.createGain(); 
+            this.channelOut.connect(this.tremoloGain); 
+            
+            // Route all audio channels to the global Master Gain instead of direct destination
+            this.tremoloGain.connect(masterGain); 
+            
             this.lfo = audioCtx.createOscillator(); this.lfoGain = audioCtx.createGain(); this.lfo.connect(this.lfoGain); this.lfo.start();
 
             this.voices = [];
             for (let i = 0; i < 5; i++) {
-                let v = { vco: audioCtx.createOscillator(), sub: audioCtx.createOscillator(), subGain: audioCtx.createGain(), vcf: audioCtx.createBiquadFilter(), vca: audioCtx.createGain() };
+                let v = { 
+                    vco: audioCtx.createOscillator(), sub: audioCtx.createOscillator(), 
+                    subGain: audioCtx.createGain(), vcf: audioCtx.createBiquadFilter(), 
+                    vca: audioCtx.createGain(), activeUntil: 0 
+                };
                 v.sub.type = 'square'; v.vcf.type = 'lowpass'; v.vca.gain.value = 0;
                 v.vco.connect(v.vcf); v.sub.connect(v.subGain); v.subGain.connect(v.vcf); v.vcf.connect(v.vca); v.vca.connect(this.channelOut);
                 v.vco.start(); v.sub.start(); this.voices.push(v);
@@ -334,10 +374,24 @@
             if (this.muted) return;
             const now = audioCtx.currentTime, freq = 440 * Math.pow(2, (pitch - 69) / 12), p = this.params;
             let overlapping = (p.mode === '303' && now < this.lastTriggerTime + this.lastDuration);
-            let vIndex = p.mode === 'poly' ? (this.voiceIndex = (this.voiceIndex + 1) % 5) : 0;
-            let voice = this.voices[vIndex];
             
+            // STRICT POLYPHONY: Note Drop Logic
+            let freeIdx = -1;
+            for (let i = 0; i < 5; i++) {
+                if (now >= this.voices[i].activeUntil) { freeIdx = i; break; }
+            }
+            
+            if (p.mode === 'poly') {
+                if (freeIdx === -1) return; // Drop note if pool is full
+                this.voiceIndex = freeIdx;
+            } else {
+                this.voiceIndex = 0;
+            }
+            
+            let voice = this.voices[this.voiceIndex];
             this.lastTriggerTime = now; this.lastDuration = durationMs / 1000;
+            const stopTime = now + this.lastDuration;
+            voice.activeUntil = stopTime + p.rel; // Lock the voice until release envelope finishes
 
             if (overlapping) {
                 voice.vco.frequency.linearRampToValueAtTime(freq, now + p.glide); voice.sub.frequency.linearRampToValueAtTime(freq / 2, now + p.glide); return;
@@ -365,13 +419,12 @@
                 voice.sub.detune.setValueAtTime(0, now); voice.sub.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.sub.detune.linearRampToValueAtTime(detunePeak * p.sus, now + p.atk + p.dec);
             } else { voice.vco.detune.setValueAtTime(0, now); voice.sub.detune.setValueAtTime(0, now); }
             
-            const stopTime = now + this.lastDuration;
             voice.vca.gain.cancelScheduledValues(stopTime); voice.vca.gain.setValueAtTime(voice.vca.gain.value, stopTime);
             voice.vca.gain.linearRampToValueAtTime(0.001, stopTime + p.rel);
         }
     }
 
-    // --- UI State Management & Presets ---
+    // --- UI State Management ---
     function selectTab(index) { activeSynthIndex = index; document.querySelectorAll('.synth-tab').forEach((t, i) => t.classList.toggle('active', i === index)); syncUI(); }
     function triggerLED(index) { const led = document.getElementById(`led-${index}`); if (led) { led.classList.add('active'); setTimeout(() => led.classList.remove('active'), 100); } }
     function setVolume(ch, val) { if (synthChannels[ch]) synthChannels[ch].setVolume(val); }
@@ -423,7 +476,6 @@
         syncPianoUI();
     }
 
-    // Presets Architecture
     function populatePresetDropdowns() {
         let presets = JSON.parse(localStorage.getItem('bioPresets') || '{"Init": null}');
         document.querySelectorAll('.preset-select').forEach(sel => {
@@ -447,7 +499,7 @@
         else {
             let presets = JSON.parse(localStorage.getItem('bioPresets') || '{}');
             if (presets[name]) {
-                synthChannels[ch].params = JSON.parse(JSON.stringify(presets[name])); // Deep copy
+                synthChannels[ch].params = JSON.parse(JSON.stringify(presets[name])); 
                 synthChannels[ch].applyParams();
             }
         }
@@ -537,7 +589,7 @@
             let finalPitch = p.n;
             if (p.e === 1 && synthChannels[i]) {
                 let modifiedPitch = applyPitchMods(i, p.n);
-                if (modifiedPitch !== null) { // Note survived the Density Probability Gate!
+                if (modifiedPitch !== null) { 
                     finalPitch = sendMidiNote(i, modifiedPitch, p.v, p.d);
                     chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
                 }
