@@ -50,7 +50,7 @@
 
   <!-- Static 3D Viewer Container -->
   <div id="model-container">
-    <model-viewer src="CHS__model01.glb" alt="Cheltenham High School Model" auto-rotate camera-controls shadow-intensity="1" style="width: 100%; height: 100%;"></model-viewer>
+    <model-viewer src="CHS_model01.glb" alt="Cheltenham High School Model" auto-rotate camera-controls shadow-intensity="1" style="width: 100%; height: 100%;"></model-viewer>
   </div>
 
   <!-- AR Camera Container -->
@@ -209,7 +209,7 @@
     }
 
     function initGPS(statusObj) {
-      statusObj.innerText = "Acquiring GPS lock...";
+      statusObj.innerText = "Finding Location...";
 
       if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
