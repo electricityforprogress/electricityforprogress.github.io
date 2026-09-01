@@ -94,8 +94,8 @@
   <script>
     const APP_CONFIG = {
       version: "3.1.0",
-      parkCenter: { lat: 40.067199, lng: -75.124375 },  //back yard test location 40.067199790182855, -75.12437548928276
-//      parkCenter: { lat: 40.071238, lng: -75.124073 },
+//      parkCenter: { lat: 40.067199, lng: -75.124375 },  //back yard test location 40.067199790182855, -75.12437548928276
+      parkCenter: { lat: 40.071238, lng: -75.124073 },
       
       farPlane: 5000 
     };
@@ -201,7 +201,7 @@
           <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
           
           <a-entity gps-entity-place="latitude: ${APP_CONFIG.parkCenter.lat}; longitude: ${APP_CONFIG.parkCenter.lng};">
-            <a-entity id="park-model" gltf-model="url(CHS_model01.glb)" scale="70 70 70" position="0 10 0" rotation="0 135 0" visible="true"></a-entity>
+            <a-entity id="park-model" gltf-model="url(CHS_model01.glb)" scale="70 70 70" position="0 10 0" rotation="0 0 0" visible="true"></a-entity>
             <a-entity id="park-tower" position="0 0 0" visible="false">
               <a-box position="0 5 0" width="20" height="10" depth="20" material="color: #FF3333; side: double"></a-box>
               <a-box position="0 15 0" width="20" height="10" depth="20" material="color: #FFFFFF; side: double"></a-box>
