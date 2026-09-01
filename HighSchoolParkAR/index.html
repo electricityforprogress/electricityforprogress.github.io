@@ -5,13 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
   <title>High School Park AR</title>
   
+  <!-- Core AR & 3D Libraries -->
   <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <!-- Google Model Viewer for Static 3D Interaction -->
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 
   <style>
     body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #222; color: #333; }
     
     #ar-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+    
+    /* New Static 3D Viewer Container */
+    #model-container { display: none; width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 10; background: #222; }
     
     #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: flex; flex-direction: column; justify-content: space-between; }
     .interactive { pointer-events: auto; }
@@ -20,6 +26,7 @@
     .btn-primary { background: #0056b3; color: white; }
     .btn-success { background: #28a745; color: white; }
     .btn-warning { background: #ffc107; color: #111; }
+    .btn-info { background: #17a2b8; color: white; }
     .btn-large { font-size: 14px; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
     #top-bar { display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; background: rgba(0, 0, 0, 0.75); padding: 10px; box-sizing: border-box; backdrop-filter: blur(4px); border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -41,8 +48,15 @@
 </head>
 <body>
 
+  <!-- Static 3D Viewer Container -->
+  <div id="model-container">
+    <model-viewer src="HStest.glb" alt="Cheltenham High School Model" auto-rotate camera-controls shadow-intensity="1" style="width: 100%; height: 100%;"></model-viewer>
+  </div>
+
+  <!-- AR Camera Container -->
   <div id="ar-container"></div>
 
+  <!-- UI Overlay -->
   <div id="ui-layer">
     <div id="top-bar" class="interactive">
       <div id="header-title" onclick="toggleModal('history-modal')">Cheltenham High School Park ⓘ</div>
@@ -69,11 +83,13 @@
 
       <div class="bottom-buttons interactive">
         <button id="toggle-content-btn" class="btn btn-warning" style="display: none;" onclick="toggleParkContent()">Show Tower</button>
+        <button id="toggle-view-btn" class="btn btn-info btn-large" onclick="toggleViewMode()">View 3D Model</button>
         <button id="debug-toggle" class="btn" style="background: rgba(0,0,0,0.6); color: #FFF; border: 1px solid #444;" onclick="toggleDebug()">Debug Info</button>
       </div>
     </div>
   </div>
 
+  <!-- HISTORY MODAL -->
   <div id="history-modal" class="modal interactive">
     <button class="close-btn" onclick="toggleModal('history-modal')">Close</button>
     <h2 style="margin-top:0;">Site History</h2>
@@ -82,6 +98,7 @@
     <p>On July 3, 1995, the remains of the building were demolished and imploded. Following the demolition, the 11-acre site was transformed into High School Park to preserve the native ecosystem where the school once stood.</p>
   </div>
 
+  <!-- SUBMIT MODAL -->
   <div id="submit-modal" class="modal interactive">
     <button class="close-btn" onclick="toggleModal('submit-modal')">Close</button>
     <h2 style="margin-top:0;">Contribute to the Archive</h2>
@@ -93,14 +110,13 @@
 
   <script>
     const APP_CONFIG = {
-      version: "3.1.0",
-//      parkCenter: { lat: 40.067199, lng: -75.124375 },  //back yard test location 40.067199790182855, -75.12437548928276
+      version: "3.2.0",
       parkCenter: { lat: 40.071238, lng: -75.124073 },
-      
       farPlane: 5000 
     };
 
     let parkShowingModel = true;
+    let is3DMode = false;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
 
@@ -128,8 +144,42 @@
         } else {
           modelEl.setAttribute('visible', 'false');
           towerEl.setAttribute('visible', 'true');
-          btn.innerText = "Show Model";
+          btn.innerText = "Show HStest Model";
         }
+      }
+    }
+
+    function toggleViewMode() {
+      const arContainer = document.getElementById('ar-container');
+      const modelContainer = document.getElementById('model-container');
+      const arVideo = document.querySelector('video'); // AR.js camera feed
+      const btn = document.getElementById('toggle-view-btn');
+      const centerLaunch = document.getElementById('center-launch');
+      
+      is3DMode = !is3DMode;
+
+      if (is3DMode) {
+        // Switch to Static 3D View
+        modelContainer.style.display = 'block';
+        arContainer.style.display = 'none';
+        if (arVideo) arVideo.style.display = 'none';
+        if (centerLaunch.style.display !== 'none') centerLaunch.style.display = 'none';
+        
+        btn.innerText = "Return to AR";
+        btn.className = "btn btn-success btn-large";
+      } else {
+        // Return to AR View
+        modelContainer.style.display = 'none';
+        arContainer.style.display = 'block';
+        if (arVideo) arVideo.style.display = 'block';
+        
+        // If AR hasn't launched yet, show the launch button again
+        if (arContainer.innerHTML === "") {
+          centerLaunch.style.display = 'block';
+        }
+        
+        btn.innerText = "View 3D Model";
+        btn.className = "btn btn-info btn-large";
       }
     }
 
@@ -176,7 +226,10 @@
             document.getElementById('dbg-dist').innerText = `${Math.round(distance)}m`;
 
             if (document.getElementById('ar-container').innerHTML === "" && acc < 150) {
-              document.getElementById('center-launch').style.display = 'none';
+              // Ensure we don't accidentally hide the 3D viewer if the user toggled it while waiting for GPS
+              if (!is3DMode) {
+                document.getElementById('center-launch').style.display = 'none';
+              }
               document.getElementById('toggle-content-btn').style.display = 'block';
               renderARScene();
             } else if (document.getElementById('ar-container').innerHTML === "" && acc >= 150) {
@@ -201,8 +254,8 @@
           <a-camera gps-camera="gpsMinDistance: 2" far="${APP_CONFIG.farPlane}"></a-camera>
           
           <a-entity gps-entity-place="latitude: ${APP_CONFIG.parkCenter.lat}; longitude: ${APP_CONFIG.parkCenter.lng};">
-            <a-entity id="park-model" gltf-model="url(CHS_model01.glb)" scale="70 70 70" position="0 10 0" rotation="0 180 0" visible="true"></a-entity>
-            <a-entity id="park-tower" position="0 0 0" visible="false">
+            <a-entity id="park-model" gltf-model="url(HStest.glb)" scale="4 4 4" position="0 15 0" rotation="0 0 0" visible="true"></a-entity>
+            <a-entity id="park-tower" position="0 15 0" visible="false">
               <a-box position="0 5 0" width="20" height="10" depth="20" material="color: #FF3333; side: double"></a-box>
               <a-box position="0 15 0" width="20" height="10" depth="20" material="color: #FFFFFF; side: double"></a-box>
               <a-box position="0 25 0" width="20" height="10" depth="20" material="color: #3388FF; side: double"></a-box>
