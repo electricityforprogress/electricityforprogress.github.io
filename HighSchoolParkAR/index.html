@@ -286,31 +286,43 @@
       }
     }
 
-    function updateModelElevation(lat, lng) {
-      if (!parkZones) return; // Don't run if the JSON hasn't loaded yet
+	function updateModelElevation(lat, lng) {
+      // 1. Safeguard if the file didn't load or Turf is blocked
+      if (!parkZones || typeof turf === 'undefined') return; 
 
-      const userPoint = turf.point([lng, lat]);
-      let targetElevation = 15; // Default fallback
+      try {
+        const userPoint = turf.point([lng, lat]);
+        let targetElevation = 15; // Default fallback
 
-      turf.featureEach(parkZones, function (currentZone) {
-        if (turf.booleanPointInPolygon(userPoint, currentZone)) {
-          targetElevation = currentZone.properties.elevationOffset;
+        turf.featureEach(parkZones, function (currentZone) {
+          // 2. Safeguard: ONLY run math if the shape is a true Polygon
+          if (currentZone.geometry && (currentZone.geometry.type === "Polygon" || currentZone.geometry.type === "MultiPolygon")) {
+            if (turf.booleanPointInPolygon(userPoint, currentZone)) {
+              
+              // 3. Safeguard: Check if you actually added the property. If not, use 15.
+              if (currentZone.properties && currentZone.properties.elevationOffset !== undefined) {
+                targetElevation = currentZone.properties.elevationOffset;
+              }
+            }
+          }
+        });
+
+        // Only trigger an animation if the elevation actually needs to change
+        if (targetElevation !== lastKnownElevation) {
+          const parkModel = document.getElementById('park-model');
+          const parkTower = document.getElementById('park-tower');
+          
+          const animString = `property: position; to: 0 ${targetElevation} 0; dur: 2000; easing: easeInOutQuad`;
+
+          if (parkModel) parkModel.setAttribute('animation', animString);
+          if (parkTower) parkTower.setAttribute('animation', animString);
+
+          lastKnownElevation = targetElevation;
+          console.log(`Transitioning model elevation to ${targetElevation}`);
         }
-      });
-
-      // Only trigger an animation if the elevation actually needs to change
-      if (targetElevation !== lastKnownElevation) {
-        const parkModel = document.getElementById('park-model');
-        const parkTower = document.getElementById('park-tower');
-        
-        // A-Frame animation string: move to the new Y value over 2000ms (2 seconds)
-        const animString = `property: position; to: 0 ${targetElevation} 0; dur: 2000; easing: easeInOutQuad`;
-
-        if (parkModel) parkModel.setAttribute('animation', animString);
-        if (parkTower) parkTower.setAttribute('animation', animString);
-
-        lastKnownElevation = targetElevation;
-        console.log(`Transitioning model elevation to ${targetElevation}`);
+      } catch (error) {
+        // 4. Safeguard: If ANYTHING breaks, log it but DON'T crash the whole app
+        console.error("Geofence math error:", error);
       }
     }
 
