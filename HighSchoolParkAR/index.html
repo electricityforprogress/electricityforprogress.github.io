@@ -10,6 +10,8 @@
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <!-- Google Model Viewer for Static 3D Interaction -->
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <!-- Add Turf.js for Geofencing -->
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <style>
     /* Fix for AR.js video and canvas stretching */
@@ -55,7 +57,7 @@
 </head>
 <body>
 
-<!-- Static 3D Viewer Container -->
+  <!-- Static 3D Viewer Container -->
   <div id="model-container">
     <model-viewer 
       src="CHS_model01.glb" 
@@ -136,6 +138,24 @@
     let is3DMode = false;
 
     document.getElementById('dbg-ver').innerText = APP_CONFIG.version;
+
+    // --- FETCH GEOFENCE DATA ---
+    let parkZones = null;
+    let lastKnownElevation = 15; // Added this variable to track the current height
+
+    fetch('vantage_zones.geojson')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("No geofence file found. Using default elevations.");
+        }
+        return response.json();
+      })
+      .then(data => {
+        parkZones = data;
+        console.log("Loaded vantage zones:", parkZones.features.length);
+      })
+      .catch(err => console.log(err.message));
+    // --------------------------------
 
     function toggleModal(modalId) {
       const modal = document.getElementById(modalId);
@@ -241,6 +261,9 @@
             document.getElementById('dbg-lng').innerText = lng.toFixed(5);
             document.getElementById('dbg-acc').innerText = `±${Math.round(acc)}m`;
             document.getElementById('dbg-dist').innerText = `${Math.round(distance)}m`;
+            
+            // Update elevation based on location
+            updateModelElevation(lat, lng);
 
             if (document.getElementById('ar-container').innerHTML === "" && acc < 150) {
               // Ensure we don't accidentally hide the 3D viewer if the user toggled it while waiting for GPS
@@ -263,7 +286,35 @@
       }
     }
 
-function renderARScene() {
+    function updateModelElevation(lat, lng) {
+      if (!parkZones) return; // Don't run if the JSON hasn't loaded yet
+
+      const userPoint = turf.point([lng, lat]);
+      let targetElevation = 15; // Default fallback
+
+      turf.featureEach(parkZones, function (currentZone) {
+        if (turf.booleanPointInPolygon(userPoint, currentZone)) {
+          targetElevation = currentZone.properties.elevationOffset;
+        }
+      });
+
+      // Only trigger an animation if the elevation actually needs to change
+      if (targetElevation !== lastKnownElevation) {
+        const parkModel = document.getElementById('park-model');
+        const parkTower = document.getElementById('park-tower');
+        
+        // A-Frame animation string: move to the new Y value over 2000ms (2 seconds)
+        const animString = `property: position; to: 0 ${targetElevation} 0; dur: 2000; easing: easeInOutQuad`;
+
+        if (parkModel) parkModel.setAttribute('animation', animString);
+        if (parkTower) parkTower.setAttribute('animation', animString);
+
+        lastKnownElevation = targetElevation;
+        console.log(`Transitioning model elevation to ${targetElevation}`);
+      }
+    }
+
+    function renderARScene() {
       const container = document.getElementById('ar-container');
       
       container.innerHTML = `
