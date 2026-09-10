@@ -11,12 +11,13 @@ let sequenceConfigs = {};
 let cachedSchedules = {};
 let activePitches = {};
 
-// We now track raw, mean, and stdDev to do the threshold math
+// Track raw, mean, stdDev, and inter-tick spikes for threshold math
 let plantActivity = { 
   ch1_raw: 2500, 
   ch1_mean: 2500, 
   ch1_stdDev: 0, 
-  ch1_norm: 0.5 
+  ch1_norm: 0.5,
+  maxDeviation: 0 // Caches spikes between grid ticks so they aren't missed
 };
 
 self.onmessage = function(e) {
@@ -41,6 +42,12 @@ self.onmessage = function(e) {
       break;
     case 'UPDATE_PLANT_DATA':
       plantActivity = { ...plantActivity, ...payload };
+      
+      // Calculate immediate deviation and cache the highest value seen
+      let currentDev = Math.abs(payload.ch1_raw - payload.ch1_mean);
+      if (currentDev > plantActivity.maxDeviation) {
+        plantActivity.maxDeviation = currentDev;
+      }
       break;
   }
 };
@@ -75,6 +82,7 @@ function evaluateAllVoices(windowStart, windowEnd) {
   Object.keys(sequenceConfigs).forEach(voiceKey => {
     const voice = sequenceConfigs[voiceKey];
     let triggeredCount = 0;
+    const bioVal = plantActivity.ch1_norm || 0.5;
 
     if (voice.useStrudel && cachedSchedules[voiceKey]) {
       // --- MODE A: STRUDEL ACTIVE ---
@@ -86,9 +94,21 @@ function evaluateAllVoices(windowStart, windowEnd) {
           : (step.start >= windowStart || step.start < windowEnd);
           
         if (inWindow && triggeredCount < (voice.densityClamp || 16)) {
+          
+          // Bio-Probability Gate (evaluating ?B modifiers)
+          if (step.probability && step.probability.type === 'bio') {
+             if (bioVal < step.probability.min || bioVal > step.probability.max) return;
+          }
+
           self.postMessage({
             type: 'TRIGGER_NOTE',
-            payload: { voiceKey, midiChannel: 1, pitch: voice.midiNote || 60, velocity: voice.velocity?.max || 127, durationMs: 120 }
+            payload: { 
+                voiceKey, 
+                midiChannel: voice.midiChannel || 1, 
+                pitch: voice.midiNote || 60, 
+                velocity: voice.velocity?.max || 127, 
+                durationMs: 120 
+            }
           });
           triggeredCount++;
         }
@@ -105,16 +125,14 @@ function evaluateAllVoices(windowStart, windowEnd) {
 
       if (inWindow && triggeredCount < (voice.densityClamp || 16)) {
         
-        const raw = plantActivity.ch1_raw;
-        const mean = plantActivity.ch1_mean;
         const stdDev = plantActivity.ch1_stdDev;
         const thresh = voice.threshold || 2.0;
 
-        // Is there a significant biological shift?
-        if (Math.abs(raw - mean) > (thresh * stdDev) && stdDev > 2.0) {
+        // Evaluate the maximum deviation captured since the last grid tick
+        if (plantActivity.maxDeviation > (thresh * stdDev) && stdDev > 2.0) {
           
           // Calculate dynamic velocity based on the intensity of the spike
-          const intensity = Math.abs(raw - mean) / stdDev;
+          const intensity = plantActivity.maxDeviation / stdDev;
           const vMin = voice.velocity?.min || 60;
           const vMax = voice.velocity?.max || 127;
           
@@ -123,8 +141,17 @@ function evaluateAllVoices(windowStart, windowEnd) {
 
           self.postMessage({
             type: 'TRIGGER_NOTE',
-            payload: { voiceKey, midiChannel: 1, pitch: voice.midiNote || 60, velocity: dynamicVel, durationMs: 120 }
+            payload: { 
+                voiceKey, 
+                midiChannel: voice.midiChannel || 1, 
+                pitch: voice.midiNote || 60, 
+                velocity: dynamicVel, 
+                durationMs: 120 
+            }
           });
+          
+          // Consume the spike so it doesn't re-trigger continuously on the next 16th note
+          plantActivity.maxDeviation = 0; 
           triggeredCount++;
         }
       }
