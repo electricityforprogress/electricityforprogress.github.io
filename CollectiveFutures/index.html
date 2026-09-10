@@ -73,6 +73,67 @@
     </section>
     <section id="channel1-panel" class="collapsible panel">
   <h2>Channel 1: Master Percussion</h2>
+      <section id="channel1-panel" class="collapsible panel">
+  <h2>Channel 1: Master Percussion</h2>
+  
+  <!-- KICK DRUM VOICE -->
+  <div class="voice-module" id="voice-kick" style="border: 1px solid var(--accent-border); padding: 15px; margin-bottom: 15px; border-radius: 8px;">
+    
+    <div class="voice-header" style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+      <h3>Kick (MIDI Note 36)</h3>
+      <label class="toggle-switch">
+        <input type="checkbox" id="kick-strudel-enable" checked>
+        <span class="slider">Enable Strudel Override</span>
+      </label>
+    </div>
+
+    <!-- Generative Biorhythm Parameters -->
+    <div class="biorhythm-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+      
+      <!-- Density Clamp (Anti-Cacophony) -->
+      <div class="control-group">
+        <label>Density Clamp (Max hits/measure)</label>
+        <input type="range" id="kick-density" min="1" max="16" value="4">
+        <span id="kick-density-val">4</span>
+      </div>
+
+      <!-- Bio-Velocity Influence -->
+      <div class="control-group">
+        <label>Bio-Velocity Influence (%)</label>
+        <input type="range" id="kick-bio-vel" min="0" max="100" value="50">
+        <span id="kick-bio-vel-val">50%</span>
+      </div>
+
+      <!-- Velocity Range (Min/Max) -->
+      <div class="control-group" style="grid-column: span 2;">
+        <label>Velocity Range [Min - Max]</label>
+        <div style="display: flex; gap: 10px;">
+          <input type="number" id="kick-vel-min" min="0" max="127" value="80" style="width: 60px;">
+          <span> to </span>
+          <input type="number" id="kick-vel-max" min="0" max="127" value="127" style="width: 60px;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Strudel Sequence Override -->
+    <div class="strudel-editor" style="border-top: 1px dashed var(--accent-border); padding-top: 15px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+        <label>Strudel Sequence:</label>
+        <select id="kick-preset-select">
+          <option value="1000">4-on-the-floor</option>
+          <option value="[~ 1>B(30)] <[1?B(5,50)] [1*B(2,4)]> 1v127">Breakbeat</option>
+        </select>
+      </div>
+      <textarea id="kick-sequence-input" rows="2" style="width: 100%; font-family: monospace; background: #111; color: #00ff00; padding: 10px; border: 1px solid var(--accent-border);">1000</textarea>
+      
+      <div style="display: flex; gap: 10px; margin-top: 10px;">
+        <button id="kick-apply-btn" style="flex: 1;">Apply Changes</button>
+        <button id="kick-save-new" style="flex: 1;">Save as Custom</button>
+      </div>
+    </div>
+
+  </div>
+</section>
   
   <!-- Kick Drum Voice -->
   <div class="voice-module" id="voice-kick">
