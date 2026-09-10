@@ -39,32 +39,34 @@ export class BiodataBleManager {
     }
   }
 
-  handlePacket(event) {
+handlePacket(event) {
     const dataView = event.target.value;
-    const rawDeltas = [0, 0, 0, 0];
-    if (dataView.byteLength >= 8) {
-      rawDeltas[0] = dataView.getUint16(0, false);
-      rawDeltas[1] = dataView.getUint16(2, false);
-      rawDeltas[2] = dataView.getUint16(4, false);
-      rawDeltas[3] = dataView.getUint16(6, false);
-    } else {
-      const decoder = new TextDecoder();
-      const parts = decoder.decode(dataView).trim().split(',').map(p => parseFloat(p));
-      for (let i = 0; i < 4; i++) rawDeltas[i] = !isNaN(parts[i]) ? parts[i] : 0;
-    }
-    const normalized = rawDeltas.map((val, idx) => {
-      const ch = this.channels[idx];
-      if (val < ch.minDelta) ch.minDelta = val;
-      if (val > ch.maxDelta) ch.maxDelta = val;
-      const span = ch.maxDelta - ch.minDelta;
-      ch.normalized = span > 0 ? (val - ch.minDelta) / span : 0.5;
-      return ch.normalized;
-    });
-    if (this.onDataReceived) {
-      this.onDataReceived({
-        raw: rawDeltas,
-        normalized: { ch1: normalized[0], ch2: normalized[1], ch3: normalized[2], ch4: normalized[3] }
-      });
+    const decoder = new TextDecoder();
+    const jsonString = decoder.decode(dataView).trim();
+
+    try {
+      // Parse the JSON string coming from the ESP32
+      const payload = JSON.parse(jsonString);
+      const rawDeltas = [0, 0, 0, 0];
+
+      // Extract the 'p' (pulse width) value from each channel's object[cite: 3]
+      if (payload.ch && Array.isArray(payload.ch)) {
+        payload.ch.forEach(channelData => {
+          if (channelData.c >= 0 && channelData.c < 4) {
+            rawDeltas[channelData.c] = channelData.p; 
+          }
+        });
+      }
+
+      // Send the clean array of pulse widths to the main orchestrator
+      if (this.onDataReceived) {
+        this.onDataReceived({
+          raw: rawDeltas
+        });
+      }
+    } catch (e) {
+      // Web Bluetooth sometimes chunks large strings; catch partial JSON drops safely
+      console.warn('Partial or malformed JSON packet received:', e.message);
     }
   }
 
