@@ -61,26 +61,71 @@ class AppOrchestrator {
     };
   }
 
-  handleBleData(packet) {
-    // Extract Channel 1 (Master Clock / Percussion Plant)[cite: 2]
+handleBleData(packet) {
     const rawPulse = packet.raw[0]; 
     if (!rawPulse || rawPulse <= 0) return;
 
-    // 1. Process data through the Leaky Integrator
     const result = this.ch1Processor.processReading(rawPulse);
     const nowTimestamp = Math.floor(Date.now() / 1000);
 
-    // 2. Update the UI scope and numeric readouts
+    // This ensures the raw pulse is passed, fixing the blank Ohms readout
     this.telemetryUI.update(nowTimestamp, result.normalizedBase, result.volatility, result.raw, 0);
 
-    // 3. Send normalized bio-influence to the Sequencer Worker[cite: 1]
+    // Send the raw math values to the worker for the Generative engine
     this.worker.postMessage({
       type: 'UPDATE_PLANT_DATA',
       payload: { 
-        ch1: result.normalizedBase,
-        ch1_volatility: result.volatility
+        ch1_raw: result.raw,
+        ch1_mean: result.mesoAvg,
+        ch1_stdDev: result.volatility,
+        ch1_norm: result.normalizedBase
       }
     });
+  }
+
+  bindVoiceUI(voiceKey) {
+    const toggle = document.getElementById(`${voiceKey}-strudel-enable`);
+    const thresh = document.getElementById(`${voiceKey}-thresh`);
+    const threshVal = document.getElementById(`${voiceKey}-thresh-val`);
+    const density = document.getElementById(`${voiceKey}-density`);
+    const applyBtn = document.getElementById(`${voiceKey}-apply-btn`);
+    const inputArea = document.getElementById(`${voiceKey}-sequence-input`);
+    const presetSelect = document.getElementById(`${voiceKey}-preset-select`);
+
+    if (!inputArea) return;
+
+    const updateWorkerState = () => {
+      this.worker.postMessage({
+        type: 'UPDATE_SEQUENCE',
+        payload: {
+          voiceKey: voiceKey,
+          config: {
+            useStrudel: toggle.value === "true",
+            sequence: inputArea.value.trim(),
+            threshold: thresh ? parseFloat(thresh.value) : 2.0,
+            densityClamp: density ? parseInt(density.value, 10) : 16,
+            velocity: {
+              min: parseInt(document.getElementById(`${voiceKey}-vel-min`).value, 10),
+              max: parseInt(document.getElementById(`${voiceKey}-vel-max`).value, 10)
+            }
+          }
+        }
+      });
+    };
+
+    // Bind real-time sliders
+    if (toggle) toggle.addEventListener('change', updateWorkerState);
+    if (thresh) thresh.addEventListener('input', (e) => { threshVal.innerText = e.target.value; updateWorkerState(); });
+    if (density) density.addEventListener('input', (e) => { document.getElementById(`${voiceKey}-density-val`).innerText = e.target.value; updateWorkerState(); });
+    
+    // Preset and Sequence Applier
+    applyBtn.addEventListener('click', updateWorkerState);
+    if (presetSelect) {
+      presetSelect.addEventListener('change', (e) => {
+        inputArea.value = e.target.value;
+        updateWorkerState(); // Immediately push the preset to the worker
+      });
+    }
   }
 
   bindDOMEvents() {
