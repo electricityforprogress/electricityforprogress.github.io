@@ -14,7 +14,7 @@ class AppOrchestrator {
     // 1. Initialize Core Modules
     this.store = new AppStateStore();
     this.midiOut = new MidiOutputController();
-    this.telemetryUI = new TelemetryController('chart-micro');
+    this.telemetryUI = new TelemetryController('oscillator-canvas', 'piano-roll-canvas');
     
     // Create processors for the incoming hardware channels
     this.ch1Processor = new BioChannelProcessor(10); // 10Hz sampling
