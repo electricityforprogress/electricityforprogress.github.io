@@ -71,6 +71,42 @@
       <div id="chart-micro" class="uplot-container"></div>
       <div id="chart-macro" class="uplot-container"></div>
     </section>
+    <section id="channel1-panel" class="collapsible panel">
+  <h2>Channel 1: Master Percussion</h2>
+  
+  <!-- Kick Drum Voice -->
+  <div class="voice-module" id="voice-kick">
+    <div class="voice-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h3>Kick (Note 36)</h3>
+      
+      <!-- Bypass Toggle -->
+      <label class="toggle-switch">
+        <input type="checkbox" id="kick-strudel-enable" checked>
+        <span class="slider">Enable Strudel</span>
+      </label>
+    </div>
+
+    <!-- Preset Manager -->
+    <div class="control-row">
+      <select id="kick-preset-select">
+        <optgroup label="Factory Presets">
+          <option value="4-on-the-floor">[1000]</option>
+          <option value="breakbeat">[~ 1>B(30)] <[1?B(5,50)] [1*B(2,4)v<60~120>]</option>
+        </optgroup>
+        <optgroup label="User Custom" id="kick-custom-presets">
+          <!-- Custom saves populate here -->
+        </optgroup>
+      </select>
+      <button id="kick-save-new">Save as New</button>
+    </div>
+
+    <!-- Strudel Editor -->
+    <div class="strudel-editor" style="margin-top: 10px;">
+      <textarea id="kick-sequence-input" rows="2" style="width: 100%; font-family: monospace; background: #111; color: #00ff00; border: 1px solid #333; padding: 10px;">[8A] 1000</textarea>
+      <button id="kick-apply-btn" style="margin-top: 5px; width: 100%;">Apply Sequence</button>
+    </div>
+  </div>
+</section>
   </main>
 
   <!-- Boot the Orchestrator[cite: 1] -->
