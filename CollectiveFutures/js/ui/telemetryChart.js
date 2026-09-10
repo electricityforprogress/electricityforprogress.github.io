@@ -26,6 +26,15 @@ export class TelemetryController {
   }
 
   update(timestamp, base, volatility, rawPulse, eventFlag = 0, pitch = 60, velocity = 100, duration = 500) {
+    // Restore the Resistance and Conductance UI updates
+    if (this.ohmsReadout && this.siemensReadout && rawPulse) {
+      const ohms = this.calculateOhms(rawPulse);
+      const uS = this.calculateMicroSiemens(ohms);
+      this.ohmsReadout.innerText = ohms > 10000 ? `${(ohms / 1000).toFixed(1)} kΩ` : `${Math.round(ohms)} Ω`;
+      this.siemensReadout.innerText = `${uS.toFixed(2)} µS`;
+    }
+
+    // ... existing waveBuffer logic ...
     // Buffer the raw pulse for dynamic visual scaling
     this.waveBuffer.push({ val: rawPulse, evt: eventFlag, n: pitch });
     if (this.waveBuffer.length > this.MAX_PTS) this.waveBuffer.shift();
