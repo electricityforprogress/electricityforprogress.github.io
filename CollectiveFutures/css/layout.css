@@ -1,0 +1,93 @@
+/**
+ * layout.css
+ * Structural Grid and Flexbox definitions.
+ * Optimized for landscape orientation (MacBook / 10" Tablet).
+ */
+
+body {
+  /* Prevent scrollbars if elements slightly overflow */
+  overflow-x: hidden; 
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top Master Controls */
+.top-controls {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 15px;
+  padding: 15px 20px;
+  background-color: var(--bg-panel);
+  border-bottom: var(--panel-border);
+}
+
+/* Main Dashboard Grid */
+.dashboard-grid {
+  flex: 1 1 auto;
+  display: grid;
+  /* 
+   * On large screens, split the screen: 
+   * Left side gets the canvas visualizers, right side gets the telemetry panels.
+   */
+  grid-template-columns: 1fr 400px; 
+  gap: 20px;
+  padding: 20px;
+  height: calc(100vh - 70px); /* Subtract top-controls height */
+}
+
+/* Canvas Visualizer Area */
+.dual-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background-color: #000;
+  border-radius: var(--border-radius);
+  border: var(--panel-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.dual-canvas canvas {
+  width: 100%;
+  height: 50%; /* Split the area equally */
+  display: block;
+}
+
+/* Telemetry & Controls Panel */
+.collapsible.panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Readouts Block */
+.numeric-readouts {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px dashed var(--accent-border);
+}
+
+.readout-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* uPlot Containers */
+.uplot-container {
+  margin-top: 10px;
+  width: 100%;
+  /* Force uPlot to respect container boundaries */
+  overflow: hidden; 
+}
+
+/* Responsive Override for smaller screens (e.g. portrait mode) */
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 40vh 1fr;
+  }
+}

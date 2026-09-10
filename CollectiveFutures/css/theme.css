@@ -1,0 +1,72 @@
+/**
+ * theme.css
+ * Global design tokens and color variables.
+ * Designed to default to a dark mode palette for the installation.
+ */
+
+:root {
+  /* Color Palette */
+  --bg-main: #0a0a0a;
+  --bg-panel: #1a1a1a;
+  --bg-panel-hover: #222222;
+  
+  --text-primary: #e0e0e0;
+  --text-secondary: #888888;
+  --text-highlight: #ffffff;
+  
+  --accent-primary: #00ff00; /* Used for base activity */
+  --accent-secondary: #ff00ff; /* Used for volatility */
+  --accent-danger: #550000;
+  --accent-border: #333333;
+
+  /* Typography */
+  --font-main: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'Courier New', Courier, monospace;
+  
+  /* Borders & Shadows */
+  --border-radius: 8px;
+  --panel-border: 1px solid var(--accent-border);
+  --shadow-drop: 0 4px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Global Resets & Body */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  color: var(--text-highlight);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* Base Panel Styling */
+.panel {
+  background-color: var(--bg-panel);
+  border: var(--panel-border);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--shadow-drop);
+}
+
+/* Numeric Readout Typography */
+.numeric-readouts {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+}
+.numeric-readouts .label {
+  color: var(--text-secondary);
+}
+.numeric-readouts span:not(.label) {
+  color: var(--text-highlight);
+  font-weight: bold;
+}
