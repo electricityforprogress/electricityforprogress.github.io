@@ -9,6 +9,11 @@ export class TelemetryController {
     this.sCtx = this.scope.getContext('2d');
     this.rCtx = this.roll.getContext('2d');
     
+    // Bind DOM elements for readouts
+    this.rawReadout = document.getElementById('readout-raw');
+    this.ohmsReadout = document.getElementById('readout-ohms');
+    this.siemensReadout = document.getElementById('readout-siemens');
+    
     this.waveBuffer = [];
     this.notes = [];
     this.MAX_PTS = 60; 
@@ -25,22 +30,27 @@ export class TelemetryController {
     this.roll.height = this.roll.clientHeight;
   }
 
-  update(timestamp, base, volatility, rawPulse, eventFlag = 0, pitch = 60, velocity = 100, duration = 500) {
-    // Restore the Resistance and Conductance UI updates
-    if (this.ohmsReadout && this.siemensReadout && rawPulse) {
+update(timestamp, base, volatility, rawPulse, eventFlag = 0, pitch = 60, velocity = 100, duration = 120) {
+    // 1. Update Numeric UI
+    if (this.rawReadout && this.ohmsReadout && this.siemensReadout && rawPulse) {
       const ohms = this.calculateOhms(rawPulse);
       const uS = this.calculateMicroSiemens(ohms);
+      
+      this.rawReadout.innerText = `${Math.round(rawPulse)} µs`;
       this.ohmsReadout.innerText = ohms > 10000 ? `${(ohms / 1000).toFixed(1)} kΩ` : `${Math.round(ohms)} Ω`;
       this.siemensReadout.innerText = `${uS.toFixed(2)} µS`;
     }
 
-    // ... existing waveBuffer logic ...
-    // Buffer the raw pulse for dynamic visual scaling
-    this.waveBuffer.push({ val: rawPulse, evt: eventFlag, n: pitch });
+    // 2. Strict Type Casting to prevent Canvas NaN crashes
+    const safePitch = Number(pitch) || 60;
+    const safeVel = Number(velocity) || 100;
+    const safeDur = Number(duration) || 120;
+
+    this.waveBuffer.push({ val: rawPulse, evt: eventFlag, n: safePitch });
     if (this.waveBuffer.length > this.MAX_PTS) this.waveBuffer.shift();
 
     if (eventFlag === 1) {
-      this.notes.push({ n: pitch, t: Date.now(), dur: duration, v: velocity });
+      this.notes.push({ n: safePitch, t: Date.now(), dur: safeDur, v: safeVel });
     }
   }
 
