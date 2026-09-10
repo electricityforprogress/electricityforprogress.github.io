@@ -3,84 +3,112 @@
  * Manages uPlot charting and live numeric readouts for the UI.
  */
 export class TelemetryController {
-  constructor(containerId) {
-    this.container = document.getElementById(containerId);
-    this.ohmsReadout = document.getElementById('readout-ohms');
-    this.siemensReadout = document.getElementById('readout-siemens');
+  constructor(scopeId, rollId) {
+    this.scope = document.getElementById(scopeId);
+    this.roll = document.getElementById(rollId);
+    this.sCtx = this.scope.getContext('2d');
+    this.rCtx = this.roll.getContext('2d');
     
-    // Arrays for uPlot: [ [Timestamps], [Normalized Base], [Volatility] ]
-    this.data = [ [], [], [] ];
+    this.waveBuffer = [];
+    this.notes = [];
+    this.MAX_PTS = 60; 
     
-    const opts = {
-      title: "Bio-Activity (Meso/Micro)",
-      width: this.container.clientWidth || 800,
-      height: 250,
-      scales: {
-        x: { time: true },
-        y: { range: [0, 1] }
-      },
-      series: [
-        {}, // X-axis
-        {
-          label: "Base Activity",
-          stroke: "#00ff00",
-          width: 2
-        },
-        {
-          label: "Volatility",
-          stroke: "#ff00ff",
-          width: 2
-        }
-      ]
-    };
-
-    // Initialize uPlot
-    this.chart = new uPlot(opts, this.data, this.container);
-    
-    // Handle window resizing gracefully
-    window.addEventListener("resize", () => {
-      this.chart.setSize({ width: this.container.clientWidth, height: 250 });
-    });
+    window.addEventListener('resize', () => this.resize());
+    this.resize();
+    requestAnimationFrame(() => this.renderLoop());
   }
 
-  update(timestamp, base, volatility, rawPulse) {
-    // 1. Update Chart Data
-    this.data[0].push(timestamp);
-    this.data[1].push(base);
-    this.data[2].push(volatility);
+  resize() {
+    this.scope.width = this.scope.clientWidth;
+    this.scope.height = this.scope.clientHeight;
+    this.roll.width = this.roll.clientWidth;
+    this.roll.height = this.roll.clientHeight;
+  }
 
-    // Keep the array length manageable for real-time memory stability
-    if (this.data[0].length > 300) {
-      this.data[0].shift();
-      this.data[1].shift();
-      this.data[2].shift();
+  update(timestamp, base, volatility, rawPulse, eventFlag = 0, pitch = 60, velocity = 100, duration = 500) {
+    // Buffer the raw pulse for dynamic visual scaling
+    this.waveBuffer.push({ val: rawPulse, evt: eventFlag, n: pitch });
+    if (this.waveBuffer.length > this.MAX_PTS) this.waveBuffer.shift();
+
+    if (eventFlag === 1) {
+      this.notes.push({ n: pitch, t: Date.now(), dur: duration, v: velocity });
     }
-    this.chart.setData(this.data);
+  }
 
-    // 2. Update Numeric Readouts
-    if (this.ohmsReadout && this.siemensReadout) {
-      const ohms = this.calculateOhms(rawPulse);
-      const microSiemens = this.calculateMicroSiemens(ohms);
+  getPitchColor(pitch, alpha = 1.0) {
+    return `hsla(${(pitch % 12) * 30}, 100%, 50%, ${alpha})`;
+  }
+
+  renderLoop() {
+    const now = Date.now();
+    const timeWindow = 4000; 
+    const sw = this.scope.width, sh = this.scope.height;
+    const rw = this.roll.width, rh = this.roll.height;
+
+    // --- 1. Render Oscilloscope ---
+    this.sCtx.fillStyle = '#000'; 
+    this.sCtx.fillRect(0, 0, sw, sh);
+    
+    if (this.waveBuffer.length > 1) {
+      // Dynamically auto-scale to the current buffer[cite: 4]
+      let min = Math.min(...this.waveBuffer.map(b => b.val));
+      let max = Math.max(...this.waveBuffer.map(b => b.val));
+      let range = max - min || 1;
       
-      const ohmsDisplay = ohms > 10000 
-        ? `${(ohms / 1000).toFixed(1)} kΩ` 
-        : `${Math.round(ohms)} Ω`;
+      let pts = this.waveBuffer.map((b, idx) => ({
+        x: idx * (sw / (this.MAX_PTS - 1)),
+        y: sh - ((b.val - min) / range * (sh * 0.8)) - (sh * 0.1),
+        e: b.evt, 
+        n: b.n
+      }));
 
-      this.ohmsReadout.innerText = ohmsDisplay;
-      this.siemensReadout.innerText = `${microSiemens.toFixed(2)} µS`;
+      // Draw trigger lines[cite: 4]
+      pts.forEach(p => {
+        if (p.e === 1) {
+          this.sCtx.strokeStyle = this.getPitchColor(p.n, 0.7); 
+          this.sCtx.lineWidth = 1; 
+          this.sCtx.beginPath(); 
+          this.sCtx.moveTo(p.x, 0); 
+          this.sCtx.lineTo(p.x, sh); 
+          this.sCtx.stroke();
+        }
+      });
+
+      // Draw continuous green wave[cite: 4]
+      this.sCtx.strokeStyle = '#39ff14'; 
+      this.sCtx.lineWidth = 2; 
+      this.sCtx.beginPath(); 
+      this.sCtx.moveTo(pts[0].x, pts[0].y);
+      for (let j = 0; j < pts.length - 1; j++) {
+        this.sCtx.lineTo(pts[j].x, pts[j].y);
+      }
+      this.sCtx.stroke();
     }
-  }
 
-  // Uses the CHANGE ISR half-period math
-  calculateOhms(pulseWidthUs) {
-    const cF = 4.2e-9;   
-    const halfRa = 1950; 
-    const tSec = pulseWidthUs * 1e-6; 
-    const rPlant = (tSec / (Math.LN2 * cF)) - halfRa;
-    return Math.max(0, rPlant); 
-  }
+    // --- 2. Render Piano Roll ---
+    this.rCtx.fillStyle = '#000'; 
+    this.rCtx.fillRect(0, 0, rw, rh);
+    this.rCtx.strokeStyle = '#30363d'; 
+    this.rCtx.lineWidth = 1;
+    
+    for (let j = 0; j < 12; j++) { 
+      this.rCtx.beginPath(); 
+      this.rCtx.moveTo(0, j * (rh / 12)); 
+      this.rCtx.lineTo(rw, j * (rh / 12)); 
+      this.rCtx.stroke(); 
+    }
+    
+    // Animate falling notes[cite: 4]
+    this.notes = this.notes.filter(n => now - n.t < timeWindow);
+    this.notes.forEach(note => {
+      let x = rw - ((now - note.t) / timeWindow * rw);
+      let y = rh - ((note.n / 127) * rh); 
+      let noteW = (note.dur / timeWindow) * rw;
+      
+      this.rCtx.fillStyle = this.getPitchColor(note.n, Math.max(0.3, note.v / 127)); 
+      this.rCtx.fillRect(x - noteW, Math.max(0, y - 4), noteW, 8); 
+    });
 
-  calculateMicroSiemens(ohms) {
-    return ohms <= 0 ? 0 : (1000000 / ohms); 
+    requestAnimationFrame(() => this.renderLoop());
   }
 }
