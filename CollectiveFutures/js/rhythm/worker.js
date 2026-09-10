@@ -122,73 +122,85 @@ function runTick() {
 function evaluateAllVoices(windowStart, windowEnd) {
   Object.keys(sequenceConfigs).forEach(voiceKey => {
     const voice = sequenceConfigs[voiceKey];
-    const steps = cachedSchedules[voiceKey] || [];
-    const bioVal = plantActivity[voice.bioSource || 'ch1'];
+    const bioVal = plantActivity[voice.bioSource || 'ch1']; // Normalized 0.0 to 1.0
+    const volatility = plantActivity.ch1_volatility || 0;
+    
     let triggeredCount = 0;
 
-    steps.forEach(step => {
-      if (step.isRest) return;
-
-      const inWindow = (windowStart < windowEnd)
-        ? (step.start >= windowStart && step.start < windowEnd)
-        : (step.start >= windowStart || step.start < windowEnd);
-
-      if (inWindow) {
-        if (triggeredCount >= (voice.densityClamp || 16)) return;
-
-        // 1. Bio-Probability
-        if (!evaluateProbability(step.probability, bioVal)) return;
-
-        // 2. Microtiming (Bio-Swing)
-        let delayMs = step.microTiming.staticMs;
-        if (step.microTiming.bioMaxMs > 0) {
-          delayMs += (1.0 - plantActivity.ch1) * step.microTiming.bioMaxMs;
-        }
-
-        // 3. Resolve Pitch (Specific Note vs Scale Quantization vs Drum Override)
-        let pitch = voice.midiNote; 
-        if (!pitch) { 
-          if (step.noteTarget) {
-            pitch = ScaleEngine.noteNameToMidi(step.noteTarget);
-          } else if (step.scaleDegree !== null && activePitches[voiceKey]) {
-            const pitches = activePitches[voiceKey];
-            pitch = pitches[step.scaleDegree % pitches.length] || 60;
-          } else if (activePitches[voiceKey]) {
-            pitch = ScaleEngine.quantize(bioVal, activePitches[voiceKey], voice.density || 0.8, voice.spread || 0.5);
-          } else {
-            pitch = 60;
-          }
-        }
-
-        // 4. Ratchets & Rolls
-        let ratchetCount = step.ratchet.count;
-        if (step.ratchet.bioRange) {
-          const [rMin, rMax] = step.ratchet.bioRange;
-          ratchetCount = Math.round(rMin + (rMax - rMin) * bioVal);
-        }
-
-        for (let r = 0; r < ratchetCount; r++) {
-          const subFraction = r / Math.max(1, ratchetCount);
-          const velocity = calculateStepVelocity(step, voice, subFraction, bioVal);
-          const ratchetOffsetMs = (r / ratchetCount) * (step.duration * (240 / bpm) * 1000);
-          const totalDelay = Math.max(0, delayMs + ratchetOffsetMs);
-
-          triggeredCount++;
+    if (voice.useStrudel && cachedSchedules[voiceKey]) {
+      // ========================================================
+      // MODE A: STRUDEL OVERRIDE ENABLED
+      // ========================================================
+      const steps = cachedSchedules[voiceKey];
+      steps.forEach(step => {
+        if (step.isRest) return;
+        
+        const inWindow = (windowStart < windowEnd)
+          ? (step.start >= windowStart && step.start < windowEnd)
+          : (step.start >= windowStart || step.start < windowEnd);
+          
+        if (inWindow) {
+          if (triggeredCount >= (voice.densityClamp || 16)) return;
+          
+          // 1. Evaluate Strudel-specific probabilities (?B)
+          if (!evaluateProbability(step.probability, bioVal)) return;
+          
+          // 2. Resolve Pitch & Calculate Velocity
+          let pitch = voice.midiNote || 60; // Expand for synth logic later
+          let velocity = calculateStepVelocity(step, voice, 1.0, bioVal);
 
           self.postMessage({
             type: 'TRIGGER_NOTE',
-            payload: {
-              voiceKey,
-              midiChannel: voice.midiChannel, 
-              pitch: pitch,                   
-              velocity,
-              delayMs: totalDelay,
-              durationMs: 120
-            }
+            payload: { voiceKey, midiChannel: voice.midiChannel, pitch, velocity, delayMs: 0, durationMs: 120 }
           });
+          triggeredCount++;
+        }
+      });
+
+    } else {
+      // ========================================================
+      // MODE B: STRUDEL BYPASSED (RAW GENERATIVE MODE)
+      // ========================================================
+      // We check for triggers on a fixed subdivision (e.g., 16th notes)
+      // windowStart represents our progression through the measure (0.0 to 1.0)
+      
+      const totalSubdivisions = 16;
+      const stepDuration = 1.0 / totalSubdivisions;
+      const currentStep = Math.floor(windowStart / stepDuration);
+      const stepStart = currentStep * stepDuration;
+      
+      const inWindow = (windowStart < windowEnd)
+        ? (stepStart >= windowStart && stepStart < windowEnd)
+        : (stepStart >= windowStart || stepStart < windowEnd);
+
+      if (inWindow) {
+        if (triggeredCount >= (voice.densityClamp || 16)) return; // Strict Anti-Cacophony clamp
+
+        // Generative Probability: Baseline activity + momentary volatility
+        const triggerThreshold = 0.8 - (bioVal * 0.4); 
+        
+        if (Math.random() + volatility > triggerThreshold) {
+          
+          let pitch = voice.midiNote || 60; 
+          
+          // Apply Bio-Velocity Influence[cite: 2]
+          const vMin = voice.velocity?.min || 40;
+          const vMax = voice.velocity?.max || 127;
+          const vRange = vMax - vMin;
+          const bioInfluence = voice.velocity?.bioInfluence || 0.5; // 0.0 to 1.0
+          
+          // Modulate base velocity by the plant's current baseline state
+          const dynamicVelocity = vMin + (vRange * (bioVal * bioInfluence));
+          const finalVelocity = Math.min(vMax, Math.max(vMin, Math.round(dynamicVelocity)));
+
+          self.postMessage({
+            type: 'TRIGGER_NOTE',
+            payload: { voiceKey, midiChannel: voice.midiChannel, pitch, velocity: finalVelocity, delayMs: 0, durationMs: 120 }
+          });
+          triggeredCount++;
         }
       }
-    });
+    }
   });
 }
 
