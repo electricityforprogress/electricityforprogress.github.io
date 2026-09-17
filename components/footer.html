@@ -1,0 +1,32 @@
+<footer>
+    <p>Electricity for Progress</p>
+</footer>
+
+<!-- Interactive Starfield Controls UI -->
+<button id="starfield-controls-toggle" onclick="toggleControls()">[Starfield]</button>
+<div id="starfield-panel">
+    <div class="control-group">
+        <label>Warp Speed: <span id="speed-val">3.0</span></label>
+        <input type="range" id="speedRange" min="0.2" max="15" step="0.2" value="3.0" oninput="updateSpeed(this.value)">
+    </div>
+    <div class="control-group">
+        <label>Star Count: <span id="count-val">400</span></label>
+        <input type="range" id="countRange" min="50" max="1000" step="50" value="400" oninput="updateCount(this.value)">
+    </div>
+    <div class="control-group">
+        <label>Star Size: <span id="size-val">5</span>px</label>
+        <input type="range" id="sizeRange" min="1" max="12" step="1" value="5" oninput="updateSize(this.value)">
+    </div>
+    <div class="control-group">
+        <label>Color Profile:</label>
+        <select id="colorScheme" onchange="updateColorScheme(this.value)">
+            <option value="white">Classic</option>
+            <option value="cyan">Blue</option>
+            <option value="nebula">Rainbow</option>
+        </select>
+    </div>
+    <div class="control-buttons">
+        <button id="pauseBtn" onclick="togglePause()">Pause</button>
+        <button onclick="resetStars()">Reset</button>
+    </div>
+</div>
