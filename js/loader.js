@@ -18,8 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Safe Email Injector
 document.addEventListener('DOMContentLoaded', () => {
-    const user = "hello"; // Change to your actual email prefix
-    const domain = "electricityforprogress.com";
+    const user = "samuel.cusumano"; // Change to your actual email prefix
+    const domain = "gmail.com";
     const emailBox = document.getElementById("safe-email");
     
     if (emailBox) {
