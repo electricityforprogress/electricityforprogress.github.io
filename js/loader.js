@@ -15,3 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadComponent('nav-placeholder', '/components/nav.html');
     loadComponent('footer-placeholder', '/components/footer.html');
 });
+
+// Safe Email Injector
+document.addEventListener('DOMContentLoaded', () => {
+    const user = "hello"; // Change to your actual email prefix
+    const domain = "electricityforprogress.com";
+    const emailBox = document.getElementById("safe-email");
+    
+    if (emailBox) {
+        emailBox.innerHTML = `<a href="mai` + `lto:${user}@${domain}">${user}@${domain}</a>`;
+    }
+});
