@@ -111,7 +111,12 @@ function updateColorScheme(val) {
 function togglePause() {
     isPaused = !isPaused;
     document.getElementById("pauseBtn").innerText = isPaused ? "Resume" : "Pause";
+    
     if (!isPaused) {
+        // Cancel any lingering ghost frames before starting a new loop
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+        }
         renderFrame();
     }
 }
