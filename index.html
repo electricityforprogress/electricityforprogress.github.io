@@ -45,10 +45,12 @@
             background-color: rgba(17, 17, 17, 0.85);
             display: flex;
             justify-content: center;
+            align-items: center; /* Forces all links to perfectly align vertically */
             padding: 1rem;
             flex-wrap: wrap;
             gap: 1rem;
             position: relative;
+            z-index: 20; /* Keeps dropdown over the main content */
         }
         nav a {
             color: var(--text-color);
