@@ -61,6 +61,44 @@
         nav a:hover {
             color: var(--accent-color);
         }
+/* Dropdown Styling */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: rgba(17, 17, 17, 0.95);
+            min-width: 280px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 100;
+            top: 100%;
+            /* Centers the dropdown nicely under the parent link */
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 4px;
+            padding: 0.5rem 0;
+            border: 1px solid #333;
+        }
+
+        .dropdown-content a {
+            display: block;
+            padding: 0.75rem 1rem;
+            text-transform: none; /* Overrides the uppercase for better readability on long links */
+            letter-spacing: normal;
+        }
+
+        .dropdown-content a:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Show the dropdown menu on hover */
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        
         main {
             max-width: 800px;
             margin: 2rem auto;
@@ -217,9 +255,18 @@
         </a>
     </header>
 
-    <nav>
+<nav>
         <a href="/">Home</a>
-        <a href="/">Biodata Sonification</a>
+        
+        <!-- Dropdown Container -->
+        <div class="dropdown">
+            <a href="/">Biodata Sonification</a>
+            <div class="dropdown-content">
+                <a href="https://github.com/electricityforprogress/biofeather" target="_blank" rel="noreferrer noopener">GitHub (Biofeather)</a>
+                <a href="https://docs.google.com/presentation/d/e/2PACX-1vQv2lf3BtgonvkuruCsEbNgXGyKHLv037CAQ4u2NWHtBqVPHp6yxi93E4WfXM578tWJ4q-WRs86Cgee/pubembed" target="_blank" rel="noreferrer noopener">ESP32-S3 Breadboard Kit Instructions</a>
+            </div>
+        </div>
+
         <a href="/circuit-bending/">Circuit Bending</a>
         <a href="/synth/">Bio-Synth</a>
         <a href="/workshops/">Workshops</a>
