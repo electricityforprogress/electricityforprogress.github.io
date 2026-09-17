@@ -1,0 +1,232 @@
+:root {
+    --text-color: #e5e5e5;
+    --accent-color: #9adffd;
+    --content-bg: rgba(26, 26, 26, 0.85); /* Transparent so stars peek through */
+}
+
+body, html {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.8;
+    margin: 0;
+    padding: 0;
+    background: transparent !important;
+    color: var(--text-color);
+}
+
+/* Starfield Canvas CSS */
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+header {
+    background-color: transparent;
+    padding: 2rem 1rem;
+    text-align: center;
+    position: relative;
+    z-index: 10;
+}
+
+header img {
+    max-width: 100%;
+    height: auto;
+}
+
+nav {
+    background-color: rgba(17, 17, 17, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center; /* Forces all links to perfectly align vertically */
+    padding: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+    position: relative;
+    z-index: 20; /* High z-index keeps dropdown over main content */
+}
+
+nav a {
+    color: var(--text-color);
+    text-decoration: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9rem;
+}
+
+nav a:hover {
+    color: var(--accent-color);
+}
+
+/* Dropdown Styling */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: rgba(17, 17, 17, 0.95);
+    min-width: 280px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    z-index: 100;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 4px;
+    padding: 0.5rem 0;
+    border: 1px solid #333;
+}
+
+.dropdown-content a {
+    display: block;
+    padding: 0.75rem 1rem;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.dropdown-content a:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
+main {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: var(--content-bg);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    position: relative;
+    z-index: 10;
+}
+
+h1, h2, h3 {
+    color: var(--accent-color);
+}
+
+a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1.5rem auto;
+    border-radius: 4px;
+}
+
+figcaption {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #c1c1c1;
+    margin-top: 0.5rem;
+}
+
+footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.9rem;
+    color: #c1c1c1;
+    position: relative;
+    z-index: 10;
+}
+
+/* Force Content Layers Above Canvas */
+header, main, footer {
+    position: relative;
+    z-index: 10;
+}
+
+/* Starfield Control Panel Styling */
+#starfield-controls-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(10, 10, 10, 0.9);
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: monospace;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+#starfield-controls-toggle:hover {
+    background: var(--accent-color);
+    color: #000;
+}
+
+#starfield-panel {
+    position: fixed;
+    bottom: 70px;
+    right: 20px;
+    background: rgba(15, 15, 15, 0.95);
+    border: 1px solid #333;
+    padding: 1.2rem;
+    border-radius: 8px;
+    width: 260px;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.7);
+    font-size: 0.85rem;
+    font-family: monospace;
+}
+
+#starfield-panel.active {
+    display: block;
+}
+
+.control-group {
+    margin-bottom: 0.8rem;
+}
+
+.control-group label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.3rem;
+    color: var(--text-color);
+}
+
+.control-group input[type="range"], .control-group select {
+    width: 100%;
+    cursor: pointer;
+}
+
+.control-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.control-buttons button {
+    flex: 1;
+    background: #222;
+    color: var(--text-color);
+    border: 1px solid #444;
+    padding: 0.4rem;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.control-buttons button:hover {
+    border-color: var(--accent-color);
+}
