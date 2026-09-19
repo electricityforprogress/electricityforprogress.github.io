@@ -63,6 +63,23 @@ nav a:hover {
     color: var(--accent-color);
 }
 
+.nav-logo {
+    display: flex;
+    align-items: center;
+    padding: 0; 
+}
+
+.nav-logo img {
+    height: 32px; /* Adjust this number to make the logo bigger or smaller */
+    width: auto;
+    margin: 0; 
+    display: inline-block;
+}
+
+.nav-logo:hover {
+    opacity: 0.8;
+}
+
 /* Dropdown Styling */
 .dropdown {
     position: relative;
