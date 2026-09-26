@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioStrike Configuration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: {
+                        bio: { 400: '#34d399', 500: '#10b981', 600: '#059669', 900: '#064e3b' },
+                        surface: { 50: '#1e293b', 100: '#0f172a', 200: '#020617' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #020617; color: #f8fafc; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #34d399; cursor: pointer; margin-top: -6px; box-shadow: 0 0 10px rgba(52, 211, 153, 0.5); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
+        input[type=range]:focus { outline: none; }
+        canvas { image-rendering: pixelated; }
+        .glass-panel { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(51, 65, 85, 0.5); }
+        
+        /* Animate the wrapper DIV, not the SVG tag */
+.logo-container {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: breathe 4s infinite alternate ease-in-out;
+}
+
+.logo-container svg {
+    width: 100%;
+    height: 100%;
+}
+
+.shimmer-text {
+    /* 
+       0-25%: The perfect resting Blue->Emerald gradient
+       45-55%: The white light catching
+       75-100%: An identical resting Blue->Emerald gradient to pause on
+    */
+    background: linear-gradient(
+        to right,
+        #60a5fa 0%,      /* Resting Blue start */
+        #a7f3d0 25%,     /* Resting Emerald end */
+        
+        #60a5fa 45%,     /* Sweep approaching */
+        #ffffff 50%,     /* The bright center flash */
+        #a7f3d0 55%,     /* Sweep leaving */
+        
+        #60a5fa 75%,     /* Paused Blue start */
+        #a7f3d0 100%     /* Paused Emerald end */
+    );
+    /* Make the background 4x wider than the text so the resting frames fit perfectly */
+    background-size: 400% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    
+    /* 12 seconds total: Happens much less frequently */
+    animation: text-shimmer 12s ease-in-out infinite; 
+}
+
+@keyframes text-shimmer {
+    /* Rests on the left side (0%) which looks exactly like your original gradient */
+    0% { background-position: 0% center; }
+    
+    /* Takes 3 seconds (25% of 12s) to slide across smoothly, not instantly */
+    25% { background-position: 100% center; }
+    
+    /* Pauses on the right side (100%) for 9 seconds. Because we built the right side to look identical to the left, there's no visual jump. */
+    100% { background-position: 100% center; } 
+}
+
+/* Combines a neon glow drop-shadow with an actual brightness pulse */
+@keyframes breathe {
+    0% {
+        filter: drop-shadow(0 0 2px rgba(51, 181, 229, 0.3)) brightness(0.85);
+    }
+    100% {
+        filter: drop-shadow(0 0 14px rgba(51, 181, 229, 1)) 
+                drop-shadow(0 0 28px rgba(51, 181, 229, 0.6)) 
+                brightness(1.3);
+    }
+}
+        
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans overflow-x-hidden">
+
+    <nav class="glass-panel sticky top-0 z-50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between shadow-lg shadow-bio-900/20">
+        <div class="flex items-center gap-3 mb-4 sm:mb-0">
+            <!-- PASTE YOUR RAW E4P SVG INSIDE THIS DIV -->
+           
+           <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   class="w-10 h-10"
+   viewBox="-157.147 25.221001 50 50"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="eforp logo.svg"
+   inkscape:version="1.4.4 (dcaf3e7d, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="2"
+     inkscape:cx="94.75"
+     inkscape:cy="68.75"
+     inkscape:window-width="1237"
+     inkscape:window-height="760"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="path1" />
+  <title
+     id="title1">svgOutput</title>
+  <desc
+     id="desc1">made with tinkercad</desc>
+  <g
+     id="path1"
+     style="opacity:1;stroke-width:0.99976227;stroke-dasharray:none"
+     transform="matrix(1.0484061,0,0,1.0661712,8.5064192,9.9431326)">
+    <path
+       style="baseline-shift:baseline;display:inline;overflow:visible;fill:#5a9fc8;enable-background:accumulate;stop-color:#000000;stop-opacity:1;stroke-width:0.8105925;stroke-dasharray:none;stroke:#000101;stroke-opacity:1"
+       d="m -136.908,32.493999 c 0.55252,1.424902 0.8479,2.964338 0.71766,4.493371 2.82265,-2.785484 5.59124,-5.664514 8.44207,-8.388538 3.02703,-2.645483 7.70053,-3.116033 11.20629,-1.153567 3.49267,1.84045 5.62923,5.896481 5.16707,9.819269 -0.36362,3.931205 -3.29459,7.45713 -7.09507,8.532205 -3.67323,1.132422 -7.9449,-0.11249 -10.40603,-3.072564 0,2.545969 0,5.091937 0,7.637906 -0.83333,0 -1.66667,0 -2.5,0 0,-4.666694 0,-9.333387 0,-14.000081 0.24624,-0.464044 0.0989,-1.070939 -0.38228,-0.271289 -2.60267,2.556185 -5.15349,5.24928 -7.78697,7.713284 1.84608,0 3.69217,0 5.53825,0 0,0.833333 0,1.666667 0,2.5 -4.30614,-0.02426 -8.62867,0.04764 -12.92273,-0.03398 -4.02411,-0.245945 -7.68381,-3.219759 -8.7856,-7.093397 -1.17935,-3.7745 0.17827,-8.165108 3.28377,-10.615644 3.03645,-2.523743 7.60254,-2.943702 11.04938,-1.015797 2.00542,1.073566 3.58083,2.862666 4.47404,4.948814 m -1.98745,5.735001 c -3.97984,-0.01871 -8.00419,-0.0027 -12.00114,-0.008 0,-0.833333 0,-1.666667 0,-2.5 4.07026,0 8.14052,0 12.21078,0 -0.19954,-3.420854 -3.05114,-6.40593 -6.44262,-6.828194 -3.38512,-0.507639 -6.93628,1.609804 -8.04781,4.855274 -1.26877,3.249315 0.14615,7.239647 3.15953,8.98851 2.90448,1.817786 7.00724,1.263042 9.31495,-1.272589 1.11055,-1.028829 2.17657,-2.1651 3.2701,-3.235001 -0.48792,0 -0.97585,0 -1.46377,0 m 20.45845,-8.937 c -3.00532,-1.276615 -6.75273,-0.312584 -8.7458,2.279366 -2.211,2.701875 -2.13371,6.952857 0.21533,9.545892 2.19444,2.654025 6.29846,3.373421 9.28106,1.663425 3.12273,-1.651368 4.68593,-5.677561 3.45607,-8.995655 -0.6652,-2.018515 -2.25702,-3.66752 -4.20666,-4.493028 z"
+       id="path285" />
+  </g>
+  <metadata
+     id="metadata286">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>svgOutput</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>
+
+           
+            <!-- END SVG -->
+<h1 class="text-2xl font-bold tracking-wider shimmer-text">BioStrike</h1>
+        </div>
+        
+        <div class="flex flex-wrap items-center justify-center gap-4 text-xs font-mono">
+            <div class="flex items-center gap-2 bg-surface-50 px-3 py-1.5 rounded-full border border-slate-700">
+                <div id="status-wifi" class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                <span id="text-wifi" class="text-slate-300">Hotspot Active (BioStrike.local)</span>
+                <button onclick="openWifiModal()" class="ml-2 text-bio-400 hover:text-bio-300 underline underline-offset-2">Config</button>
+            </div>
+            <div class="flex items-center gap-2 bg-surface-50 px-3 py-1.5 rounded-full border border-slate-700">
+                <div id="status-ble" class="w-2.5 h-2.5 rounded-full bg-bio-500 animate-pulse"></div>
+                <span class="text-slate-300">BLE MIDI</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow p-4 sm:p-6 lg:p-8 flex flex-col gap-6 max-w-7xl mx-auto w-full">
+        
+        <div class="glass-panel p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <label for="global-channel" class="text-sm font-semibold text-slate-300">MIDI Out</label>
+                <select id="global-channel" onchange="updateGlobalChannel(this.value)" class="bg-surface-100 border border-slate-600 text-white text-sm rounded-lg focus:ring-bio-500 focus:border-bio-500 block p-2 outline-none"></select>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 bg-surface-100 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <label class="text-xs font-semibold text-slate-300">Test Vel: <span id="test-vel-label" class="text-bio-300 font-mono">100</span></label>
+                    <input type="range" id="global-test-vel" min="1" max="127" value="100" oninput="document.getElementById('test-vel-label').innerText=this.value" class="w-24">
+                </div>
+                <button id="demo-btn" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded transition-colors" onclick="toggleDemoMode()">
+                    Start Simulation
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6" id="channels-container"></div>
+
+        <div class="glass-panel p-4 rounded-xl flex-grow min-h-[250px] flex flex-col">
+            <!-- Headers Removed for cleaner look -->
+            <div class="relative flex-grow bg-black rounded border border-slate-800 overflow-hidden mt-2">
+                <canvas id="piano-roll-canvas" class="absolute inset-0 w-full h-full"></canvas>
+                <!-- Dynamic Axis overlay -->
+                <div class="absolute left-0 top-0 bottom-0 w-10 bg-surface-100/80 border-r border-slate-800 flex flex-col justify-between py-2 items-center text-[10px] text-slate-500 font-mono z-10 pointer-events-none">
+                    <span id="axis-max">--</span>
+                    <span id="axis-mid">--</span>
+                    <span id="axis-min">--</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="wifi-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-surface-50 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4 transform scale-95 transition-transform duration-300" id="wifi-modal-content">
+            <h2 class="text-2xl font-bold mb-2">Network Config</h2>
+            <p class="text-slate-400 text-sm mb-6">Connect BioStrike to your local Wi-Fi to disable the captive hotspot.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">SSID (Network Name)</label>
+                    <input type="text" id="wifi-ssid" class="w-full bg-surface-100 border border-slate-600 rounded-lg p-2.5 text-white outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                    <input type="password" id="wifi-pass" class="w-full bg-surface-100 border border-slate-600 rounded-lg p-2.5 text-white outline-none">
+                </div>
+                <div class="pt-4 flex gap-3 justify-end">
+                    <button onclick="closeWifiModal()" class="px-4 py-2 rounded-lg text-slate-300 hover:bg-surface-100 transition-colors">Cancel</button>
+                    <button onclick="saveWifi()" class="px-4 py-2 rounded-lg bg-bio-600 hover:bg-bio-500 text-white font-medium transition-colors">Connect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            globalChannel: 1,
+            demoMode: false,
+            demoInterval: null,
+            channels: [
+                { id: 0, name: "CH 1", note: 36, minPwm: 120, maxPwm: 255, duration: 40, meterVel: 0, meterPwm: 0, strikeEnd: 0, color: '#ef4444' }, 
+                { id: 1, name: "CH 2", note: 38, minPwm: 100, maxPwm: 255, duration: 30, meterVel: 0, meterPwm: 0, strikeEnd: 0, color: '#10b981' }, 
+                { id: 2, name: "CH 3", note: 42, minPwm: 80, maxPwm: 200, duration: 15, meterVel: 0, meterPwm: 0, strikeEnd: 0, color: '#0ea5e9' }, 
+                { id: 3, name: "CH 4", note: 45, minPwm: 110, maxPwm: 255, duration: 35, meterVel: 0, meterPwm: 0, strikeEnd: 0, color: '#f59e0b' }  
+            ],
+            pianoRoll: [] 
+        };
+
+        const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        function getNoteString(noteNum) {
+            const octave = Math.floor(noteNum / 12) - 1;
+            return `${noteNames[noteNum % 12]}${octave} (${noteNum})`;
+        }
+        function getShortNote(noteNum) { return `${noteNames[noteNum % 12]}${Math.floor(noteNum / 12) - 1}`; }
+
+        function mapRange(value, inMin, inMax, outMin, outMax) {
+            return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+        }
+
+        function setupGlobalChannelSelect() {
+            const select = document.getElementById('global-channel');
+            select.innerHTML = '<option value="0">Omni (All)</option>';
+            for(let i=1; i<=16; i++) select.innerHTML += `<option value="${i}">Channel ${i}</option>`;
+            select.value = state.globalChannel;
+        }
+
+        function updateGlobalChannel(val) {
+            state.globalChannel = parseInt(val);
+        }
+
+        function renderChannels() {
+            const container = document.getElementById('channels-container');
+            container.innerHTML = '';
+            state.channels.forEach((ch, index) => {
+                container.innerHTML += `
+                    <div class="glass-panel rounded-xl p-5 border-t-4 relative overflow-hidden group" style="border-top-color: ${ch.color}">
+                        <div class="flex justify-between items-start mb-4">
+                            <h2 class="text-lg font-bold text-white">${ch.name}</h2>
+                            <button onclick="testStrike(${index})" class="bg-surface-100 hover:bg-slate-700 border border-slate-600 text-xs px-2 py-1 rounded transition-colors text-slate-300 flex items-center gap-1">
+                                <div class="w-1.5 h-1.5 rounded-full bg-slate-500" id="indicator-${index}"></div>TEST
+                            </button>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-20 h-48 bg-black rounded border border-slate-700 relative flex justify-around p-1 pb-6 items-end">
+                                <div class="flex flex-col items-center w-full h-full justify-end">
+                                    <span id="num-vel-${index}" class="text-[10px] text-slate-400 font-mono mb-1">0</span>
+                                    <div class="w-4 h-full relative bg-slate-900 rounded-sm overflow-hidden flex items-end">
+                                        <div id="bar-vel-${index}" class="w-full transition-all duration-75" style="height: 0%; background-color: ${ch.color}"></div>
+                                    </div>
+                                    <span class="text-[9px] text-slate-500 font-mono mt-1">VEL</span>
+                                </div>
+                                <div class="flex flex-col items-center w-full h-full justify-end">
+                                    <span id="num-pwm-${index}" class="text-[10px] text-slate-400 font-mono mb-1">0</span>
+                                    <div class="w-4 h-full relative bg-slate-900 rounded-sm overflow-hidden flex items-end">
+                                        <div id="bar-pwm-${index}" class="w-full transition-none" style="height: 0%; background-color: ${ch.color}"></div>
+                                    </div>
+                                    <span class="text-[9px] text-slate-500 font-mono mt-1">PWM</span>
+                                </div>
+                            </div>
+                            <div class="flex-grow flex flex-col gap-3 justify-between">
+                                <div><label class="text-xs text-slate-400 flex justify-between">Note <span id="label-note-${index}" class="text-bio-300">${getNoteString(ch.note)}</span></label><input type="range" min="0" max="127" value="${ch.note}" oninput="updateParam(${index}, 'note', this.value)"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Min PWM <span id="label-minPwm-${index}" class="text-bio-300">${ch.minPwm}</span></label><input type="range" min="0" max="255" value="${ch.minPwm}" oninput="updateParam(${index}, 'minPwm', this.value)"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Max PWM <span id="label-maxPwm-${index}" class="text-bio-300">${ch.maxPwm}</span></label><input type="range" min="0" max="255" value="${ch.maxPwm}" oninput="updateParam(${index}, 'maxPwm', this.value)"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Duration <span id="label-duration-${index}" class="text-bio-300">${ch.duration}ms</span></label><input type="range" min="5" max="100" value="${ch.duration}" oninput="updateParam(${index}, 'duration', this.value)"></div>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function updateParam(chIndex, param, value) {
+            value = parseInt(value);
+            state.channels[chIndex][param] = value;
+            if (param === 'minPwm' && value > state.channels[chIndex].maxPwm) { state.channels[chIndex].maxPwm = value; document.querySelector(`input[oninput="updateParam(${chIndex}, 'maxPwm', this.value)"]`).value = value; document.getElementById(`label-maxPwm-${chIndex}`).innerText = value; }
+            if (param === 'maxPwm' && value < state.channels[chIndex].minPwm) { state.channels[chIndex].minPwm = value; document.querySelector(`input[oninput="updateParam(${chIndex}, 'minPwm', this.value)"]`).value = value; document.getElementById(`label-minPwm-${chIndex}`).innerText = value; }
+            const label = document.getElementById(`label-${param}-${chIndex}`);
+            if (param === 'note') label.innerText = getNoteString(value); else if (param === 'duration') label.innerText = value + 'ms'; else label.innerText = value;
+        }
+
+        function handleMidiHit(note, velocity) {
+            const now = performance.now();
+            state.pianoRoll.push({ note: note, velocity: velocity, x: 0, time: now });
+            const channel = state.channels.find(c => c.note === note);
+            if (channel) {
+                let targetPwm = Math.round(Math.min(255, Math.max(0, mapRange(velocity, 1, 127, channel.minPwm, channel.maxPwm)))); 
+                channel.meterVel = velocity;
+                channel.meterPwm = targetPwm;
+                channel.strikeEnd = now + channel.duration;
+                
+                // Peak Hold: Update numeric text ONLY when a strike happens
+                document.getElementById(`num-vel-${channel.id}`).innerText = velocity;
+                document.getElementById(`num-pwm-${channel.id}`).innerText = targetPwm;
+
+                const indicator = document.getElementById(`indicator-${channel.id}`);
+                if(indicator) {
+                    indicator.style.backgroundColor = channel.color;
+                    indicator.style.boxShadow = `0 0 8px ${channel.color}`;
+                    setTimeout(() => { indicator.style.backgroundColor = '#64748b'; indicator.style.boxShadow = 'none'; }, channel.duration);
+                }
+            }
+        }
+
+        function testStrike(chIndex) { handleMidiHit(state.channels[chIndex].note, parseInt(document.getElementById('global-test-vel').value)); }
+
+        const canvas = document.getElementById('piano-roll-canvas'); const ctx = canvas.getContext('2d');
+        function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawLoop() {
+            const now = performance.now();
+            state.channels.forEach(ch => {
+                const velBar = document.getElementById(`bar-vel-${ch.id}`);
+                const pwmBar = document.getElementById(`bar-pwm-${ch.id}`);
+                if (velBar && pwmBar) {
+                    velBar.style.height = `${(ch.meterVel / 127) * 100}%`;
+                    ch.meterVel = Math.max(0, ch.meterVel * 0.90); 
+					// Smooth decay for PWM bar (same as velocity)
+					pwmBar.style.height = `${(ch.meterPwm / 255) * 100}%`;
+					ch.meterPwm = Math.max(0, ch.meterPwm * 0.90); // 10% decay per frame
+                }
+            });
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+            for(let i = 0; i < canvas.height; i += 20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
+
+            // Dynamic Zoom Logic for Piano Roll
+            const currentNotes = state.channels.map(c => c.note);
+            let minNote = Math.min(...currentNotes) - 3; // Pad 3 notes below
+            let maxNote = Math.max(...currentNotes) + 3; // Pad 3 notes above
+            if (maxNote <= minNote) maxNote = minNote + 12; // Fallback if all set to same note
+            
+            // Update UI Axis
+            document.getElementById('axis-max').innerText = getShortNote(maxNote);
+            document.getElementById('axis-mid').innerText = getShortNote(Math.floor((maxNote+minNote)/2));
+            document.getElementById('axis-min').innerText = getShortNote(minNote);
+
+            const noteRange = maxNote - minNote;
+            
+            for (let i = state.pianoRoll.length - 1; i >= 0; i--) {
+                let note = state.pianoRoll[i];
+                note.x += 3; // Scrolling speed
+                
+                // Map the Y coordinate to our dynamic noteRange
+                const normalizedY = 1 - ((note.note - minNote) / noteRange);
+                const y = normalizedY * canvas.height;
+                
+                const mappedChannel = state.channels.find(c => c.note === note.note);
+                ctx.fillStyle = mappedChannel ? mappedChannel.color : `rgba(56, 189, 248, ${note.velocity/127 + 0.2})`; 
+                ctx.shadowBlur = mappedChannel ? 10 : 0; ctx.shadowColor = ctx.fillStyle;
+                ctx.fillRect(canvas.width - note.x, y - 2, Math.max(2, (note.velocity / 127) * 20), 5);
+                ctx.shadowBlur = 0; 
+                if (canvas.width - note.x < -20) state.pianoRoll.splice(i, 1);
+            }
+            requestAnimationFrame(drawLoop);
+        }
+
+        function toggleDemoMode() {
+            const btn = document.getElementById('demo-btn');
+            state.demoMode = !state.demoMode;
+            if (state.demoMode) {
+                btn.innerText = "Stop Simulation";
+                btn.classList.replace('bg-slate-800', 'bg-blue-600');
+                
+                let beat = 0;
+                // Simulation Loop Logic
+                state.demoInterval = setInterval(() => {
+                    const kick = state.channels[0].note;
+                    const snare = state.channels[1].note;
+                    const hihat = state.channels[2].note;
+                    const tom = state.channels[3].note;
+                    
+                    // Modulo math dictates when notes fire. "beat % 8 === 0" means every 8th step.
+                    handleMidiHit(hihat, beat % 4 === 0 ? 110 : 60); 
+                    if (beat % 8 === 0) handleMidiHit(kick, 120); 
+                    if (beat % 8 === 4) handleMidiHit(snare, 127); 
+                    if (beat % 16 === 11) handleMidiHit(snare, 40); 
+                    if (beat % 32 === 30) handleMidiHit(tom, 115); 
+                    beat++;
+                }, 150); // Speed: Lower is faster. 150ms = 100 BPM 16th notes.
+            } else {
+                btn.innerText = "Start Simulation";
+                btn.classList.replace('bg-blue-600', 'bg-slate-800');
+                clearInterval(state.demoInterval);
+            }
+        }
+
+        function openWifiModal() { document.getElementById('wifi-modal').classList.replace('hidden', 'flex'); setTimeout(() => { document.getElementById('wifi-modal').classList.remove('opacity-0'); document.getElementById('wifi-modal-content').classList.remove('scale-95'); }, 10); }
+        function closeWifiModal() { document.getElementById('wifi-modal').classList.add('opacity-0'); document.getElementById('wifi-modal-content').classList.add('scale-95'); setTimeout(() => { document.getElementById('wifi-modal').classList.replace('flex', 'hidden'); }, 300); }
+        function saveWifi() { closeWifiModal(); }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setupGlobalChannelSelect(); renderChannels(); resizeCanvas(); requestAnimationFrame(drawLoop);
+            setTimeout(() => handleMidiHit(60, 100), 500); 
+        });
+    </script>
+</body>
+</html>
