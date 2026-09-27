@@ -358,11 +358,12 @@
                 const velBar = document.getElementById(`bar-vel-${ch.id}`);
                 const pwmBar = document.getElementById(`bar-pwm-${ch.id}`);
                 if (velBar && pwmBar) {
-                    velBar.style.height = `${(ch.meterVel / 127) * 100}%`;
-                    ch.meterVel = Math.max(0, ch.meterVel * 0.90); 
-					// Smooth decay for PWM bar (same as velocity)
-					pwmBar.style.height = `${(ch.meterPwm / 255) * 100}%`;
-					ch.meterPwm = Math.max(0, ch.meterPwm * 0.90); // 10% decay per frame
+					velBar.style.height = `${(ch.meterVel / 127) * 100}%`;
+  					  ch.meterVel = Math.max(0, ch.meterVel * 0.90); 
+    
+  					  // Map 0-255 hardware range to 0-100% visual height
+ 					   pwmBar.style.height = `${(ch.meterPwm / 255) * 100}%`;
+					    ch.meterPwm = Math.max(0, ch.meterPwm * 0.90);
                 }
             });
 
