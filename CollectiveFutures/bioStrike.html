@@ -171,9 +171,9 @@
         
         <div class="flex flex-wrap items-center justify-center gap-4 text-xs font-mono">
             <div class="flex items-center gap-2 bg-surface-50 px-3 py-1.5 rounded-full border border-slate-700">
-                <div id="status-wifi" class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                <span id="text-wifi" class="text-slate-300">Hotspot Active (BioStrike.local)</span>
-                <button onclick="openWifiModal()" class="ml-2 text-bio-400 hover:text-bio-300 underline underline-offset-2">Config</button>
+                <div id="status-gatt" class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                <span id="text-gatt" class="text-slate-300">Web App Disconnected</span>
+                <button onclick="connectBle()" class="ml-2 text-bio-400 hover:text-bio-300 underline underline-offset-2">Connect</button>
             </div>
             <div class="flex items-center gap-2 bg-surface-50 px-3 py-1.5 rounded-full border border-slate-700">
                 <div id="status-ble" class="w-2.5 h-2.5 rounded-full bg-bio-500 animate-pulse"></div>
@@ -217,28 +217,14 @@
         </div>
     </main>
 
-    <div id="wifi-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden items-center justify-center opacity-0 transition-opacity duration-300">
-        <div class="bg-surface-50 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4 transform scale-95 transition-transform duration-300" id="wifi-modal-content">
-            <h2 class="text-2xl font-bold mb-2">Network Config</h2>
-            <p class="text-slate-400 text-sm mb-6">Connect BioStrike to your local Wi-Fi to disable the captive hotspot.</p>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">SSID (Network Name)</label>
-                    <input type="text" id="wifi-ssid" class="w-full bg-surface-100 border border-slate-600 rounded-lg p-2.5 text-white outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
-                    <input type="password" id="wifi-pass" class="w-full bg-surface-100 border border-slate-600 rounded-lg p-2.5 text-white outline-none">
-                </div>
-                <div class="pt-4 flex gap-3 justify-end">
-                    <button onclick="closeWifiModal()" class="px-4 py-2 rounded-lg text-slate-300 hover:bg-surface-100 transition-colors">Cancel</button>
-                    <button onclick="saveWifi()" class="px-4 py-2 rounded-lg bg-bio-600 hover:bg-bio-500 text-white font-medium transition-colors">Connect</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
+        const UART_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+        const UART_TX_CHAR_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+        const UART_RX_CHAR_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+
+        let rxChar = null;
+        let txChar = null;
+
         const state = {
             globalChannel: 1,
             demoMode: false,
@@ -251,6 +237,71 @@
             ],
             pianoRoll: [] 
         };
+
+        async function connectBle() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: "BioStrike" }],
+                    optionalServices: [UART_SERVICE_UUID]
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(UART_SERVICE_UUID);
+
+                rxChar = await service.getCharacteristic(UART_RX_CHAR_UUID);
+                txChar = await service.getCharacteristic(UART_TX_CHAR_UUID);
+
+                await txChar.startNotifications();
+                txChar.addEventListener("characteristicvaluechanged", handleNotifications);
+
+                const statusIndicator = document.getElementById("status-gatt");
+                statusIndicator.classList.replace("bg-yellow-500", "bg-bio-500");
+                statusIndicator.classList.add("animate-pulse");
+                document.getElementById("text-gatt").innerText = "GATT Connected";
+                
+                sendCmd("?\n"); // Solicit initial configuration snapshot from Flash
+            } catch (err) {
+                console.error("BLE Error: ", err);
+            }
+        }
+
+        function sendCmd(cmdStr) {
+            if (!rxChar) return;
+            const encoder = new TextEncoder();
+            rxChar.writeValueWithoutResponse(encoder.encode(cmdStr)).catch(err => console.error(err));
+        }
+
+        function handleNotifications(event) {
+            const decoder = new TextDecoder();
+            const raw = decoder.decode(event.target.value);
+            const lines = raw.split("\n");
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+
+                if (line.startsWith("S:")) {
+                    const parts = line.split(":");
+                    const ch = parseInt(parts[1], 10);
+                    const vel = parseInt(parts[2], 10);
+                    if(ch >= 0 && ch < 4) handleMidiHit(state.channels[ch].note, vel);
+                }
+                else if (line.startsWith("CFG:")) {
+                    const parts = line.split(":");
+                    state.globalChannel = parseInt(parts[1], 10);
+                    document.getElementById('global-channel').value = state.globalChannel;
+
+                    for (let i = 0; i < 4; i++) {
+                        const chParams = parts[i + 2].split(",");
+                        state.channels[i].note = parseInt(chParams[0], 10);
+                        state.channels[i].minPwm = parseInt(chParams[1], 10);
+                        state.channels[i].maxPwm = parseInt(chParams[2], 10);
+                        state.channels[i].duration = parseInt(chParams[3], 10);
+                    }
+                    renderChannels(); // Redraw UI with loaded Flash values
+                }
+            }
+        }
 
         const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
         function getNoteString(noteNum) {
@@ -272,6 +323,8 @@
 
         function updateGlobalChannel(val) {
             state.globalChannel = parseInt(val);
+            sendCmd(`GCH:${state.globalChannel}\n`);
+            setTimeout(() => sendCmd(`SAVE:99\n`), 50);
         }
 
         function renderChannels() {
@@ -304,10 +357,10 @@
                                 </div>
                             </div>
                             <div class="flex-grow flex flex-col gap-3 justify-between">
-                                <div><label class="text-xs text-slate-400 flex justify-between">Note <span id="label-note-${index}" class="text-bio-300">${getNoteString(ch.note)}</span></label><input type="range" min="0" max="127" value="${ch.note}" oninput="updateParam(${index}, 'note', this.value)"></div>
-                                <div><label class="text-xs text-slate-400 flex justify-between">Min PWM <span id="label-minPwm-${index}" class="text-bio-300">${ch.minPwm}</span></label><input type="range" min="0" max="255" value="${ch.minPwm}" oninput="updateParam(${index}, 'minPwm', this.value)"></div>
-                                <div><label class="text-xs text-slate-400 flex justify-between">Max PWM <span id="label-maxPwm-${index}" class="text-bio-300">${ch.maxPwm}</span></label><input type="range" min="0" max="255" value="${ch.maxPwm}" oninput="updateParam(${index}, 'maxPwm', this.value)"></div>
-                                <div><label class="text-xs text-slate-400 flex justify-between">Duration <span id="label-duration-${index}" class="text-bio-300">${ch.duration}ms</span></label><input type="range" min="5" max="100" value="${ch.duration}" oninput="updateParam(${index}, 'duration', this.value)"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Note <span id="label-note-${index}" class="text-bio-300">${getNoteString(ch.note)}</span></label><input type="range" min="0" max="127" value="${ch.note}" oninput="updateParam(${index}, 'note', this.value)" onchange="commitToFlash(${index})"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Min PWM <span id="label-minPwm-${index}" class="text-bio-300">${ch.minPwm}</span></label><input type="range" min="0" max="255" value="${ch.minPwm}" oninput="updateParam(${index}, 'minPwm', this.value)" onchange="commitToFlash(${index})"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Max PWM <span id="label-maxPwm-${index}" class="text-bio-300">${ch.maxPwm}</span></label><input type="range" min="0" max="255" value="${ch.maxPwm}" oninput="updateParam(${index}, 'maxPwm', this.value)" onchange="commitToFlash(${index})"></div>
+                                <div><label class="text-xs text-slate-400 flex justify-between">Duration <span id="label-duration-${index}" class="text-bio-300">${ch.duration}ms</span></label><input type="range" min="5" max="100" value="${ch.duration}" oninput="updateParam(${index}, 'duration', this.value)" onchange="commitToFlash(${index})"></div>
                             </div>
                         </div>
                     </div>`;
@@ -317,10 +370,39 @@
         function updateParam(chIndex, param, value) {
             value = parseInt(value);
             state.channels[chIndex][param] = value;
-            if (param === 'minPwm' && value > state.channels[chIndex].maxPwm) { state.channels[chIndex].maxPwm = value; document.querySelector(`input[oninput="updateParam(${chIndex}, 'maxPwm', this.value)"]`).value = value; document.getElementById(`label-maxPwm-${chIndex}`).innerText = value; }
-            if (param === 'maxPwm' && value < state.channels[chIndex].minPwm) { state.channels[chIndex].minPwm = value; document.querySelector(`input[oninput="updateParam(${chIndex}, 'minPwm', this.value)"]`).value = value; document.getElementById(`label-minPwm-${chIndex}`).innerText = value; }
+            
+            let paramId = 0;
+            if (param === 'note') paramId = 0;
+            if (param === 'minPwm') {
+                paramId = 1;
+                if (value > state.channels[chIndex].maxPwm) { 
+                    state.channels[chIndex].maxPwm = value; 
+                    document.querySelector(`input[oninput="updateParam(${chIndex}, 'maxPwm', this.value)"]`).value = value; 
+                    document.getElementById(`label-maxPwm-${chIndex}`).innerText = value; 
+                }
+            }
+            if (param === 'maxPwm') {
+                paramId = 2;
+                if (value < state.channels[chIndex].minPwm) { 
+                    state.channels[chIndex].minPwm = value; 
+                    document.querySelector(`input[oninput="updateParam(${chIndex}, 'minPwm', this.value)"]`).value = value; 
+                    document.getElementById(`label-minPwm-${chIndex}`).innerText = value; 
+                }
+            }
+            if (param === 'duration') paramId = 3;
+
             const label = document.getElementById(`label-${param}-${chIndex}`);
-            if (param === 'note') label.innerText = getNoteString(value); else if (param === 'duration') label.innerText = value + 'ms'; else label.innerText = value;
+            if (param === 'note') label.innerText = getNoteString(value); 
+            else if (param === 'duration') label.innerText = value + 'ms'; 
+            else label.innerText = value;
+
+            // Stream live tuning to RAM
+            sendCmd(`L:${chIndex}:${paramId}:${value}\n`);
+        }
+
+        function commitToFlash(chIndex) {
+            // Save to Flash memory once dragging stops
+            sendCmd(`SAVE:${chIndex}\n`);
         }
 
         function handleMidiHit(note, velocity) {
@@ -346,7 +428,11 @@
             }
         }
 
-        function testStrike(chIndex) { handleMidiHit(state.channels[chIndex].note, parseInt(document.getElementById('global-test-vel').value)); }
+        function testStrike(chIndex) { 
+            const vel = parseInt(document.getElementById('global-test-vel').value);
+            handleMidiHit(state.channels[chIndex].note, vel); 
+            sendCmd(`TEST:${chIndex}:${vel}\n`);
+        }
 
         const canvas = document.getElementById('piano-roll-canvas'); const ctx = canvas.getContext('2d');
         function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
@@ -431,10 +517,6 @@
                 clearInterval(state.demoInterval);
             }
         }
-
-        function openWifiModal() { document.getElementById('wifi-modal').classList.replace('hidden', 'flex'); setTimeout(() => { document.getElementById('wifi-modal').classList.remove('opacity-0'); document.getElementById('wifi-modal-content').classList.remove('scale-95'); }, 10); }
-        function closeWifiModal() { document.getElementById('wifi-modal').classList.add('opacity-0'); document.getElementById('wifi-modal-content').classList.add('scale-95'); setTimeout(() => { document.getElementById('wifi-modal').classList.replace('flex', 'hidden'); }, 300); }
-        function saveWifi() { closeWifiModal(); }
 
         document.addEventListener('DOMContentLoaded', () => {
             setupGlobalChannelSelect(); renderChannels(); resizeCanvas(); requestAnimationFrame(drawLoop);
