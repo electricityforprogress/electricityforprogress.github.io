@@ -176,7 +176,7 @@
                 <button onclick="connectBle()" class="ml-2 text-bio-400 hover:text-bio-300 underline underline-offset-2">Connect</button>
             </div>
             <div class="flex items-center gap-2 bg-surface-50 px-3 py-1.5 rounded-full border border-slate-700">
-                <div id="status-ble" class="w-2.5 h-2.5 rounded-full bg-bio-500 animate-pulse"></div>
+				<div id="status-ble" class="w-2.5 h-2.5 rounded-full bg-slate-500"></div>
                 <span class="text-slate-300">BLE MIDI</span>
             </div>
         </div>
@@ -300,6 +300,16 @@
                     }
                     renderChannels(); // Redraw UI with loaded Flash values
                 }
+				else if (line.startsWith("BLE:")) {
+					const bleStatus = document.getElementById("status-ble");
+					if (line.trim() === "BLE:1") {
+						bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
+						bleStatus.classList.add("animate-pulse");
+					} else {
+						bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
+						bleStatus.classList.remove("animate-pulse");
+					}
+				}
             }
         }
 
