@@ -237,6 +237,44 @@
             ],
             pianoRoll: [] 
         };
+        
+        // --- Web MIDI API Integration ---
+		let midiAccess = null;
+		
+		async function initWebMIDI() {
+			try {
+				midiAccess = await navigator.requestMIDIAccess();
+				checkMidiPorts(); // Initial check
+				
+				// Listen for hardware connecting/disconnecting
+				midiAccess.onstatechange = checkMidiPorts; 
+			} catch (err) {
+				console.warn("Web MIDI API not supported or access denied.", err);
+			}
+		}
+		
+		function checkMidiPorts() {
+			if (!midiAccess) return;
+			
+			let isConnected = false;
+			
+			// Scan all active MIDI inputs and outputs for "BioStrike"
+			for (let input of midiAccess.inputs.values()) {
+				if (input.name.toLowerCase().includes("biostrike")) isConnected = true;
+			}
+			for (let output of midiAccess.outputs.values()) {
+				if (output.name.toLowerCase().includes("biostrike")) isConnected = true;
+			}
+		
+			const bleStatus = document.getElementById("status-ble");
+			if (isConnected) {
+				bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
+				bleStatus.classList.add("animate-pulse");
+			} else {
+				bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
+				bleStatus.classList.remove("animate-pulse");
+			}
+		}
 
         async function connectBle() {
             try {
@@ -300,16 +338,7 @@
                     }
                     renderChannels(); // Redraw UI with loaded Flash values
                 }
-				else if (line.startsWith("BLE:")) {
-					const bleStatus = document.getElementById("status-ble");
-					if (line.trim() === "BLE:1") {
-						bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
-						bleStatus.classList.add("animate-pulse");
-					} else {
-						bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
-						bleStatus.classList.remove("animate-pulse");
-					}
-				}
+
             }
         }
 
@@ -528,10 +557,15 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            setupGlobalChannelSelect(); renderChannels(); resizeCanvas(); requestAnimationFrame(drawLoop);
-            setTimeout(() => handleMidiHit(60, 100), 500); 
-        });
+		document.addEventListener('DOMContentLoaded', () => {
+			setupGlobalChannelSelect(); 
+			renderChannels(); 
+			resizeCanvas(); 
+			requestAnimationFrame(drawLoop);
+			setTimeout(() => handleMidiHit(60, 100), 500); 
+			
+			initWebMIDI(); // Start listening for the BioStrike MIDI port
+		});
     </script>
 </body>
 </html>
