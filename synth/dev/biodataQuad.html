@@ -335,7 +335,7 @@
                     vcf: audioCtx.createBiquadFilter(), vca: audioCtx.createGain(), activeUntil: 0 
                 };
                 
-                v.sub.type = 'square'; v.vcf.type = 'lowpass'; v.vca.gain.value = 0.001;
+                v.sub.type = 'square'; v.vcf.type = 'lowpass'; v.vca.gain.value = 0.00001;
                 v.noise.buffer = noiseBuffer; v.noise.loop = true; v.noise.start();
                 
                 v.vco.connect(v.vcoGain); v.vcoGain.connect(v.vcf);
@@ -386,7 +386,10 @@
             if (p.mode === 'poly') { if (freeIdx === -1) return; this.voiceIndex = freeIdx; } else { this.voiceIndex = 0; }
             
             let voice = this.voices[this.voiceIndex];
-            this.lastTriggerTime = now; this.lastDuration = durationMs / 1000;
+            
+            this.lastTriggerTime = now; 
+			this.lastDuration = Math.min(durationMs / 1000, 8.0); // Cap max incoming duration to 8 seconds
+
             const stopTime = now + this.lastDuration;
             voice.activeUntil = stopTime + p.rel; 
 
@@ -401,13 +404,19 @@
             if(p.wave === 'noise') { voice.noise.playbackRate.cancelScheduledValues(now); voice.noise.playbackRate.setValueAtTime(freq / 440, now); }
             
             const peakVCA = velocity / 127, amt = p.adsrAmt;
-            voice.vca.gain.cancelScheduledValues(now); voice.vca.gain.setValueAtTime(0.001, now);
             
-            if (p.adsrDest === 'volume') {
-                voice.vca.gain.exponentialRampToValueAtTime(Math.max(peakVCA * amt, 0.01), now + p.atk); 
-                voice.vca.gain.setTargetAtTime(Math.max(peakVCA * amt * p.sus, 0.001), now + p.atk, p.dec / 3);
-            } else { voice.vca.gain.linearRampToValueAtTime(peakVCA, now + 0.02); voice.vca.gain.setValueAtTime(peakVCA, now + p.atk + p.dec); }
-            
+            const silenceFloor = 0.00001;
+			voice.vca.gain.cancelScheduledValues(now); 
+			voice.vca.gain.setValueAtTime(silenceFloor, now);
+			
+			if (p.adsrDest === 'volume') {
+				voice.vca.gain.exponentialRampToValueAtTime(Math.max(peakVCA * amt, 0.01), now + p.atk);
+				voice.vca.gain.setTargetAtTime(Math.max(peakVCA * amt * p.sus, silenceFloor), now + p.atk, p.dec / 3);
+			} else { 
+					voice.vca.gain.linearRampToValueAtTime(peakVCA, now + 0.02); 
+					voice.vca.gain.setValueAtTime(peakVCA, now + p.atk + p.dec); 
+				}
+                     
             voice.vcf.frequency.cancelScheduledValues(now);
             if (p.adsrDest === 'filter') {
                 const targetCutoff = p.cutoff + (5000 * amt); voice.vcf.frequency.setValueAtTime(p.cutoff, now);
@@ -424,8 +433,8 @@
                 voice.sub.detune.setValueAtTime(0, now); voice.sub.detune.linearRampToValueAtTime(detunePeak, now + p.atk); voice.sub.detune.setTargetAtTime(detunePeak * p.sus, now + p.atk, p.dec / 3);
             } else { voice.vco.detune.setValueAtTime(0, now); voice.sub.detune.setValueAtTime(0, now); }
             
-            voice.vca.gain.cancelScheduledValues(stopTime); 
-            voice.vca.gain.setTargetAtTime(0.001, stopTime, p.rel / 3);
+			voice.vca.gain.cancelScheduledValues(stopTime); 
+			voice.vca.gain.setTargetAtTime(0, stopTime, p.rel / 3);
         }
     }
 
