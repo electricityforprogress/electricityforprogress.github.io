@@ -64,7 +64,16 @@
 <div class="toolbar">
     <div class="control-group">
         <button id="btn-ble" onclick="connectBLE()">CONNECT BLE</button>
-        <span id="ble-status" style="color:var(--red); font-size:0.9em; font-weight:bold;">OFFLINE</span>
+        <span id="ble-status" style="color:var(--red); font-size:0.9em; font-weight:bold; margin-right:15px;">OFFLINE</span>
+        
+        <label style="font-size:0.9em; border-left:1px solid var(--border); padding-left:15px;">Preset:</label>
+        <select id="preset-select" onchange="loadPreset(this.value)" style="min-width:120px;">
+            <option value="">-- Select --</option>
+        </select>
+        <button onclick="savePreset()">SAVE</button>
+        <button onclick="exportPresets()" style="margin-left:10px;">↓ EXPORT</button>
+        <button onclick="document.getElementById('import-file').click()">↑ IMPORT</button>
+        <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
     </div>
     <div class="control-group">
         <label style="font-size:0.9em;">Clock:</label>
@@ -513,11 +522,7 @@
     async function connectBLE() {
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         if (!rampDownWave) initCustomWaves();
-        if (synthChannels.length === 0) {
-            for(let i=0; i<4; i++) synthChannels.push(new PolyChannel(i));
-            document.getElementById('synth-inspector').style.display = 'block';
-            initKnobs(); syncUI(); 
-        }
+        ensureSynths();
         try {
             const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Biodata" }], optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"] });
             document.getElementById('ble-status').innerText = 'CONNECTING...';
@@ -650,8 +655,135 @@
         
         requestAnimationFrame(renderLoop);
     }
+    
+    // --- Preset Management ---
+    let globalPresets = {};
 
-    window.onload = () => { initPiano(); initKnobs(); };
+    function ensureSynths() {
+        if (synthChannels.length === 0) {
+            for(let i=0; i<4; i++) synthChannels.push(new PolyChannel(i));
+            document.getElementById('synth-inspector').style.display = 'block';
+            initKnobs(); syncUI(); 
+        } else {
+            // Synths already exist, do nothing
+        }
+    }
+
+    function loadPresetsFromStorage() {
+        try {
+            const stored = localStorage.getItem('biodataPresets');
+            if (stored) {
+                globalPresets = JSON.parse(stored);
+            } else {
+                globalPresets = {};
+            }
+        } catch(e) { 
+            console.error("Error loading presets", e); 
+        }
+        updatePresetDropdown();
+    }
+
+    function updatePresetDropdown() {
+        const select = document.getElementById('preset-select');
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">-- Select --</option>';
+        
+        Object.keys(globalPresets).forEach(name => {
+            let opt = document.createElement('option');
+            opt.value = name; opt.text = name;
+            select.appendChild(opt);
+        });
+        
+        if (globalPresets[currentVal]) {
+            select.value = currentVal;
+        } else {
+            select.value = "";
+        }
+    }
+
+    function savePreset() {
+        ensureSynths();
+        const name = prompt("Enter a name for this global preset:");
+        
+        if (!name || name.trim() === "") {
+            return; // Action canceled or empty name
+        } else {
+            // Deep copy the parameters for all 4 channels to sever references
+            const presetData = synthChannels.map(ch => JSON.parse(JSON.stringify(ch.params)));
+            globalPresets[name] = presetData;
+            
+            localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+            updatePresetDropdown();
+            document.getElementById('preset-select').value = name;
+        }
+    }
+
+    function loadPreset(name) {
+        if (!name || !globalPresets[name]) {
+            return;
+        } else {
+            ensureSynths();
+            const presetData = globalPresets[name];
+            
+            for (let i = 0; i < 4; i++) {
+                if (presetData[i] && synthChannels[i]) {
+                    // Deep copy the saved params back into the active channel
+                    synthChannels[i].params = JSON.parse(JSON.stringify(presetData[i]));
+                    synthChannels[i].applyParams();
+                } else {
+                    console.warn(`Missing channel data for channel ${i}`);
+                }
+            }
+            syncUI();
+        }
+    }
+
+    function exportPresets() {
+        if (Object.keys(globalPresets).length === 0) {
+            alert("No presets to export.");
+        } else {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(globalPresets, null, 2));
+            const downloadNode = document.createElement('a');
+            downloadNode.setAttribute("href", dataStr);
+            downloadNode.setAttribute("download", "biodata_presets.json");
+            document.body.appendChild(downloadNode);
+            downloadNode.click();
+            downloadNode.remove();
+        }
+    }
+
+    function importPresets(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        } else {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (typeof imported === 'object' && imported !== null) {
+                        // Merge imported presets with existing ones
+                        globalPresets = { ...globalPresets, ...imported };
+                        localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+                        updatePresetDropdown();
+                        alert("Presets imported successfully!");
+                    } else {
+                        alert("Invalid preset file format.");
+                    }
+                } catch(err) {
+                    alert("Error parsing preset file.");
+                }
+                event.target.value = ""; // Reset input so the same file can be reloaded
+            };
+            reader.readAsText(file);
+        }
+    }
+
+	window.onload = () => { 
+			initPiano(); 
+			initKnobs(); s
+			loadPresetsFromStorage();
+	;
     requestAnimationFrame(renderLoop);
 </script>
 </body>
