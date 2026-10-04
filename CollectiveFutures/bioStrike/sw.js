@@ -1,4 +1,4 @@
-const CACHE_NAME = 'biostrike-pwa-v1';
+const CACHE_NAME = 'biostrike-pwa-v2';
 const CORE_ASSETS = [
     './',
     './bioStrike.html',
