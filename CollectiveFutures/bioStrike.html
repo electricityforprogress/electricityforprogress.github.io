@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioStrike Configuration</title>
+    
+    <!-- PWA Manifest & Theme -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#020617">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
@@ -30,7 +36,6 @@
         canvas { image-rendering: pixelated; }
         .glass-panel { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(51, 65, 85, 0.5); }
         
-        /* Animate the wrapper DIV, not the SVG tag */
 .logo-container {
     width: 48px;
     height: 48px;
@@ -46,45 +51,29 @@
 }
 
 .shimmer-text {
-    /* 
-       0-25%: The perfect resting Blue->Emerald gradient
-       45-55%: The white light catching
-       75-100%: An identical resting Blue->Emerald gradient to pause on
-    */
     background: linear-gradient(
         to right,
-        #60a5fa 0%,      /* Resting Blue start */
-        #a7f3d0 25%,     /* Resting Emerald end */
-        
-        #60a5fa 45%,     /* Sweep approaching */
-        #ffffff 50%,     /* The bright center flash */
-        #a7f3d0 55%,     /* Sweep leaving */
-        
-        #60a5fa 75%,     /* Paused Blue start */
-        #a7f3d0 100%     /* Paused Emerald end */
+        #60a5fa 0%,      
+        #a7f3d0 25%,     
+        #60a5fa 45%,     
+        #ffffff 50%,     
+        #a7f3d0 55%,     
+        #60a5fa 75%,     
+        #a7f3d0 100%     
     );
-    /* Make the background 4x wider than the text so the resting frames fit perfectly */
     background-size: 400% 100%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    
-    /* 12 seconds total: Happens much less frequently */
     animation: text-shimmer 12s ease-in-out infinite; 
 }
 
 @keyframes text-shimmer {
-    /* Rests on the left side (0%) which looks exactly like your original gradient */
     0% { background-position: 0% center; }
-    
-    /* Takes 3 seconds (25% of 12s) to slide across smoothly, not instantly */
     25% { background-position: 100% center; }
-    
-    /* Pauses on the right side (100%) for 9 seconds. Because we built the right side to look identical to the left, there's no visual jump. */
     100% { background-position: 100% center; } 
 }
 
-/* Combines a neon glow drop-shadow with an actual brightness pulse */
 @keyframes breathe {
     0% {
         filter: drop-shadow(0 0 2px rgba(51, 181, 229, 0.3)) brightness(0.85);
@@ -102,8 +91,6 @@
 
     <nav class="glass-panel sticky top-0 z-50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between shadow-lg shadow-bio-900/20">
         <div class="flex items-center gap-3 mb-4 sm:mb-0">
-            <!-- PASTE YOUR RAW E4P SVG INSIDE THIS DIV -->
-           
            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
    class="w-10 h-10"
@@ -119,8 +106,7 @@
    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
    xmlns:cc="http://creativecommons.org/ns#"
    xmlns:dc="http://purl.org/dc/elements/1.1/">
-  <defs
-     id="defs1" />
+  <defs id="defs1" />
   <sodipodi:namedview
      id="namedview1"
      pagecolor="#ffffff"
@@ -140,32 +126,12 @@
      inkscape:window-y="33"
      inkscape:window-maximized="0"
      inkscape:current-layer="path1" />
-  <title
-     id="title1">svgOutput</title>
-  <desc
-     id="desc1">made with tinkercad</desc>
-  <g
-     id="path1"
-     style="opacity:1;stroke-width:0.99976227;stroke-dasharray:none"
-     transform="matrix(1.0484061,0,0,1.0661712,8.5064192,9.9431326)">
-    <path
-       style="baseline-shift:baseline;display:inline;overflow:visible;fill:#5a9fc8;enable-background:accumulate;stop-color:#000000;stop-opacity:1;stroke-width:0.8105925;stroke-dasharray:none;stroke:#000101;stroke-opacity:1"
-       d="m -136.908,32.493999 c 0.55252,1.424902 0.8479,2.964338 0.71766,4.493371 2.82265,-2.785484 5.59124,-5.664514 8.44207,-8.388538 3.02703,-2.645483 7.70053,-3.116033 11.20629,-1.153567 3.49267,1.84045 5.62923,5.896481 5.16707,9.819269 -0.36362,3.931205 -3.29459,7.45713 -7.09507,8.532205 -3.67323,1.132422 -7.9449,-0.11249 -10.40603,-3.072564 0,2.545969 0,5.091937 0,7.637906 -0.83333,0 -1.66667,0 -2.5,0 0,-4.666694 0,-9.333387 0,-14.000081 0.24624,-0.464044 0.0989,-1.070939 -0.38228,-0.271289 -2.60267,2.556185 -5.15349,5.24928 -7.78697,7.713284 1.84608,0 3.69217,0 5.53825,0 0,0.833333 0,1.666667 0,2.5 -4.30614,-0.02426 -8.62867,0.04764 -12.92273,-0.03398 -4.02411,-0.245945 -7.68381,-3.219759 -8.7856,-7.093397 -1.17935,-3.7745 0.17827,-8.165108 3.28377,-10.615644 3.03645,-2.523743 7.60254,-2.943702 11.04938,-1.015797 2.00542,1.073566 3.58083,2.862666 4.47404,4.948814 m -1.98745,5.735001 c -3.97984,-0.01871 -8.00419,-0.0027 -12.00114,-0.008 0,-0.833333 0,-1.666667 0,-2.5 4.07026,0 8.14052,0 12.21078,0 -0.19954,-3.420854 -3.05114,-6.40593 -6.44262,-6.828194 -3.38512,-0.507639 -6.93628,1.609804 -8.04781,4.855274 -1.26877,3.249315 0.14615,7.239647 3.15953,8.98851 2.90448,1.817786 7.00724,1.263042 9.31495,-1.272589 1.11055,-1.028829 2.17657,-2.1651 3.2701,-3.235001 -0.48792,0 -0.97585,0 -1.46377,0 m 20.45845,-8.937 c -3.00532,-1.276615 -6.75273,-0.312584 -8.7458,2.279366 -2.211,2.701875 -2.13371,6.952857 0.21533,9.545892 2.19444,2.654025 6.29846,3.373421 9.28106,1.663425 3.12273,-1.651368 4.68593,-5.677561 3.45607,-8.995655 -0.6652,-2.018515 -2.25702,-3.66752 -4.20666,-4.493028 z"
-       id="path285" />
+  <title id="title1">svgOutput</title>
+  <desc id="desc1">made with tinkercad</desc>
+  <g id="path1" style="opacity:1;stroke-width:0.99976227;stroke-dasharray:none" transform="matrix(1.0484061,0,0,1.0661712,8.5064192,9.9431326)">
+    <path style="baseline-shift:baseline;display:inline;overflow:visible;fill:#5a9fc8;enable-background:accumulate;stop-color:#000000;stop-opacity:1;stroke-width:0.8105925;stroke-dasharray:none;stroke:#000101;stroke-opacity:1" d="m -136.908,32.493999 c 0.55252,1.424902 0.8479,2.964338 0.71766,4.493371 2.82265,-2.785484 5.59124,-5.664514 8.44207,-8.388538 3.02703,-2.645483 7.70053,-3.116033 11.20629,-1.153567 3.49267,1.84045 5.62923,5.896481 5.16707,9.819269 -0.36362,3.931205 -3.29459,7.45713 -7.09507,8.532205 -3.67323,1.132422 -7.9449,-0.11249 -10.40603,-3.072564 0,2.545969 0,5.091937 0,7.637906 -0.83333,0 -1.66667,0 -2.5,0 0,-4.666694 0,-9.333387 0,-14.000081 0.24624,-0.464044 0.0989,-1.070939 -0.38228,-0.271289 -2.60267,2.556185 -5.15349,5.24928 -7.78697,7.713284 1.84608,0 3.69217,0 5.53825,0 0,0.833333 0,1.666667 0,2.5 -4.30614,-0.02426 -8.62867,0.04764 -12.92273,-0.03398 -4.02411,-0.245945 -7.68381,-3.219759 -8.7856,-7.093397 -1.17935,-3.7745 0.17827,-8.165108 3.28377,-10.615644 3.03645,-2.523743 7.60254,-2.943702 11.04938,-1.015797 2.00542,1.073566 3.58083,2.862666 4.47404,4.948814 m -1.98745,5.735001 c -3.97984,-0.01871 -8.00419,-0.0027 -12.00114,-0.008 0,-0.833333 0,-1.666667 0,-2.5 4.07026,0 8.14052,0 12.21078,0 -0.19954,-3.420854 -3.05114,-6.40593 -6.44262,-6.828194 -3.38512,-0.507639 -6.93628,1.609804 -8.04781,4.855274 -1.26877,3.249315 0.14615,7.239647 3.15953,8.98851 2.90448,1.817786 7.00724,1.263042 9.31495,-1.272589 1.11055,-1.028829 2.17657,-2.1651 3.2701,-3.235001 -0.48792,0 -0.97585,0 -1.46377,0 m 20.45845,-8.937 c -3.00532,-1.276615 -6.75273,-0.312584 -8.7458,2.279366 -2.211,2.701875 -2.13371,6.952857 0.21533,9.545892 2.19444,2.654025 6.29846,3.373421 9.28106,1.663425 3.12273,-1.651368 4.68593,-5.677561 3.45607,-8.995655 -0.6652,-2.018515 -2.25702,-3.66752 -4.20666,-4.493028 z" id="path285" />
   </g>
-  <metadata
-     id="metadata286">
-    <rdf:RDF>
-      <cc:Work
-         rdf:about="">
-        <dc:title>svgOutput</dc:title>
-      </cc:Work>
-    </rdf:RDF>
-  </metadata>
 </svg>
-
-           
-            <!-- END SVG -->
 <h1 class="text-2xl font-bold tracking-wider shimmer-text">BioStrike</h1>
         </div>
         
@@ -175,7 +141,6 @@
                 <span id="text-gatt" class="text-slate-300">Web App Disconnected</span>
                 <button onclick="connectBle()" class="ml-2 text-bio-400 hover:text-bio-300 underline underline-offset-2">Connect</button>
             </div>
-
         </div>
     </nav>
 
@@ -201,10 +166,8 @@
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6" id="channels-container"></div>
 
         <div class="glass-panel p-4 rounded-xl flex-grow min-h-[250px] flex flex-col">
-            <!-- Headers Removed for cleaner look -->
             <div class="relative flex-grow bg-black rounded border border-slate-800 overflow-hidden mt-2">
                 <canvas id="piano-roll-canvas" class="absolute inset-0 w-full h-full"></canvas>
-                <!-- Dynamic Axis overlay -->
                 <div class="absolute left-0 top-0 bottom-0 w-10 bg-surface-100/80 border-r border-slate-800 flex flex-col justify-between py-2 items-center text-[10px] text-slate-500 font-mono z-10 pointer-events-none">
                     <span id="axis-max">--</span>
                     <span id="axis-mid">--</span>
@@ -235,15 +198,12 @@
             pianoRoll: [] 
         };
         
-        // --- Web MIDI API Integration ---
 		let midiAccess = null;
 		
 		async function initWebMIDI() {
 			try {
 				midiAccess = await navigator.requestMIDIAccess();
-				checkMidiPorts(); // Initial check
-				
-				// Listen for hardware connecting/disconnecting
+				checkMidiPorts();
 				midiAccess.onstatechange = checkMidiPorts; 
 			} catch (err) {
 				console.warn("Web MIDI API not supported or access denied.", err);
@@ -252,10 +212,7 @@
 		
 		function checkMidiPorts() {
 			if (!midiAccess) return;
-			
 			let isConnected = false;
-			
-			// Scan all active MIDI inputs and outputs for "BioStrike"
 			for (let input of midiAccess.inputs.values()) {
 				if (input.name.toLowerCase().includes("biostrike")) isConnected = true;
 			}
@@ -264,13 +221,15 @@
 			}
 		
 			const bleStatus = document.getElementById("status-ble");
-			if (isConnected) {
-				bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
-				bleStatus.classList.add("animate-pulse");
-			} else {
-				bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
-				bleStatus.classList.remove("animate-pulse");
-			}
+            if (bleStatus) {
+                if (isConnected) {
+                    bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
+                    bleStatus.classList.add("animate-pulse");
+                } else {
+                    bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
+                    bleStatus.classList.remove("animate-pulse");
+                }
+            }
 		}
 
         async function connectBle() {
@@ -294,7 +253,7 @@
                 statusIndicator.classList.add("animate-pulse");
                 document.getElementById("text-gatt").innerText = "GATT Connected";
                 
-                sendCmd("?\n"); // Solicit initial configuration snapshot from Flash
+                sendCmd("?\n"); 
             } catch (err) {
                 console.error("BLE Error: ", err);
             }
@@ -333,16 +292,18 @@
                         state.channels[i].maxPwm = parseInt(chParams[2], 10);
                         state.channels[i].duration = parseInt(chParams[3], 10);
                     }
-                    renderChannels(); // Redraw UI with loaded Flash values
+                    renderChannels(); 
                 }
 				else if (line.startsWith("BLE:")) {
                     const bleStatus = document.getElementById("status-ble");
-                    if (line.trim() === "BLE:1") {
-                        bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
-                        bleStatus.classList.add("animate-pulse");
-                    } else {
-                        bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
-                        bleStatus.classList.remove("animate-pulse");
+                    if (bleStatus) {
+                        if (line.trim() === "BLE:1") {
+                            bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
+                            bleStatus.classList.add("animate-pulse");
+                        } else {
+                            bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
+                            bleStatus.classList.remove("animate-pulse");
+                        }
                     }
                 }
             }
@@ -441,12 +402,10 @@
             else if (param === 'duration') label.innerText = value + 'ms'; 
             else label.innerText = value;
 
-            // Stream live tuning to RAM
             sendCmd(`L:${chIndex}:${paramId}:${value}\n`);
         }
 
         function commitToFlash(chIndex) {
-            // Save to Flash memory once dragging stops
             sendCmd(`SAVE:${chIndex}\n`);
         }
 
@@ -460,7 +419,6 @@
                 channel.meterPwm = targetPwm;
                 channel.strikeEnd = now + channel.duration;
                 
-                // Peak Hold: Update numeric text ONLY when a strike happens
                 document.getElementById(`num-vel-${channel.id}`).innerText = velocity;
                 document.getElementById(`num-pwm-${channel.id}`).innerText = targetPwm;
 
@@ -490,11 +448,9 @@
                 const pwmBar = document.getElementById(`bar-pwm-${ch.id}`);
                 if (velBar && pwmBar) {
 					velBar.style.height = `${(ch.meterVel / 127) * 100}%`;
-  					  ch.meterVel = Math.max(0, ch.meterVel * 0.96); 
-    
-  					  // Map 0-255 hardware range to 0-100% visual height
- 					   pwmBar.style.height = `${(ch.meterPwm / 255) * 100}%`;
-					    ch.meterPwm = Math.max(0, ch.meterPwm * 0.90);
+  					ch.meterVel = Math.max(0, ch.meterVel * 0.96); 
+ 					pwmBar.style.height = `${(ch.meterPwm / 255) * 100}%`;
+					ch.meterPwm = Math.max(0, ch.meterPwm * 0.90);
                 }
             });
 
@@ -502,13 +458,11 @@
             ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
             for(let i = 0; i < canvas.height; i += 20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
 
-            // Dynamic Zoom Logic for Piano Roll
             const currentNotes = state.channels.map(c => c.note);
-            let minNote = Math.min(...currentNotes) - 3; // Pad 3 notes below
-            let maxNote = Math.max(...currentNotes) + 3; // Pad 3 notes above
-            if (maxNote <= minNote) maxNote = minNote + 12; // Fallback if all set to same note
+            let minNote = Math.min(...currentNotes) - 3; 
+            let maxNote = Math.max(...currentNotes) + 3; 
+            if (maxNote <= minNote) maxNote = minNote + 12; 
             
-            // Update UI Axis
             document.getElementById('axis-max').innerText = getShortNote(maxNote);
             document.getElementById('axis-mid').innerText = getShortNote(Math.floor((maxNote+minNote)/2));
             document.getElementById('axis-min').innerText = getShortNote(minNote);
@@ -517,9 +471,8 @@
             
             for (let i = state.pianoRoll.length - 1; i >= 0; i--) {
                 let note = state.pianoRoll[i];
-                note.x += 3; // Scrolling speed
+                note.x += 3; 
                 
-                // Map the Y coordinate to our dynamic noteRange
                 const normalizedY = 1 - ((note.note - minNote) / noteRange);
                 const y = normalizedY * canvas.height;
                 
@@ -541,21 +494,19 @@
                 btn.classList.replace('bg-slate-800', 'bg-blue-600');
                 
                 let beat = 0;
-                // Simulation Loop Logic
                 state.demoInterval = setInterval(() => {
                     const kick = state.channels[0].note;
                     const snare = state.channels[1].note;
                     const hihat = state.channels[2].note;
                     const tom = state.channels[3].note;
                     
-                    // Modulo math dictates when notes fire. "beat % 8 === 0" means every 8th step.
                     handleMidiHit(hihat, beat % 4 === 0 ? 110 : 60); 
                     if (beat % 8 === 0) handleMidiHit(kick, 120); 
                     if (beat % 8 === 4) handleMidiHit(snare, 127); 
                     if (beat % 16 === 11) handleMidiHit(snare, 40); 
                     if (beat % 32 === 30) handleMidiHit(tom, 115); 
                     beat++;
-                }, 150); // Speed: Lower is faster. 150ms = 100 BPM 16th notes.
+                }, 150); 
             } else {
                 btn.innerText = "Start Simulation";
                 btn.classList.replace('bg-blue-600', 'bg-slate-800');
@@ -569,8 +520,18 @@
 			resizeCanvas(); 
 			requestAnimationFrame(drawLoop);
 			setTimeout(() => handleMidiHit(60, 100), 500); 
-			
 		});
+    </script>
+
+    <!-- Register Service Worker for PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker registered', reg))
+                    .catch(err => console.error('Service Worker registration failed', err));
+            });
+        }
     </script>
 </body>
 </html>
