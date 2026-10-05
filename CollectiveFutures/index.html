@@ -10,29 +10,64 @@
 <body>
 
 <div class="toolbar">
-    <div class="control-group">
-        <button id="btn-ble" onclick="connectBLE()">CONNECT BLE</button>
-        <span id="ble-status" class="status-offline">OFFLINE</span>
-        
-        <!-- FUTURE ENHANCEMENT: This preset section will be migrated into its own modal/pop-box -->
-        <div id="preset-controls-container" class="preset-group">
-            <label>Preset:</label>
-            <select id="preset-select" onchange="loadPreset(this.value)">
-                <option value="">-- Select --</option>
-            </select>
-            <button onclick="savePreset()">SAVE</button>
-            <button onclick="exportPresets()">↓ EXPORT</button>
-            <button onclick="document.getElementById('import-file').click()">↑ IMPORT</button>
-            <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
-       		<button class="danger" onclick="clearAllPresets()" style="margin-left:10px;">🗑️ CLEAR SAVES</button>
-        </div>
+    <!-- Branding -->
+    <div class="brand-group">
+        <svg width="24" height="24" viewBox="0 0 100 100" fill="none" stroke="url(#eforpGrad)" stroke-width="8" stroke-linecap="round">
+            <defs>
+                <linearGradient id="eforpGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00f0ff" />
+                    <stop offset="100%" stop-color="#39ff14" />
+                </linearGradient>
+            </defs>
+            <path d="M 80,30 C 80,10 20,10 20,30 C 20,50 80,50 80,70 C 80,90 20,90 20,70 M 50,10 L 50,90" />
+        </svg>
+        <span class="bio-brand">bioQuad</span>
     </div>
-    <div class="control-group">
-        <label>Clock:</label>
-        <select id="midi-clock-dir"><option value="out">MIDI Clock OUT (Master)</option><option value="in">MIDI Clock IN (Sync)</option></select>
-        <button id="btn-master-mute" class="danger" onclick="toggleMasterMute()">MUTE ALL AUDIO</button>
-        <label>Global MIDI Out:</label>
-        <select id="midi-out-select"><option value="none">No Output</option></select>
+
+    <div class="control-group right-controls">
+        <button id="btn-ble" onclick="connectBLE()">CONNECT BLE <span id="ble-status" class="status-offline">●</span></button>
+
+        <!-- MIDI Dropdown -->
+        <div class="dropdown-widget">
+            <button>MIDI ⚙️</button>
+            <div class="dropdown-content midi-panel">
+                <label>Clock:</label>
+                <select id="midi-clock-dir"><option value="out">MIDI Clock OUT (Master)</option><option value="in">MIDI Clock IN (Sync)</option></select>
+                <label>Master Out:</label>
+                <select id="midi-out-select"><option value="none">No Output</option></select>
+                <hr>
+                <div class="midi-ch-grid">
+                    <span>CH 1</span><select id="ui-midi-ch-0" onchange="updateMidiChannel(0, this.value)"></select>
+                    <span>CH 2</span><select id="ui-midi-ch-1" onchange="updateMidiChannel(1, this.value)"></select>
+                    <span>CH 3</span><select id="ui-midi-ch-2" onchange="updateMidiChannel(2, this.value)"></select>
+                    <span>CH 4</span><select id="ui-midi-ch-3" onchange="updateMidiChannel(3, this.value)"></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRESETS Dropdown -->
+        <div class="dropdown-widget">
+            <button>PRESETS ▼</button>
+            <div class="dropdown-content preset-panel">
+                <select id="preset-select" onchange="loadPreset(this.value)"><option value="">-- Select --</option></select>
+                <button onclick="savePreset()">SAVE</button>
+                <button onclick="exportPresets()">↓ EXPORT</button>
+                <button onclick="document.getElementById('import-file').click()">↑ IMPORT</button>
+                <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
+                <button class="danger" onclick="clearAllPresets()">🗑️ CLEAR</button>
+            </div>
+        </div>
+
+        <!-- MASTER MIXER Dropdown -->
+        <div class="dropdown-widget global-mixer-widget">
+            <span style="font-size: 0.8em; color: #888;">MASTER</span>
+            <div class="master-vu-container"><canvas id="master-vu-hz" width="80" height="12"></canvas></div>
+            <button id="btn-master-mute" class="danger" onclick="toggleMasterMute()" style="padding: 2px 6px; font-size: 0.7em;">MUTE</button>
+            
+            <div class="dropdown-content mixer-dropdown" id="mixer-dropdown-content">
+                <!-- Javascript will inject the Channel Strips here -->
+            </div>
+        </div>
     </div>
 </div>
 
