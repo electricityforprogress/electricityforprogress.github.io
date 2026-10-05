@@ -1,8 +1,5 @@
 /**
  * js/main.js
- * 
- * Primary entry point. Bootstraps the application, ensures components 
- * load in the correct order, and initiates the render loop.
  */
 
 function ensureSynths() {
@@ -16,8 +13,10 @@ function ensureSynths() {
 
 window.onload = () => { 
     initVisualizer();
+    // Build the synth UI immediately on load so the Connect button doesn't shift
+    ensureSynths(); 
     initPiano(); 
-    initKnobs(); 
+    syncPianoUI(); // Force scale colors to update
     loadPresetsFromStorage();
     
     // Kick off the global render loop
