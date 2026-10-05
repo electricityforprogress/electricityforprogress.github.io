@@ -61,22 +61,29 @@ function sendThresholdBLE(ch, val) {
 }
 
 function processBiodata(payload) {
-    payload.ch.forEach(p => {
-        let i = p.c;
-        let cond_uS = (p.p * 1.0e-6 / (0.693147 * 4.2e-9)) - 3900.0;
-        cond_uS = (cond_uS > 1.0) ? ((1.0 / cond_uS) * 1000000.0) : 0.0;
-        
-        let finalPitch = p.n;
-        if (p.e === 1 && synthChannels[i]) {
-            let modifiedPitch = applyPitchMods(i, p.n);
-            if (modifiedPitch !== null) { 
-                finalPitch = sendMidiNote(i, modifiedPitch, p.v, p.d);
-                chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+    // Optionally, you can now grab payload.t (Temp) and payload.h (Humidity) here
+    
+    if (payload.ch) {
+        payload.ch.forEach(p => {
+            let i = p.c;
+            
+            // ESP32 now sends raw microsecond high-time.
+            // We pass it directly into the graph scaler.
+            let rawPulse = p.p; 
+            
+            let finalPitch = p.n;
+            if (p.e === 1 && synthChannels[i]) {
+                let modifiedPitch = applyPitchMods(i, p.n);
+                if (modifiedPitch !== null) { 
+                    finalPitch = sendMidiNote(i, modifiedPitch, p.v, p.d);
+                    chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+                }
             }
-        }
-        
-        chData[i].waveBuffer.push({ g: cond_uS, evt: p.e, n: finalPitch });
-        // FUTURE ENHANCEMENT: Increase shift threshold here when handling larger incoming arrays
-        if (chData[i].waveBuffer.length > 60) chData[i].waveBuffer.shift();
-    });
+            
+            chData[i].waveBuffer.push({ g: rawPulse, evt: p.e, n: finalPitch });
+            
+            // Increased to 100 to map nicely to the new 10Hz payload delivery
+            if (chData[i].waveBuffer.length > 100) chData[i].waveBuffer.shift();
+        });
+    }
 }
