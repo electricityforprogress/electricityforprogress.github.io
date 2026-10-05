@@ -70,7 +70,16 @@ function toggleMute(ch) { if (synthChannels[ch]) synthChannels[ch].toggleMute();
 function updateActiveSynth(param, value) {
     if (!synthChannels[activeSynthIndex]) return;
     synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
-    if (param === 'bpm') document.getElementById('ui-bpm-display').innerText = Math.round(value).toString().padStart(3, '0');
+    
+    if (param === 'bpm') {
+        document.getElementById('ui-bpm-display').innerText = Math.round(value).toString().padStart(3, '0');
+    }
+    
+    // Push threshold updates back to hardware so physical LEDs match
+    if (param === 'threshold' && typeof bleTxCharacteristic !== 'undefined' && bleTxCharacteristic) {
+        bleTxCharacteristic.writeValueWithoutResponse(new TextEncoder().encode(`T${activeSynthIndex}:${value}\n`));
+    }
+    
     synthChannels[activeSynthIndex].applyParams();
 }
 
@@ -288,3 +297,5 @@ function clearAllPresets() {
         alert("All presets have been cleared.");
     }
 }
+
+
