@@ -193,7 +193,8 @@ class PolyChannel {
 
         // NEW STRUCTURED PARAMS
         this.params = {
-            // Core logic
+            
+            mixVol: 0.8, muted: false, midiOutCh: id, // Mixer & MIDI state
             bpm: 120, mode: 'poly', glide: 0.1,
             threshold: 2.0, sampleSize: 32, 
             scaleRoot: '0', scaleType: 'pentatonic_minor', activeScaleBits: new Array(12).fill(true),
@@ -258,9 +259,15 @@ class PolyChannel {
         this.applyParams();
     }
 
-    setVolume(val) { this.masterVolume = parseFloat(val); this.channelOut.gain.value = this.muted ? 0 : this.masterVolume; }
+   setVolume(val) { 
+        this.params.mixVol = parseFloat(val); 
+        this.channelOut.gain.value = this.params.muted ? 0 : this.params.mixVol; 
+    }
     
-    toggleMute() { /* ... (Keep your original UI mute logic) ... */ }
+    toggleMute() { 
+        this.params.muted = !this.params.muted; 
+        this.channelOut.gain.value = this.params.muted ? 0 : this.params.mixVol; 
+    }
 
     applyParams() {
         const p = this.params;
