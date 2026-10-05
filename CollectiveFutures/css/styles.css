@@ -63,6 +63,33 @@ body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font
     /* Pauses on the right side (100%) for 9 seconds without a visual jump */
     100% { background-position: 100% center; } 
 }
+
+.logo-shimmer {
+    width: 28px;
+    height: 28px;
+    
+    /* 1. The exact same gradient and timing as .bio-brand */
+    background: linear-gradient(
+        to right,
+        #c9ebff 0%,      
+        #001144 25%,     
+        
+        #c9ebff 45%,     
+        #ffffff 50%,     
+        #001144 55%,     
+        
+        #c9ebff 75%,     
+        #001144 100%     
+    );
+    background-size: 400% 100%;
+    animation: text-shimmer 12s ease-in-out infinite;
+    
+    /* 2. Masks the animated background using your cleaned SVG */
+    /* Update this URL if your SVG is in a subfolder like 'img/eforp-logo.svg' */
+    -webkit-mask: url('eforp-logo.svg') no-repeat center / contain;
+    mask: url('eforp-logo.svg') no-repeat center / contain;
+}
+
 .right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .status-offline { color: var(--red); margin-left: 5px; text-shadow: 0 0 5px var(--red); }
 
