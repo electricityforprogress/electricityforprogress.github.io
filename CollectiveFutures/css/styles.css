@@ -16,8 +16,39 @@
 
 body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
 
-/* FUTURE ENHANCEMENT: Toolbar will shrink when Presets are moved to a pop-box */
-.toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; }
+/* Toolbar & Branding */
+.toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 10px 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; position: relative; z-index: 100; }
+.brand-group { display: flex; align-items: center; gap: 10px; }
+.bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: -webkit-linear-gradient(45deg, #00f0ff, #39ff14); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.status-offline { color: var(--red); margin-left: 5px; text-shadow: 0 0 5px var(--red); }
+
+/* Dropdown Logic */
+.dropdown-widget { position: relative; display: inline-block; }
+.dropdown-content { display: none; position: absolute; top: 100%; right: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.9); z-index: 100; flex-direction: column; gap: 10px; min-width: 200px; margin-top: 5px; }
+.dropdown-widget:hover .dropdown-content { display: flex; }
+
+/* Sub-Panels */
+.midi-ch-grid { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: center; font-size: 0.8em; }
+.global-mixer-widget { display: flex; align-items: center; gap: 8px; background: #0a0d12; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px; cursor: default; }
+.master-vu-container { width: 80px; height: 12px; }
+.mixer-dropdown { flex-direction: row; min-width: 320px; justify-content: space-between; }
+
+/* Channel Strips */
+.strip { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 3px; }
+.strip.master { border-color: var(--cyan); }
+.strip-label { font-size: 0.7em; font-weight: bold; }
+.strip-controls { display: flex; gap: 10px; height: 100px; align-items: center; }
+
+/* Segmented LED Canvas */
+canvas.vu { background: #000; border: 1px solid var(--border); border-radius: 2px; }
+
+@media (max-width: 768px) {
+    .dropdown-content { right: auto; left: 0; min-width: 280px; }
+    .mixer-dropdown { right: 0; left: auto; flex-wrap: wrap; justify-content: center; }
+}
+
+/* depricated control and preset REMOVE? */
 .control-group { display: flex; gap: 10px; align-items: center; }
 .preset-group { font-size:0.9em; border-left:1px solid var(--border); padding-left:15px; display: flex; align-items: center; gap: 10px; }
 
