@@ -9,9 +9,17 @@ navigator.requestMIDIAccess({ sysex: false }).then(access => {
 }).catch(()=>{});
 
 function sendMidiNote(channel, pitch, velocity, duration) {
-    triggerLED(channel);
     if (synthChannels[channel]) synthChannels[channel].play(pitch, velocity, duration);
-    if (midiOutput) { midiOutput.send([0x90 + channel, pitch, velocity]); setTimeout(() => { if (midiOutput) midiOutput.send([0x80 + channel, pitch, 0]); }, duration); }
+    
+    if (midiOutput) { 
+        // Route to specific user-assigned MIDI Channel (0-15)
+        let midiCh = synthChannels[channel].params.midiOutCh || channel; 
+        
+        midiOutput.send([0x90 + midiCh, pitch, velocity]); 
+        setTimeout(() => { 
+            if (midiOutput) midiOutput.send([0x80 + midiCh, pitch, 0]); 
+        }, duration); 
+    }
     return pitch; 
 }
 
