@@ -25,61 +25,32 @@ body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font
     font-family: sans-serif; 
     letter-spacing: -1px; 
     
-    /* 
-       0-25%: The perfect resting Ice->Navy gradient
-       45-55%: The white light catching
-       75-100%: An identical resting Ice->Navy gradient to pause on
-    */
-    background: linear-gradient(
-        to right,
-        #c9ebff 0%,      /* Resting Ice start */
-        #001144 25%,     /* Resting Navy end */
-        
-        #c9ebff 45%,     /* Sweep approaching */
-        #ffffff 50%,     /* The bright center flash */
-        #001144 55%,     /* Sweep leaving */
-        
-        #c9ebff 75%,     /* Paused Ice start */
-        #001144 100%     /* Paused Navy end */
-    );
-    
-    /* Make the background 4x wider than the text so the resting frames fit perfectly */
-    background-size: 400% 100%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    /* A simple, static 2-color gradient */
+    background: -webkit-linear-gradient(45deg, #c9ebff, #0066cc); 
+    -webkit-background-clip: text; 
+    -webkit-text-fill-color: transparent; 
     background-clip: text;
     
-    /* 12 seconds total: Happens much less frequently */
-    animation: text-shimmer 12s ease-in-out infinite; 
+    /* Notice: No background-size or animation properties here */
 }
 
-@keyframes text-shimmer {
-    /* Rests on the left side (0%) which looks exactly like the original gradient */
-    0% { background-position: 0% center; }
-    
-    /* Takes 3 seconds (25% of 12s) to slide across smoothly, not instantly */
-    25% { background-position: 100% center; }
-    
-    /* Pauses on the right side (100%) for 9 seconds without a visual jump */
-    100% { background-position: 100% center; } 
-}
+
 
 .logo-shimmer {
     width: 28px;
     height: 28px;
     
-    /* 1. The exact same gradient and timing as .bio-brand */
     background: linear-gradient(
         to right,
-        #c9ebff 0%,      
-        #001144 25%,     
+        #c9ebff 0%,      /* Resting Light Ice */
+        #0066cc 25%,     /* Resting Ocean Blue (Lighter than Navy) */
         
-        #c9ebff 45%,     
-        #ffffff 50%,     
-        #001144 55%,     
+        #c9ebff 45%,     /* Sweep approaching */
+        #ffffff 50%,     /* The bright center flash */
+        #0066cc 55%,     /* Sweep leaving */
         
-        #c9ebff 75%,     
-        #001144 100%     
+        #c9ebff 75%,     /* Paused Light Ice */
+        #0066cc 100%     /* Paused Ocean Blue */
     );
     background-size: 400% 100%;
     animation: text-shimmer 12s ease-in-out infinite;
