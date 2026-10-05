@@ -287,7 +287,9 @@ class PolyChannel {
     
     play(pitch, velocity, durationMs) {
         if (this.muted) return;
-        cconst now = audioCtx.currentTime + 0.015;
+        
+        // 15ms lookahead for smooth, click-free audio envelopes
+        const now = audioCtx.currentTime + 0.015; 
         const freq = 440 * Math.pow(2, (pitch - 69) / 12);
         
         // Voice Allocation
