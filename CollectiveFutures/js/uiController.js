@@ -74,47 +74,6 @@ function updateActiveSynth(param, value) {
     synthChannels[activeSynthIndex].applyParams();
 }
 
-function initKnobs() {
-    document.querySelectorAll('.knob-track').forEach(knob => {
-        let isDragging = false, startY = 0, startVal = 0;
-        const updateDial = (val) => {
-            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
-            let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
-            knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
-        };
-        updateDial(parseFloat(knob.dataset.val));
-        knob.addEventListener('mousedown', (e) => { isDragging = true; startY = e.clientY; startVal = parseFloat(knob.dataset.val); e.preventDefault(); });
-        window.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
-            let deltaY = startY - e.clientY, newVal;
-            if (isLog) {
-                let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
-                pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
-                newVal = Math.exp(Math.log(min) + pct * (Math.log(max) - Math.log(min)));
-            } else { newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); }
-            knob.dataset.val = newVal; updateDial(newVal); updateActiveSynth(knob.dataset.param, newVal);
-        });
-        window.addEventListener('mouseup', () => isDragging = false);
-    });
-}
-
-function syncUI() {
-    if (!synthChannels[activeSynthIndex]) return;
-    const p = synthChannels[activeSynthIndex].params;
-    ['ui-scaleRoot', 'ui-scaleType', 'ui-mode', 'ui-wave', 'ui-lfo-shape', 'ui-lfo-dest', 'ui-adsr-dest', 'ui-atk', 'ui-dec', 'ui-sus', 'ui-rel'].forEach(id => { 
-        let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; 
-    });
-    document.getElementById('ui-bpm-display').innerText = Math.round(p.bpm).toString().padStart(3, '0');
-    document.querySelectorAll('.synth-inspector .knob-track').forEach(knob => {
-        const param = knob.dataset.param; knob.dataset.val = p[param];
-        const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
-        let pct = isLog ? (Math.log(p[param]) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (p[param] - min) / (max - min);
-        knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
-    });
-    syncPianoUI();
-}
-
 // --- Preset Management (Ready to hook into new Pop-box Modal) ---
 function loadPresetsFromStorage() {
     try {
@@ -256,7 +215,7 @@ function initKnobs() {
     });
 }
 
-function function syncUI() {
+function syncUI() {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
     
