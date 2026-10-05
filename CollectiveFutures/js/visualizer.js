@@ -14,8 +14,6 @@ function initVisualizer() {
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button id="mute-btn-${i}" onclick="toggleMute(${i})" style="padding: 2px 6px; font-size: 0.7em; margin-left:10px;">MUTE</button>
                     <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setVolume(${i}, this.value)" style="width: 50px;">
-                    <span style="font-size:0.75em; margin-left:5px;">Thresh (<span id="t-val-${i}">2.0</span>x)</span>
-                    <input type="range" min="0.5" max="5.0" step="0.1" value="2.0" onchange="sendThresholdBLE(${i}, this.value)" style="width:50px">
                 </div>
             </div>
             <canvas class="scope" id="scope-${i}"></canvas>
