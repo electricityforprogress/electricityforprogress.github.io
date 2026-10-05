@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biodata Studio - Biovoice & Biorhythm</title>
+    <!-- FUTURE ENHANCEMENT: UI styles and color palettes are now isolated here -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="toolbar">
+    <div class="control-group">
+        <button id="btn-ble" onclick="connectBLE()">CONNECT BLE</button>
+        <span id="ble-status" class="status-offline">OFFLINE</span>
+        
+        <!-- FUTURE ENHANCEMENT: This preset section will be migrated into its own modal/pop-box -->
+        <div id="preset-controls-container" class="preset-group">
+            <label>Preset:</label>
+            <select id="preset-select" onchange="loadPreset(this.value)">
+                <option value="">-- Select --</option>
+            </select>
+            <button onclick="savePreset()">SAVE</button>
+            <button onclick="exportPresets()">↓ EXPORT</button>
+            <button onclick="document.getElementById('import-file').click()">↑ IMPORT</button>
+            <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
+        </div>
+    </div>
+    <div class="control-group">
+        <label>Clock:</label>
+        <select id="midi-clock-dir"><option value="out">MIDI Clock OUT (Master)</option><option value="in">MIDI Clock IN (Sync)</option></select>
+        <button id="btn-master-mute" class="danger" onclick="toggleMasterMute()">MUTE ALL AUDIO</button>
+        <label>Global MIDI Out:</label>
+        <select id="midi-out-select"><option value="none">No Output</option></select>
+    </div>
+</div>
+
+<div class="synth-inspector" id="synth-inspector">
+    <div class="synth-tabs">
+        <div class="synth-tab active" onclick="selectTab(0)"><div class="led" id="led-0"></div>CH 1</div>
+        <div class="synth-tab" onclick="selectTab(1)"><div class="led" id="led-1"></div>CH 2</div>
+        <div class="synth-tab" onclick="selectTab(2)"><div class="led" id="led-2"></div>CH 3</div>
+        <div class="synth-tab" onclick="selectTab(3)"><div class="led" id="led-3"></div>CH 4</div>
+    </div>
+    
+    <!-- ROW 1: BIORHYTHM & SCALING -->
+    <div class="synth-controls">
+        <div class="synth-module clock-module">
+            <h3>CLOCK & GROOVE</h3>
+            <div class="module-row">
+                <div class="tap-container">
+                    <div class="led" id="ui-bpm-led"></div>
+                    <button onclick="tapTempo()" class="tap-btn">TAP</button>
+                </div>
+                <div class="digital-display" id="ui-bpm-display">120</div>
+                <div class="knob-container"><div class="knob-track" data-param="bpm" data-min="60" data-max="240" data-val="120"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">TEMPO</div></div>
+                <div class="knob-container"><div class="knob-track" data-param="bioAmt" data-min="0" data-max="100" data-val="50"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">BIO AMT<br><span>PLANT ↔ BPM</span></div></div>
+                <div class="knob-container"><div class="knob-track" data-param="elasticity" data-min="0" data-max="100" data-val="15"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SWING<br><span>GRID ↔ LOOSE</span></div></div>
+            </div>
+        </div>
+
+        <div class="synth-module scale-module">
+            <h3>MIDI FILTRATION & SCALING</h3>
+            <div class="module-row">
+                <div class="scale-selects">
+                    <div class="select-row">
+                        <select id="ui-scaleRoot" class="routing-select" onchange="updateActiveSynth('scaleRoot', this.value); applyScalePreset();">
+                            <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
+                        </select>
+                        <select id="ui-scaleType" class="routing-select" onchange="updateActiveSynth('scaleType', this.value); applyScalePreset();">
+                            <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor">Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="module-row">
+                        <div class="knob-container"><div class="knob-track" data-param="minNote" data-min="0" data-max="127" data-val="36"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">MIN NOTE</div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="maxNote" data-min="0" data-max="127" data-val="84"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">MAX NOTE</div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SPREAD<br><span>BELL ↔ TROUGH</span></div></div>
+                        <div class="knob-container"><div class="knob-track" data-param="density" data-min="0" data-max="100" data-val="100"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DENSITY<br><span>SPARSE ↔ ALL</span></div></div>
+                    </div>
+                </div>
+                <div class="piano-section">
+                    <div class="piano-wrapper" id="piano-keys"></div>
+                    <div class="custom-scale-label">CUSTOM SCALE EDITOR</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROW 2: AUDIO ENGINE -->
+    <!-- FUTURE ENHANCEMENT: This section will expand as new synth parameters are added -->
+    <div class="synth-controls">
+        <div class="synth-module osc-module">
+            <h3>VOICING & OSC</h3>
+            <select id="ui-mode" class="routing-select" onchange="updateActiveSynth('mode', this.value)">
+                <option value="poly">Polyphonic (5-Voice)</option><option value="mono">Monophonic</option><option value="303">303 Legato Slide</option>
+            </select>
+            <select id="ui-wave" class="routing-select" onchange="updateActiveSynth('wave', this.value)">
+                <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="noise">White Noise</option>
+            </select>
+            <div>
+                <div class="knob-container"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">GLIDE</div></div>
+                <div class="knob-container"><div class="knob-track" data-param="subLvl" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SUB LVL</div></div>
+            </div>
+        </div>
+
+        <div class="synth-module">
+            <h3>FILTER</h3>
+            <div class="knob-container"><div class="knob-track" data-param="cutoff" data-min="100" data-max="10000" data-val="2000" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">CUTOFF</div></div>
+            <div class="knob-container"><div class="knob-track" data-param="res" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RES (Q)</div></div>
+        </div>
+
+        <div class="synth-module">
+            <h3 class="lfo-header">LFO <div class="lfo-led" id="ui-lfo-led"></div></h3>
+            <select id="ui-lfo-shape" class="routing-select" onchange="updateActiveSynth('lfoShape', this.value)">
+                <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sawtooth">Ramp Up</option><option value="rampdown">Ramp Down</option><option value="random">Random (S&H)</option>
+            </select>
+            <select id="ui-lfo-dest" class="routing-select" onchange="updateActiveSynth('lfoDest', this.value)">
+                <option value="pitch">Pitch</option><option value="filter">Filter Cutoff</option><option value="volume">Volume (Tremolo)</option>
+            </select>
+            <div>
+                <div class="knob-container"><div class="knob-track" data-param="lfoRate" data-min="0.1" data-max="20" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RATE</div></div>
+                <div class="knob-container"><div class="knob-track" data-param="lfoDepth" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DEPTH</div></div>
+            </div>
+        </div>
+
+        <div class="synth-module env-module">
+            <h3>MOD ENVELOPE</h3>
+            <div class="env-layout">
+                <div class="env-routing">
+                    <select id="ui-adsr-dest" class="routing-select" onchange="updateActiveSynth('adsrDest', this.value)">
+                        <option value="filter">Filter Cutoff</option><option value="volume">Volume (VCA)</option><option value="pitch">Pitch</option>
+                    </select>
+                    <div class="knob-container"><div class="knob-track" data-param="adsrAmt" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
+                </div>
+                <div class="slider-group">
+                    <div class="slider-col"><input type="range" class="v-slider" id="ui-atk" min="0.01" max="2" step="0.01" oninput="updateActiveSynth('atk', this.value)"><div class="slider-label">A</div></div>
+                    <div class="slider-col"><input type="range" class="v-slider" id="ui-dec" min="0.01" max="2" step="0.01" oninput="updateActiveSynth('dec', this.value)"><div class="slider-label">D</div></div>
+                    <div class="slider-col"><input type="range" class="v-slider" id="ui-sus" min="0" max="1" step="0.01" oninput="updateActiveSynth('sus', this.value)"><div class="slider-label">S</div></div>
+                    <div class="slider-col"><input type="range" class="v-slider" id="ui-rel" min="0.01" max="4" step="0.01" oninput="updateActiveSynth('rel', this.value)"><div class="slider-label">R</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid" id="dashboard"></div>
+
+<!-- Load order is important for non-module global architecture -->
+<script src="js/globals.js"></script>
+<script src="js/audioEngine.js"></script>
+<script src="js/uiController.js"></script>
+<script src="js/visualizer.js"></script>
+<script src="js/bleMidi.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>
