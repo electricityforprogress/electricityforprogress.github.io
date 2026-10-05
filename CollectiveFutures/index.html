@@ -91,24 +91,27 @@
     <!-- FUTURE ENHANCEMENT: This section will expand as new synth parameters are added -->
     <div class="synth-controls">
         <div class="synth-module osc-module">
-            <h3>VOICING & OSC</h3>
-            <select id="ui-mode" class="routing-select" onchange="updateActiveSynth('mode', this.value)">
-                <option value="poly">Polyphonic (5-Voice)</option><option value="mono">Monophonic</option><option value="303">303 Legato Slide</option>
-            </select>
-            <select id="ui-wave" class="routing-select" onchange="updateActiveSynth('wave', this.value)">
-                <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="noise">White Noise</option>
-            </select>
-            <div>
-                <div class="knob-container"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">GLIDE</div></div>
-                <div class="knob-container"><div class="knob-track" data-param="subLvl" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SUB LVL</div></div>
-            </div>
-        </div>
-
-        <div class="synth-module">
-            <h3>FILTER</h3>
-            <div class="knob-container"><div class="knob-track" data-param="cutoff" data-min="100" data-max="10000" data-val="2000" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">CUTOFF</div></div>
-            <div class="knob-container"><div class="knob-track" data-param="res" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RES (Q)</div></div>
-        </div>
+			<h3>VOICING & OSC</h3>
+			<select id="ui-mode" class="routing-select" onchange="updateActiveSynth('mode', this.value)">
+				<option value="poly">Polyphonic (5-Voice)</option><option value="mono">Monophonic</option><option value="303">303 Legato Slide</option>
+			</select>
+			<!-- Mapped to the new nested sources object -->
+			<select id="ui-wave" class="routing-select" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
+				<option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="noise">White Noise</option>
+			</select>
+			<div>
+				<div class="knob-container"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">GLIDE</div></div>
+				<!-- Mapped to sources.sub.level -->
+				<div class="knob-container"><div class="knob-track" data-param="sub.level" data-group="sources" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SUB LVL</div></div>
+			</div>
+		</div>
+		
+		<div class="synth-module">
+			<h3>FILTER</h3>
+			<!-- Mapped to filter.cutoff and filter.res -->
+			<div class="knob-container"><div class="knob-track" data-param="cutoff" data-group="filter" data-min="100" data-max="10000" data-val="2000" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">CUTOFF</div></div>
+			<div class="knob-container"><div class="knob-track" data-param="res" data-group="filter" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RES (Q)</div></div>
+		</div>
 
         <!-- MULTI-LFO MODULE -->
 		<div class="synth-module">
