@@ -49,6 +49,8 @@ function resize() {
 
 let lastBeatCount = 0;
 
+flet lastBeatCount = 0;
+
 function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
@@ -61,34 +63,64 @@ function renderLoop() {
         const currentBeatCount = Math.floor(nowMs / msPerBeat);
         if (currentBeatCount !== lastBeatCount) {
             lastBeatCount = currentBeatCount;
-            document.getElementById('ui-bpm-led').classList.add('active');
-            setTimeout(() => document.getElementById('ui-bpm-led').classList.remove('active'), 50);
-        }
-
-        // LFO LED Feedback
-        let phase = (nowAudio * p.lfoRate) % 1.0;
-        let bright = 0;
-        if (p.lfoShape === 'sine') bright = (Math.sin(phase * Math.PI * 2) + 1) / 2;
-        else if (p.lfoShape === 'square') bright = phase < 0.5 ? 1 : 0;
-        else if (p.lfoShape === 'triangle') bright = phase < 0.5 ? phase * 2 : 2 - (phase * 2);
-        else if (p.lfoShape === 'sawtooth') bright = phase;
-        else if (p.lfoShape === 'rampdown') bright = 1 - phase;
-        else if (p.lfoShape === 'random') bright = (synthChannels[activeSynthIndex].shValue + 1) / 2;
-        document.getElementById('ui-lfo-led').style.opacity = 0.1 + (bright * 0.9);
-    }
-
-    // Custom S&H LFO Processing
-    synthChannels.forEach(ch => {
-        const p = ch.params;
-        if (p.lfoShape === 'random') {
-            if (nowMs - ch.lastShTime > (1000 / p.lfoRate)) {
-                ch.lastShTime = nowMs;
-                ch.shValue = (Math.random() * 2) - 1; 
-                if (p.lfoDest === 'pitch') { ch.voices.forEach(v => { v.vco.detune.setTargetAtTime(ch.shValue * p.lfoDepth * 200, nowAudio, 0.02); v.sub.detune.setTargetAtTime(ch.shValue * p.lfoDepth * 200, nowAudio, 0.02); }); } 
-                else if (p.lfoDest === 'filter') { ch.voices.forEach(v => v.vcf.detune.setTargetAtTime(ch.shValue * p.lfoDepth * 2000, nowAudio, 0.02)); } 
-                else if (p.lfoDest === 'volume') { ch.tremoloGain.gain.setTargetAtTime(1.0 + (ch.shValue * p.lfoDepth), nowAudio, 0.02); }
+            const bpmLed = document.getElementById('ui-bpm-led');
+            if(bpmLed) {
+                bpmLed.classList.add('active');
+                setTimeout(() => bpmLed.classList.remove('active'), 50);
             }
         }
+
+        // Free-Running Multi-LFO LED Feedback
+        const lfos = [
+            { key: 'pitchLfo', id: 'ind-lfo-pitchLfo' },
+            { key: 'filterLfo', id: 'ind-lfo-filterLfo' },
+            { key: 'ampLfo', id: 'ind-lfo-ampLfo' }
+        ];
+
+        lfos.forEach(lfo => {
+            const config = p[lfo.key];
+            let phase = (nowAudio * config.rate) % 1.0;
+            let bright = 0;
+            
+            if (config.shape === 'sine') bright = (Math.sin(phase * Math.PI * 2) + 1) / 2;
+            else if (config.shape === 'square') bright = phase < 0.5 ? 1 : 0;
+            else if (config.shape === 'triangle') bright = phase < 0.5 ? phase * 2 : 2 - (phase * 2);
+            else if (config.shape === 'sawtooth') bright = phase;
+            else if (config.shape === 'rampdown') bright = 1 - phase;
+            else if (config.shape === 'random') bright = Math.random(); // Visual fallback for S&H
+
+            const ledEl = document.getElementById(lfo.id);
+            if (ledEl) {
+                // Dim pulse (0.25) to preview rate, brightens (0.9) when applied
+                const intensity = config.depth > 0 ? 0.9 : 0.25; 
+                ledEl.style.opacity = 0.1 + (bright * intensity);
+            }
+        });
+    }
+
+    // Modular S&H LFO Processing
+    synthChannels.forEach(ch => {
+        if(!ch.shState) ch.shState = { pitch: 0, filter: 0, amp: 0 };
+        const p = ch.params;
+        
+        ['pitch', 'filter', 'amp'].forEach(dest => {
+            const lfoParam = p[`${dest}Lfo`];
+            if (lfoParam.shape === 'random') {
+                if (nowMs - ch.shState[dest] > (1000 / lfoParam.rate)) {
+                    ch.shState[dest] = nowMs;
+                    const shVal = (Math.random() * 2) - 1; // -1.0 to 1.0
+                    
+                    if (dest === 'pitch') { 
+                        ch.voices.forEach(v => { 
+                            v.sources.osc1.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
+                            v.sources.sub.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
+                        }); 
+                    } 
+                    else if (dest === 'filter') { ch.voices.forEach(v => v.vcf.detune.setTargetAtTime(shVal * lfoParam.depth * 2000, nowAudio, 0.02)); } 
+                    else if (dest === 'amp') { ch.ampLfoNode.gain.setTargetAtTime(1.0 + (shVal * lfoParam.depth), nowAudio, 0.02); }
+                }
+            }
+        });
     });
     
     // Data Visualization Scopes
@@ -100,7 +132,6 @@ function renderLoop() {
         
         if(buf.length > 1) {
             let min = Math.min(...buf.map(b => b.g)), max = Math.max(...buf.map(b => b.g)), range = max - min || 1;
-            // FUTURE ENHANCEMENT: Modify scalar mapping here for new data arrays and time scales
             let pts = buf.map((b, idx) => ({ x: idx * (sw / (buf.length - 1)), y: sh - ((b.g - min) / range * (sh * 0.8)) - (sh * 0.1), e: b.evt, n: b.n }));
             pts.forEach(p => { if(p.e === 1) { sCtx.strokeStyle = `hsla(${(p.n % 12) * 30}, 100%, 50%, 0.7)`; sCtx.lineWidth = 1; sCtx.beginPath(); sCtx.moveTo(p.x, 0); sCtx.lineTo(p.x, sh); sCtx.stroke(); } });
             sCtx.strokeStyle = '#39ff14'; sCtx.lineWidth = 2; sCtx.beginPath(); sCtx.moveTo(pts[0].x, pts[0].y);
