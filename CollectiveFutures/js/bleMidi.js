@@ -1,10 +1,5 @@
 /**
  * js/bleMidi.js
- * 
- * Manages Bluetooth connection, data parsing, and WebMIDI outbound routing.
- * 
- * FUTURE ENHANCEMENT: Integrate indexedDB or a structured logging service here 
- * to handle recording the raw data over extended durations.
  */
 
 navigator.requestMIDIAccess({ sysex: false }).then(access => {
@@ -22,8 +17,9 @@ function sendMidiNote(channel, pitch, velocity, duration) {
 
 async function connectBLE() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
-    if (!rampDownWave) initCustomWaves();
-    ensureSynths();
+    // Synths are already ensured on window load now, but we check again just in case
+    ensureSynths(); 
+    
     try {
         const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Biodata" }], optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"] });
         document.getElementById('ble-status').innerText = 'CONNECTING...';
@@ -44,7 +40,6 @@ async function connectBLE() {
             for (let line of lines) { 
                 if (line.trim().startsWith('{')) { 
                     try { 
-                        // FUTURE ENHANCEMENT: Hook logging functions into this pipeline
                         processBiodata(JSON.parse(line)); 
                     } catch(err){} 
                 } 
@@ -61,15 +56,13 @@ function sendThresholdBLE(ch, val) {
 }
 
 function processBiodata(payload) {
-    // Optionally, you can now grab payload.t (Temp) and payload.h (Humidity) here
-    
-    if (payload.ch) {
+    // Check if the payload contains channel data
+    if(payload.ch) {
         payload.ch.forEach(p => {
             let i = p.c;
             
-            // ESP32 now sends raw microsecond high-time.
-            // We pass it directly into the graph scaler.
-            let rawPulse = p.p; 
+            // Map the new raw ESP32 pulse width directly 
+            let rawPulse = p.p;
             
             let finalPitch = p.n;
             if (p.e === 1 && synthChannels[i]) {
@@ -82,7 +75,7 @@ function processBiodata(payload) {
             
             chData[i].waveBuffer.push({ g: rawPulse, evt: p.e, n: finalPitch });
             
-            // Increased to 100 to map nicely to the new 10Hz payload delivery
+            // Buffer increased to 100 for higher speed telemetry smoothing
             if (chData[i].waveBuffer.length > 100) chData[i].waveBuffer.shift();
         });
     }
