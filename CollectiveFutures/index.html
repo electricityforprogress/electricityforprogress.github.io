@@ -24,6 +24,7 @@
             <button onclick="exportPresets()">↓ EXPORT</button>
             <button onclick="document.getElementById('import-file').click()">↑ IMPORT</button>
             <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
+       		<button class="danger" onclick="clearAllPresets()" style="margin-left:10px;">🗑️ CLEAR SAVES</button>
         </div>
     </div>
     <div class="control-group">
@@ -109,37 +110,61 @@
             <div class="knob-container"><div class="knob-track" data-param="res" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RES (Q)</div></div>
         </div>
 
-        <div class="synth-module">
-            <h3 class="lfo-header">LFO <div class="lfo-led" id="ui-lfo-led"></div></h3>
-            <select id="ui-lfo-shape" class="routing-select" onchange="updateActiveSynth('lfoShape', this.value)">
-                <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sawtooth">Ramp Up</option><option value="rampdown">Ramp Down</option><option value="random">Random (S&H)</option>
-            </select>
-            <select id="ui-lfo-dest" class="routing-select" onchange="updateActiveSynth('lfoDest', this.value)">
-                <option value="pitch">Pitch</option><option value="filter">Filter Cutoff</option><option value="volume">Volume (Tremolo)</option>
-            </select>
-            <div>
-                <div class="knob-container"><div class="knob-track" data-param="lfoRate" data-min="0.1" data-max="20" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RATE</div></div>
-                <div class="knob-container"><div class="knob-track" data-param="lfoDepth" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">DEPTH</div></div>
-            </div>
-        </div>
+        <!-- MULTI-LFO MODULE -->
+		<div class="synth-module">
+			<h3>MULTI-LFO</h3>
+			<div class="mod-selectors">
+				<label>
+					<input type="radio" name="activeLfo" value="pitchLfo" checked onchange="switchModView('lfo', this.value)"> 
+					<div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div> <span class="label-text">PITCH</span>
+				</label>
+				<label>
+					<input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value)"> 
+					<div class="mod-led led-filter" id="ind-lfo-filterLfo"></div> <span class="label-text">FILTER</span>
+				</label>
+				<label>
+					<input type="radio" name="activeLfo" value="ampLfo" onchange="switchModView('lfo', this.value)"> 
+					<div class="mod-led led-amp" id="ind-lfo-ampLfo"></div> <span class="label-text">AMP</span>
+				</label>
+			</div>
+			<select id="ui-lfo-shape" class="routing-select" onchange="updateNestedSynth('lfo', 'shape', this.value)">
+				<option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sawtooth">Ramp Up</option><option value="rampdown">Ramp Down</option><option value="random">Random (S&H)</option>
+			</select>
+			<div>
+				<div class="knob-container"><div class="knob-track" data-param="rate" data-group="lfo" data-min="0.1" data-max="20" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RATE</div></div>
+				<div class="knob-container"><div class="knob-track" data-param="depth" data-group="lfo" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
+			</div>
+		</div>
 
-        <div class="synth-module env-module">
-            <h3>MOD ENVELOPE</h3>
-            <div class="env-layout">
-                <div class="env-routing">
-                    <select id="ui-adsr-dest" class="routing-select" onchange="updateActiveSynth('adsrDest', this.value)">
-                        <option value="filter">Filter Cutoff</option><option value="volume">Volume (VCA)</option><option value="pitch">Pitch</option>
-                    </select>
-                    <div class="knob-container"><div class="knob-track" data-param="adsrAmt" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
-                </div>
-                <div class="slider-group">
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-atk" min="0.01" max="2" step="0.01" oninput="updateActiveSynth('atk', this.value)"><div class="slider-label">A</div></div>
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-dec" min="0.01" max="2" step="0.01" oninput="updateActiveSynth('dec', this.value)"><div class="slider-label">D</div></div>
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-sus" min="0" max="1" step="0.01" oninput="updateActiveSynth('sus', this.value)"><div class="slider-label">S</div></div>
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-rel" min="0.01" max="4" step="0.01" oninput="updateActiveSynth('rel', this.value)"><div class="slider-label">R</div></div>
-                </div>
-            </div>
-        </div>
+		<!-- MULTI-ENVELOPE MODULE -->
+		<div class="synth-module env-module" style="flex: 1.5;">
+			<h3>MULTI-ENVELOPE</h3>
+			<div class="env-layout">
+				<div class="env-routing">
+					<div class="mod-selectors" style="flex-direction: column; align-items: flex-start;">
+						<label>
+							<input type="radio" name="activeEnv" value="pitchEnv" onchange="switchModView('env', this.value)"> 
+							<div class="mod-led led-pitch" id="ind-env-pitchEnv"></div> <span class="label-text">PITCH</span>
+						</label>
+						<label>
+							<input type="radio" name="activeEnv" value="filterEnv" onchange="switchModView('env', this.value)"> 
+							<div class="mod-led led-filter" id="ind-env-filterEnv"></div> <span class="label-text">FILTER</span>
+						</label>
+						<label>
+							<input type="radio" name="activeEnv" value="ampEnv" checked onchange="switchModView('env', this.value)"> 
+							<div class="mod-led led-amp" id="ind-env-ampEnv"></div> <span class="label-text">AMP</span>
+						</label>
+					</div>
+					<div class="knob-container"><div class="knob-track" data-param="amt" data-group="env" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
+				</div>
+				<div class="slider-group">
+					<div class="slider-col"><input type="range" class="v-slider" id="ui-env-atk" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'atk', this.value)"><div class="slider-label">A</div></div>
+					<div class="slider-col"><input type="range" class="v-slider" id="ui-env-dec" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'dec', this.value)"><div class="slider-label">D</div></div>
+					<div class="slider-col"><input type="range" class="v-slider" id="ui-env-sus" min="0" max="1" step="0.01" oninput="updateNestedSynth('env', 'sus', this.value)"><div class="slider-label">S</div></div>
+					<div class="slider-col"><input type="range" class="v-slider" id="ui-env-rel" min="0.01" max="4" step="0.01" oninput="updateNestedSynth('env', 'rel', this.value)"><div class="slider-label">R</div></div>
+				</div>
+			</div>
+		</div>
     </div>
 </div>
 
