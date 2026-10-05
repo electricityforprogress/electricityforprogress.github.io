@@ -147,13 +147,13 @@
             </div>
 		</div>
 
-        <!-- LFO MODULE -->
+       <!-- LFO MODULE -->
 		<div class="synth-module lfo-module">
 			<h3>LFO</h3>
 			<div class="mod-selectors lfo-selectors">
-				<label><input type="radio" name="activeLfo" value="pitchLfo" checked onchange="switchModView('lfo', this.value)"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span class="label-text">P</span></label>
-				<label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value)"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span class="label-text">F</span></label>
-				<label><input type="radio" name="activeLfo" value="ampLfo" onchange="switchModView('lfo', this.value)"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span class="label-text">A</span></label>
+				<label><input type="radio" name="activeLfo" value="pitchLfo" checked onchange="switchModView('lfo', this.value)"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span class="label-text">PITCH</span></label>
+				<label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value)"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span class="label-text">FILTER</span></label>
+				<label><input type="radio" name="activeLfo" value="ampLfo" onchange="switchModView('lfo', this.value)"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span class="label-text">AMP</span></label>
 			</div>
 			<select id="ui-lfo-shape" class="routing-select compact lfo-shape" onchange="updateNestedSynth('lfo', 'shape', this.value)">
 				<option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Tri</option><option value="sawtooth">Up</option><option value="rampdown">Down</option><option value="random">S&H</option>
@@ -168,14 +168,14 @@
 		<div class="synth-module env-module">
 			<h3>ENVELOPE</h3>
 			<div class="env-layout">
-                <!-- Col 1: Spaced Selectors -->
-                <div class="env-selectors">
+                <!-- Col 1: Selectors (Added mod-selectors back to hide radios) -->
+                <div class="mod-selectors env-selectors">
                     <label><input type="radio" name="activeEnv" value="pitchEnv" onchange="switchModView('env', this.value)"><div class="mod-led led-pitch" id="ind-env-pitchEnv"></div> <span class="label-text">PITCH</span></label>
                     <label><input type="radio" name="activeEnv" value="filterEnv" onchange="switchModView('env', this.value)"><div class="mod-led led-filter" id="ind-env-filterEnv"></div> <span class="label-text">FILTER</span></label>
                     <label><input type="radio" name="activeEnv" value="ampEnv" checked onchange="switchModView('env', this.value)"><div class="mod-led led-amp" id="ind-env-ampEnv"></div> <span class="label-text">AMP</span></label>
                 </div>
                 
-                <!-- Col 2: Centered Amount Knob -->
+                <!-- Col 2: Amount Knob -->
                 <div class="env-amount">
                     <div class="knob-container"><div class="knob-track" data-param="amt" data-group="env" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
                 </div>
