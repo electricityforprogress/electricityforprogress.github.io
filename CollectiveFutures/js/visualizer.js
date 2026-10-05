@@ -1,11 +1,5 @@
 /**
  * js/visualizer.js
- * 
- * Drives the Canvas rendering loop.
- * FUTURE ENHANCEMENT: As we implement more elaborate charts/graphs and handle
- * new densities of information, you might consider migrating this Canvas logic to 
- * WebGL (via Three.js/Pixi.js) or a dedicated charting library (like Chart.js/D3)
- * if timescale zooming and panning are required.
  */
 
 let sCtxs = [], rCtxs = [];
@@ -49,7 +43,6 @@ function resize() {
 
 let lastBeatCount = 0;
 
-
 function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
@@ -86,11 +79,10 @@ function renderLoop() {
             else if (config.shape === 'triangle') bright = phase < 0.5 ? phase * 2 : 2 - (phase * 2);
             else if (config.shape === 'sawtooth') bright = phase;
             else if (config.shape === 'rampdown') bright = 1 - phase;
-            else if (config.shape === 'random') bright = Math.random(); // Visual fallback for S&H
+            else if (config.shape === 'random') bright = Math.random(); 
 
             const ledEl = document.getElementById(lfo.id);
             if (ledEl) {
-                // Dim pulse (0.25) to preview rate, brightens (0.9) when applied
                 const intensity = config.depth > 0 ? 0.9 : 0.25; 
                 ledEl.style.opacity = 0.1 + (bright * intensity);
             }
@@ -107,7 +99,7 @@ function renderLoop() {
             if (lfoParam.shape === 'random') {
                 if (nowMs - ch.shState[dest] > (1000 / lfoParam.rate)) {
                     ch.shState[dest] = nowMs;
-                    const shVal = (Math.random() * 2) - 1; // -1.0 to 1.0
+                    const shVal = (Math.random() * 2) - 1; 
                     
                     if (dest === 'pitch') { 
                         ch.voices.forEach(v => { 
