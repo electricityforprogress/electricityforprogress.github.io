@@ -8,6 +8,51 @@
  * are ready to be attached to the new "preset pop box" HTML modal when built.
  */
 
+function buildMixerAndMidiUI() {
+    // 1. Build MIDI Out Selectors
+    for (let i = 0; i < 4; i++) {
+        const select = document.getElementById(`ui-midi-ch-${i}`);
+        if(select) {
+            for (let ch = 0; ch < 16; ch++) {
+                let opt = document.createElement('option');
+                opt.value = ch; opt.text = `MIDI CH ${ch + 1}`;
+                if (ch === i) opt.selected = true; // Default mapping
+                select.appendChild(opt);
+            }
+        }
+    }
+
+    // 2. Build Mixer Strips
+    const mixerContent = document.getElementById('mixer-dropdown-content');
+    if (!mixerContent) return;
+    
+    let html = '';
+    for(let i=0; i<4; i++) {
+        html += `
+        <div class="strip">
+            <div class="strip-label" style="color: hsl(${i*90}, 100%, 60%)">CH ${i+1}</div>
+            <div class="strip-controls">
+                <div class="slider-col"><input type="range" class="v-slider" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
+                <canvas class="vu ch-vu" id="vu-${i}" width="12" height="100"></canvas>
+            </div>
+            <button class="danger" id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.innerText = synthChannels[${i}].params.muted ? 'MUTED' : 'M'; this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : ''; this.style.color = synthChannels[${i}].params.muted ? '#000' : '';" style="padding: 2px 6px; font-size: 0.7em;">M</button>
+        </div>`;
+    }
+    html += `
+        <div class="strip master">
+            <div class="strip-label" style="color: var(--cyan)">MASTER</div>
+            <div class="strip-controls">
+                <div class="slider-col"><input type="range" id="master-vol-slider" class="v-slider" min="0" max="1" step="0.01" value="1.0" oninput="masterGain.gain.value = this.value"></div>
+                <canvas class="vu master-vu-vert" id="vu-master-v" width="12" height="100"></canvas>
+            </div>
+        </div>`;
+    mixerContent.innerHTML = html;
+}
+
+function updateMidiChannel(synthCh, midiCh) {
+    if (synthChannels[synthCh]) synthChannels[synthCh].params.midiOutCh = parseInt(midiCh);
+}
+
 function toggleMasterMute() {
     isMasterMuted = !isMasterMuted;
     masterGain.gain.value = isMasterMuted ? 0 : 1.0;
@@ -108,7 +153,12 @@ function savePreset() {
     ensureSynths();
     const name = prompt("Enter a name for this global preset:");
     if (!name || name.trim() === "") return;
-    const presetData = synthChannels.map(ch => JSON.parse(JSON.stringify(ch.params)));
+    
+    const presetData = {
+        channels: synthChannels.map(ch => JSON.parse(JSON.stringify(ch.params))),
+        master: { vol: masterGain.gain.value, muted: isMasterMuted }
+    };
+    
     globalPresets[name] = presetData;
     localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
     updatePresetDropdown();
@@ -119,12 +169,29 @@ function loadPreset(name) {
     if (!name || !globalPresets[name]) return;
     ensureSynths();
     const presetData = globalPresets[name];
+    
+    // Backwards compatibility if old preset was just an array
+    const channelData = presetData.channels || presetData; 
+    
     for (let i = 0; i < 4; i++) {
-        if (presetData[i] && synthChannels[i]) {
-            synthChannels[i].params = JSON.parse(JSON.stringify(presetData[i]));
+        if (channelData[i] && synthChannels[i]) {
+            synthChannels[i].params = JSON.parse(JSON.stringify(channelData[i]));
             synthChannels[i].applyParams();
+            
+            // Sync specific mixer/midi UI
+            let midiSel = document.getElementById(`ui-midi-ch-${i}`);
+            if (midiSel) midiSel.value = synthChannels[i].params.midiOutCh;
         }
     }
+    
+    // Apply Master
+    if (presetData.master) {
+        masterGain.gain.value = presetData.master.vol;
+        isMasterMuted = presetData.master.muted;
+        document.getElementById('master-vol-slider').value = presetData.master.vol;
+        // Trigger UI updates for master mute button visually here if needed
+    }
+    
     syncUI();
 }
 
