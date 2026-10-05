@@ -20,12 +20,10 @@ function ensureSynths() {
 
 window.onload = () => { 
     initVisualizer();
-    
-    // Build the synth UI immediately on load so the Connect button doesn't shift
+    initCustomWaves(); // Generate buffers BEFORE building synths
     ensureSynths(); 
-    
     initPiano(); 
-    syncPianoUI();
+    syncPianoUI(); 
     loadPresetsFromStorage();
     
     // Kick off the global render loop
