@@ -73,6 +73,25 @@ let lastBeatCount = 0;
 function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
+
+    // Update Channel VUs & calculate Master Peak
+    let masterPeak = 0;
+    for (let i = 0; i < 4; i++) {
+        if (synthChannels[i]) {
+            synthChannels[i].analyser.getFloatTimeDomainData(synthChannels[i].vuData);
+            let peak = 0;
+            for (let j = 0; j < synthChannels[i].vuData.length; j++) {
+                let abs = Math.abs(synthChannels[i].vuData[j]);
+                if (abs > peak) peak = abs;
+            }
+            
+            // Gravity falloff
+            synthChannels[i].vuLevel = synthChannels[i].vuLevel ? Math.max(peak, synthChannels[i].vuLevel - 0.04) : peak;
+            masterPeak = Math.max(masterPeak, synthChannels[i].vuLevel);
+            
+            drawSegmentedVU(document.getElementById(`vu-${i}`), Math.min(1.0, synthChannels[i].vuLevel * 1.5), false);
+        }
+    }
     
     if (synthChannels[activeSynthIndex]) {
         const p = synthChannels[activeSynthIndex].params;
