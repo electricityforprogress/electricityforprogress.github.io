@@ -181,19 +181,24 @@ select { background: var(--bg); color: var(--text); border: 1px solid var(--bord
 .lfo-selectors { margin-bottom: 8px; gap: 8px; }
 .lfo-shape { max-width: 80px; margin: 0 auto 10px auto; display: block; }
 
-/* Envelope Module (Tighter constraints) */
-.env-module { flex: 1.2; max-width: 360px; min-width: 320px; }
-.env-layout { display: flex; justify-content: center; align-items: center; width: 100%; height: 110px; gap: 15px; }
+/* Envelope Module (Tighter constraints & Vertical Alignment) */
+.env-module { flex: 1.2; max-width: 360px; min-width: 320px; display: flex; flex-direction: column; }
 
-/* Col 1: PFA Selectors vertically stacked */
-.env-selectors { display: flex; flex-direction: column; justify-content: space-evenly; height: 90px; align-items: flex-start; margin: 0; }
+/* Flex: 1 allows the layout to fill the stretched module and perfectly center items vertically */
+.env-layout { display: flex; justify-content: center; align-items: center; width: 100%; flex: 1; gap: 15px; min-height: 110px; }
+
+/* Col 1: PFA Selectors vertically stacked and centered */
+.env-selectors { display: flex; flex-direction: column; justify-content: center; gap: 12px; align-items: flex-start; margin: 0; }
 .env-selectors label { margin: 0; font-size: 0.65em; }
 
 /* Col 2: Amount Knob Wrapper */
-.env-amount { display: flex; align-items: center; justify-content: center; height: 100%; margin: 0 5px; }
+.env-amount { display: flex; align-items: center; justify-content: center; }
 
-/* Col 3: ADSR Sliders - Locked width to keep them near */
-.env-module .slider-group { display: flex; justify-content: space-between; flex: 0 1 auto; width: 140px; margin-top: 0; padding-top: 15px; gap: 15px; }
+/* Col 3: ADSR Sliders - Removed padding/margins that pushed them off-center */
+.env-module .slider-group { display: flex; justify-content: space-between; align-items: center; flex: 0 1 auto; width: 140px; height: 100px; margin: 0; padding: 0; gap: 15px; }
+
+/* Pulls the ADSR text up slightly so it aligns better with the Amount knob label */
+.env-module .slider-label { bottom: -5px; }
 
 /* Knob & UI Element Styles */
 .knob-container { display: inline-block; margin: 0 5px 10px 5px; text-align: center; vertical-align: top; }
