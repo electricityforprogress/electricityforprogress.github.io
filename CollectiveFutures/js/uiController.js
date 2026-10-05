@@ -1,112 +1,310 @@
-/* FUTURE ENHANCEMENT: Modify these variables to experiment with the new color palette */
-:root { 
-    --bg: #0d1117; 
-    --panel: #161b22; 
-    --cyan: #00f0ff; 
-    --red: #ff0055; 
-    --green: #39ff14; 
-    --text: #c9d1d9; 
-    --border: #30363d; 
-    --knob-bg: #21262d; 
-    /* Modulation Routing Colors */
-    --mod-pitch: #ff0055;  /* Red */
-    --mod-filter: #39ff14; /* Green */
-    --mod-amp: #00f0ff;    /* Cyan */
+/**
+ * js/uiController.js
+ * 
+ * Handles DOM interactions, rendering synth panels, routing knobs/sliders,
+ * and preset functionality.
+ * 
+ * FUTURE ENHANCEMENT: The preset functions below (savePreset, loadPreset, etc.)
+ * are ready to be attached to the new "preset pop box" HTML modal when built.
+ */
+
+function toggleMasterMute() {
+    isMasterMuted = !isMasterMuted;
+    masterGain.gain.value = isMasterMuted ? 0 : 1.0;
+    const btn = document.getElementById('btn-master-mute');
+    // FUTURE ENHANCEMENT: Mute button state changes to 'LOGGING ACTIVE' to support upcoming background data tasks
+    btn.innerText = isMasterMuted ? 'AUDIO MUTED (LOGGING ACTIVE)' : 'MUTE ALL AUDIO';
+    btn.style.backgroundColor = isMasterMuted ? 'var(--red)' : 'var(--border)';
+    btn.style.color = isMasterMuted ? 'var(--bg)' : 'var(--text)';
 }
 
-body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
+let tapTimes = [];
+function tapTempo() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const now = performance.now();
+    tapTimes.push(now);
+    if (tapTimes.length > 4) tapTimes.shift();
+    if (tapTimes.length >= 2) {
+        let intervals = [];
+        for(let i=1; i<tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i-1]);
+        let avg = intervals.reduce((a,b)=>a+b)/intervals.length;
+        let newBpm = 60000 / avg;
+        if(newBpm >= 60 && newBpm <= 240) { updateActiveSynth('bpm', newBpm); syncUI(); }
+    }
+    document.getElementById('ui-bpm-led').classList.add('active');
+    setTimeout(() => document.getElementById('ui-bpm-led').classList.remove('active'), 50);
+}
 
-/* FUTURE ENHANCEMENT: Toolbar will shrink when Presets are moved to a pop-box */
-.toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; }
-.control-group { display: flex; gap: 10px; align-items: center; }
-.preset-group { font-size:0.9em; border-left:1px solid var(--border); padding-left:15px; display: flex; align-items: center; gap: 10px; }
+function initPiano() {
+    const p = document.getElementById('piano-keys'); p.innerHTML = '';
+    const whiteKeys = [0, 2, 4, 5, 7, 9, 11], blackKeys = [1, 3, null, 6, 8, 10]; 
+    whiteKeys.forEach(noteIdx => { let k = document.createElement('div'); k.className = 'key-w active'; k.id = `pkey-${noteIdx}`; k.onclick = () => togglePianoKey(noteIdx); p.appendChild(k); });
+    blackKeys.forEach((noteIdx, i) => { if (noteIdx !== null) { let k = document.createElement('div'); k.className = 'key-b active'; k.id = `pkey-${noteIdx}`; k.style.left = `${(i + 1) * 14.28}%`; k.onclick = () => togglePianoKey(noteIdx); p.appendChild(k); } });
+}
 
-button { background: var(--border); color: var(--text); border: 1px solid var(--cyan); padding: 6px 12px; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 3px; transition: 0.2s; }
-button:hover { background: var(--cyan); color: var(--bg); }
-button.danger { border-color: var(--red); color: var(--red); }
-button.danger:hover { background: var(--red); color: var(--bg); }
-select { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px; font-family: inherit; }
+function togglePianoKey(noteIdx) {
+    if(!synthChannels[activeSynthIndex]) return;
+    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
+    document.getElementById('ui-scaleType').value = 'custom'; updateActiveSynth('scaleType', 'custom'); syncPianoUI();
+}
 
-.status-offline { color:var(--red); font-size:0.9em; font-weight:bold; margin-right:15px; }
+function applyScalePreset() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    if (p.scaleType === 'custom') return; 
+    p.activeScaleBits.fill(false); SCALES[p.scaleType].forEach(deg => { p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; });
+    syncPianoUI();
+}
 
-.synth-inspector { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; display: none; }
-.synth-tabs { display: flex; border-bottom: 1px solid var(--border); background: #000; }
-.synth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; }
-.synth-tab.active { background: var(--panel); color: var(--cyan); border-bottom: 2px solid var(--cyan); }
+function syncPianoUI() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
+    for(let i=0; i<12; i++) { let k = document.getElementById(`pkey-${i}`); if(k) k.classList.toggle('active', bits[i]); }
+}
 
-.led { width: 12px; height: 12px; border-radius: 50%; background: #222; box-shadow: inset 0px 2px 4px rgba(0,0,0,0.8); }
-.led.active { background: var(--cyan); box-shadow: 0 0 10px var(--cyan), inset 0px 1px 2px rgba(255,255,255,0.8); }
-.lfo-led { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); margin-left: 8px; opacity: 0.1; box-shadow: 0 0 8px var(--cyan); }
-.digital-display { background: #000; color: var(--red); font-family: monospace; font-size: 1.2em; padding: 4px 8px; border: 1px solid #333; border-radius: 2px; text-align: center; margin-right:15px; }
+function selectTab(index) { activeSynthIndex = index; document.querySelectorAll('.synth-tab').forEach((t, i) => t.classList.toggle('active', i === index)); syncUI(); }
+function triggerLED(index) { const led = document.getElementById(`led-${index}`); if (led) { led.classList.add('active'); setTimeout(() => led.classList.remove('active'), 100); } }
+function setVolume(ch, val) { if (synthChannels[ch]) synthChannels[ch].setVolume(val); }
+function toggleMute(ch) { if (synthChannels[ch]) synthChannels[ch].toggleMute(); }
 
-/* FUTURE ENHANCEMENT: UI Styling experiments will target these module classes */
-.synth-controls { display: flex; flex-wrap: wrap; padding: 15px; gap: 15px; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); }
-.synth-module { border: 1px solid var(--border); padding: 15px; border-radius: 4px; background: #0a0d12; flex: 1; min-width: 140px; text-align: center; display:flex; flex-direction: column; justify-content: space-between; }
-.synth-module h3 { margin: 0 0 15px 0; font-size: 0.85em; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; text-transform: uppercase; }
+function updateActiveSynth(param, value) {
+    if (!synthChannels[activeSynthIndex]) return;
+    synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+    if (param === 'bpm') document.getElementById('ui-bpm-display').innerText = Math.round(value).toString().padStart(3, '0');
+    synthChannels[activeSynthIndex].applyParams();
+}
 
-.module-row { display:flex; justify-content:space-around; align-items:center; gap: 15px; }
-.clock-module { flex: 1; }
-.scale-module { flex: 1.8; }
-.osc-module { flex: 1.2; }
-.env-module { flex: 1.5; }
-.env-layout { display:flex; justify-content:space-between; align-items:center; }
-.env-routing { width:40%; }
-.lfo-header { display:flex; justify-content:center; align-items:center; }
+function initKnobs() {
+    document.querySelectorAll('.knob-track').forEach(knob => {
+        let isDragging = false, startY = 0, startVal = 0;
+        const updateDial = (val) => {
+            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+            let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
+            knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+        };
+        updateDial(parseFloat(knob.dataset.val));
+        knob.addEventListener('mousedown', (e) => { isDragging = true; startY = e.clientY; startVal = parseFloat(knob.dataset.val); e.preventDefault(); });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+            let deltaY = startY - e.clientY, newVal;
+            if (isLog) {
+                let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
+                pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
+                newVal = Math.exp(Math.log(min) + pct * (Math.log(max) - Math.log(min)));
+            } else { newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); }
+            knob.dataset.val = newVal; updateDial(newVal); updateActiveSynth(knob.dataset.param, newVal);
+        });
+        window.addEventListener('mouseup', () => isDragging = false);
+    });
+}
 
-/* Knob & UI Element Styles */
-.knob-container { display: inline-block; margin: 0 5px 10px 5px; text-align: center; vertical-align: top; }
-.knob-track { width: 40px; height: 40px; border-radius: 50%; background: var(--knob-bg); border: 2px solid var(--border); position: relative; margin: 0 auto 5px auto; cursor: ns-resize; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
-.knob-dial { width: 100%; height: 100%; position: absolute; transform: rotate(-135deg); pointer-events: none; }
-.knob-indicator { width: 4px; height: 12px; background: var(--cyan); margin: 2px auto 0 auto; border-radius: 2px; }
-.knob-label { font-size: 0.7em; color: #888; text-transform: uppercase; font-weight:bold; line-height:1.2; }
-.knob-label span { font-size:0.7em; color:#555; }
+function syncUI() {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    ['ui-scaleRoot', 'ui-scaleType', 'ui-mode', 'ui-wave', 'ui-lfo-shape', 'ui-lfo-dest', 'ui-adsr-dest', 'ui-atk', 'ui-dec', 'ui-sus', 'ui-rel'].forEach(id => { 
+        let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; 
+    });
+    document.getElementById('ui-bpm-display').innerText = Math.round(p.bpm).toString().padStart(3, '0');
+    document.querySelectorAll('.synth-inspector .knob-track').forEach(knob => {
+        const param = knob.dataset.param; knob.dataset.val = p[param];
+        const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+        let pct = isLog ? (Math.log(p[param]) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (p[param] - min) / (max - min);
+        knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+    });
+    syncPianoUI();
+}
 
-.slider-group { display: flex; justify-content: space-evenly; height: 120px; align-items: flex-start; padding-top:10px; width:55%; }
-.slider-col { position: relative; width: 20px; height: 100%; }
-.v-slider { -webkit-appearance: none; position: absolute; width: 100px; height: 4px; background: var(--border); top: 45px; left: -40px; transform: rotate(-90deg); outline: none; cursor: pointer; }
-.v-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 20px; background: var(--text); border-radius: 2px; }
-.slider-label { position: absolute; bottom: 0; width: 100%; text-align: center; font-size: 0.75em; color: #888; font-weight: bold; }
-.routing-select { width: 100%; margin-bottom: 10px; background: var(--knob-bg); color: var(--text); font-size: 0.75em; border: 1px solid var(--border); padding: 4px; }
+// --- Preset Management (Ready to hook into new Pop-box Modal) ---
+function loadPresetsFromStorage() {
+    try {
+        const stored = localStorage.getItem('biodataPresets');
+        if (stored) globalPresets = JSON.parse(stored);
+        else globalPresets = {};
+    } catch(e) { console.error("Error loading presets", e); }
+    updatePresetDropdown();
+}
 
-.tap-container { text-align:center; margin-right:10px; }
+function updatePresetDropdown() {
+    const select = document.getElementById('preset-select');
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Select --</option>';
+    Object.keys(globalPresets).forEach(name => {
+        let opt = document.createElement('option');
+        opt.value = name; opt.text = name; select.appendChild(opt);
+    });
+    select.value = globalPresets[currentVal] ? currentVal : "";
+}
 
-.tap-btn { font-size:0.65em; padding:4px 8px; }
-.tap-container .led { margin: 0 auto 10px auto; }
-.scale-selects { flex:1; }
-.select-row { display:flex; gap:5px; margin-bottom: 10px; }
-.piano-section { flex:1.5; }
+function savePreset() {
+    ensureSynths();
+    const name = prompt("Enter a name for this global preset:");
+    if (!name || name.trim() === "") return;
+    const presetData = synthChannels.map(ch => JSON.parse(JSON.stringify(ch.params)));
+    globalPresets[name] = presetData;
+    localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+    updatePresetDropdown();
+    document.getElementById('preset-select').value = name;
+}
 
-/* Piano Keys */
-.piano-wrapper { position: relative; width: 100%; height: 75px; display: flex; margin-bottom: 5px; }
-.key-w { flex: 1; background: #eee; border: 1px solid #999; border-radius: 0 0 3px 3px; cursor: pointer; position: relative; z-index: 1; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2); }
-.key-w.active { background: var(--cyan); box-shadow: inset 0 0 15px rgba(0,0,0,0.3); border-color: #0099aa; }
-.key-b { position: absolute; width: 9%; height: 60%; background: #222; border-radius: 0 0 2px 2px; cursor: pointer; z-index: 2; margin-left: -4.5%; box-shadow: inset 0 -2px 3px rgba(255,255,255,0.2), 2px 2px 5px rgba(0,0,0,0.8); }
-.key-b.active { background: var(--cyan); filter: brightness(0.7); border: 1px solid #000; box-shadow: 0 0 10px var(--cyan); }
-.custom-scale-label { text-align:right; font-size:0.7em; color:#666; }
+function loadPreset(name) {
+    if (!name || !globalPresets[name]) return;
+    ensureSynths();
+    const presetData = globalPresets[name];
+    for (let i = 0; i < 4; i++) {
+        if (presetData[i] && synthChannels[i]) {
+            synthChannels[i].params = JSON.parse(JSON.stringify(presetData[i]));
+            synthChannels[i].applyParams();
+        }
+    }
+    syncUI();
+}
 
-/* Scopes & Dashboard */
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
-.card { background: var(--panel); border: 1px solid var(--border); padding: 10px; border-radius: 4px; display: flex; flex-direction: column;}
-.card-header { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 10px; align-items: center;}
-.ch-title { font-weight: bold; font-size: 1.1em; }
-canvas { width: 100%; background: #000; border: 1px solid var(--border); margin-bottom: 10px; border-radius: 2px; }
-.scope { height: 80px; }
-.roll { height: 120px; flex-grow: 1;}
+function exportPresets() {
+    if (Object.keys(globalPresets).length === 0) { alert("No presets to export."); return; }
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(globalPresets, null, 2));
+    const downloadNode = document.createElement('a');
+    downloadNode.setAttribute("href", dataStr);
+    downloadNode.setAttribute("download", "biodata_presets.json");
+    document.body.appendChild(downloadNode); downloadNode.click(); downloadNode.remove();
+}
 
-/* Mod Selectors & LEDs */
-.mod-selectors { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
-.mod-selectors label { display: flex; align-items: center; gap: 5px; font-size: 0.7em; cursor: pointer; color: #888; font-weight: bold; }
-.mod-selectors input[type="radio"] { display: none; }
-.mod-selectors input[type="radio"]:checked + label { color: var(--text); }
+function importPresets(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const imported = JSON.parse(e.target.result);
+            if (typeof imported === 'object' && imported !== null) {
+                globalPresets = { ...globalPresets, ...imported };
+                localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+                updatePresetDropdown();
+                alert("Presets imported successfully!");
+            } else alert("Invalid preset file format.");
+        } catch(err) { alert("Error parsing preset file."); }
+        event.target.value = "";
+    };
+    reader.readAsText(file);
+}
 
-.mod-led { width: 10px; height: 10px; border-radius: 50%; opacity: 0.1; transition: opacity 0.2s; box-shadow: inset 0px 1px 2px rgba(255,255,255,0.4); }
-.led-pitch { background: var(--mod-pitch); box-shadow: 0 0 8px var(--mod-pitch); }
-.led-filter { background: var(--mod-filter); box-shadow: 0 0 8px var(--mod-filter); }
-.led-amp { background: var(--mod-amp); box-shadow: 0 0 8px var(--mod-amp); }
+// --- Context UI State ---
+let activeLfoView = 'pitchLfo';
+let activeEnvView = 'ampEnv';
 
-/* Highlight the active label text based on destination */
-input[value="pitchLfo"]:checked ~ .label-text, input[value="pitchEnv"]:checked ~ .label-text { color: var(--mod-pitch); }
-input[value="filterLfo"]:checked ~ .label-text, input[value="filterEnv"]:checked ~ .label-text { color: var(--mod-filter); }
-input[value="ampLfo"]:checked ~ .label-text, input[value="ampEnv"]:checked ~ .label-text { color: var(--mod-amp); }
+function switchModView(type, targetView) {
+    if (type === 'lfo') activeLfoView = targetView;
+    if (type === 'env') activeEnvView = targetView;
+    syncUI(); // Re-render sliders and knobs to match the selected destination
+}
 
-@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+function updateNestedSynth(group, param, value) {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    let targetObj = (group === 'lfo') ? p[activeLfoView] : p[activeEnvView];
+    
+    targetObj[param] = isNaN(value) ? value : parseFloat(value);
+    synthChannels[activeSynthIndex].applyParams();
+    updateModLEDs(); // Instantly visually update the LED amounts
+}
+
+// --- Dynamic Knobs ---
+function initKnobs() {
+    document.querySelectorAll('.knob-track').forEach(knob => {
+        let isDragging = false, startY = 0, startVal = 0;
+        const updateDial = (val) => {
+            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+            let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
+            knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+        };
+        updateDial(parseFloat(knob.dataset.val));
+        knob.addEventListener('mousedown', (e) => { isDragging = true; startY = e.clientY; startVal = parseFloat(knob.dataset.val); e.preventDefault(); });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+            let deltaY = startY - e.clientY, newVal;
+            if (isLog) {
+                let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
+                pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
+                newVal = Math.exp(Math.log(min) + pct * (Math.log(max) - Math.log(min)));
+            } else { newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); }
+            
+            knob.dataset.val = newVal; 
+            updateDial(newVal); 
+            
+            // Route data to the correct param level
+            const group = knob.dataset.group;
+            if (group) {
+                updateNestedSynth(group, knob.dataset.param, newVal);
+            } else {
+                updateActiveSynth(knob.dataset.param, newVal);
+            }
+        });
+        window.addEventListener('mouseup', () => isDragging = false);
+    });
+}
+
+function syncUI() {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    
+    // Sync Standard Selects
+    ['ui-scaleRoot', 'ui-scaleType', 'ui-mode'].forEach(id => { 
+        let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; 
+    });
+    
+    // Sync LFO and ENV Selects/Sliders mapped to current view
+    document.getElementById('ui-lfo-shape').value = p[activeLfoView].shape;
+    ['atk', 'dec', 'sus', 'rel'].forEach(id => {
+        let el = document.getElementById(`ui-env-${id}`);
+        if(el) el.value = p[activeEnvView][id];
+    });
+
+    document.getElementById('ui-bpm-display').innerText = Math.round(p.bpm).toString().padStart(3, '0');
+    
+    // Sync Context-Aware Knobs
+    document.querySelectorAll('.synth-inspector .knob-track').forEach(knob => {
+        const param = knob.dataset.param; 
+        const group = knob.dataset.group;
+        let val;
+        
+        if (group === 'lfo') val = p[activeLfoView][param];
+        else if (group === 'env') val = p[activeEnvView][param];
+        else val = p[param]; // Root level fallback (cutoff, res, bpm, etc.)
+
+        knob.dataset.val = val;
+        const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+        let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
+        knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+    });
+    
+    syncPianoUI();
+    updateModLEDs();
+}
+
+// Visual feedback for non-selected destinations
+function updateModLEDs() {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    
+    const setLed = (id, val, maxVal = 1.0) => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = 0.1 + (0.9 * (val / maxVal));
+    };
+
+    // LFO LEDs are now animated dynamically in visualizer.js
+    // We only need to statically update the Envelope amount LEDs here
+    setLed('ind-env-pitchEnv', p.pitchEnv.amt);
+    setLed('ind-env-filterEnv', p.filterEnv.amt);
+    setLed('ind-env-ampEnv', p.ampEnv.amt);
+}
+
+// --- Deleting Presets ---
+function clearAllPresets() {
+    if(confirm("Are you sure you want to delete all saved presets? This cannot be undone.")) {
+        localStorage.removeItem('biodataPresets');
+        globalPresets = {};
+        updatePresetDropdown();
+        alert("All presets have been cleared.");
+    }
+}
