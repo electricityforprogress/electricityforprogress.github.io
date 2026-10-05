@@ -201,11 +201,23 @@ function switchModView(type, targetView) {
 function updateNestedSynth(group, param, value) {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
-    let targetObj = (group === 'lfo') ? p[activeLfoView] : p[activeEnvView];
     
-    targetObj[param] = isNaN(value) ? value : parseFloat(value);
+    let targetObj;
+    if (group === 'lfo') targetObj = p[activeLfoView];
+    else if (group === 'env') targetObj = p[activeEnvView];
+    else if (group === 'filter') targetObj = p.filter;
+    else if (group === 'sources') targetObj = p.sources;
+    
+    // Handle deep dot notation (e.g., 'osc1.type' or 'sub.level')
+    if (param.includes('.')) {
+        const keys = param.split('.');
+        targetObj[keys[0]][keys[1]] = isNaN(value) ? value : parseFloat(value);
+    } else {
+        targetObj[param] = isNaN(value) ? value : parseFloat(value);
+    }
+    
     synthChannels[activeSynthIndex].applyParams();
-    updateModLEDs(); // Instantly visually update the LED amounts
+    updateModLEDs(); 
 }
 
 // --- Dynamic Knobs ---
@@ -244,7 +256,7 @@ function initKnobs() {
     });
 }
 
-function syncUI() {
+function function syncUI() {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
     
@@ -252,6 +264,10 @@ function syncUI() {
     ['ui-scaleRoot', 'ui-scaleType', 'ui-mode'].forEach(id => { 
         let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; 
     });
+    
+    // Sync Wave selector to the new modular architecture
+    const waveEl = document.getElementById('ui-wave');
+    if(waveEl) waveEl.value = p.sources.osc1.type;
     
     // Sync LFO and ENV Selects/Sliders mapped to current view
     document.getElementById('ui-lfo-shape').value = p[activeLfoView].shape;
@@ -270,7 +286,12 @@ function syncUI() {
         
         if (group === 'lfo') val = p[activeLfoView][param];
         else if (group === 'env') val = p[activeEnvView][param];
-        else val = p[param]; // Root level fallback (cutoff, res, bpm, etc.)
+        else if (group === 'filter') val = p.filter[param];
+        else if (group === 'sources') {
+            const keys = param.split('.');
+            val = p.sources[keys[0]][keys[1]];
+        }
+        else val = p[param]; // Root level fallback
 
         knob.dataset.val = val;
         const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
