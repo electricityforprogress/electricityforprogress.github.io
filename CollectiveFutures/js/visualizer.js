@@ -126,7 +126,7 @@ function renderLoop() {
             let pts = buf.map((b, idx) => ({ x: idx * (sw / (buf.length - 1)), y: sh - ((b.g - min) / range * (sh * 0.8)) - (sh * 0.1), e: b.evt, n: b.n }));
             pts.forEach(p => { if(p.e === 1) { sCtx.strokeStyle = `hsla(${(p.n % 12) * 30}, 100%, 50%, 0.7)`; sCtx.lineWidth = 1; sCtx.beginPath(); sCtx.moveTo(p.x, 0); sCtx.lineTo(p.x, sh); sCtx.stroke(); } });
             sCtx.strokeStyle = '#39ff14'; sCtx.lineWidth = 2; sCtx.beginPath(); sCtx.moveTo(pts[0].x, pts[0].y);
-            for (let j = 0; j < pts.length - 1; j++) sCtx.lineTo(pts[j].x, pts[j].y); sCtx.stroke();
+            for (let j = 1; j < pts.length; j++) sCtx.lineTo(pts[j].x, pts[j].y); sCtx.stroke();
         }
         
         rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
