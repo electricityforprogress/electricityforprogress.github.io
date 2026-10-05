@@ -69,7 +69,9 @@ select { background: var(--bg); color: var(--text); border: 1px solid var(--bord
 .routing-select { width: 100%; margin-bottom: 10px; background: var(--knob-bg); color: var(--text); font-size: 0.75em; border: 1px solid var(--border); padding: 4px; }
 
 .tap-container { text-align:center; margin-right:10px; }
+
 .tap-btn { font-size:0.65em; padding:4px 8px; }
+.tap-container .led { margin: 0 auto 10px auto; }
 .scale-selects { flex:1; }
 .select-row { display:flex; gap:5px; margin-bottom: 10px; }
 .piano-section { flex:1.5; }
