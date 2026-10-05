@@ -28,6 +28,35 @@ function initVisualizer() {
     resize();
 }
 
+function drawSegmentedVU(canvas, level, isHorizontal = false) {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const numSegments = isHorizontal ? 20 : 15;
+    const gap = 1;
+    
+    for (let i = 0; i < numSegments; i++) {
+        const threshold = (i + 1) / numSegments;
+        const isOn = level >= (i / numSegments);
+        
+        let color = '#39ff14'; // Green
+        if (threshold > 0.7) color = '#ffff00'; // Yellow
+        if (threshold > 0.9) color = '#ff0055'; // Red
+        
+        ctx.fillStyle = isOn ? color : '#111'; // #111 is unlit background LED
+        
+        if (isHorizontal) {
+            let w = (canvas.width / numSegments) - gap;
+            ctx.fillRect(i * (w + gap), 0, w, canvas.height);
+        } else {
+            let h = (canvas.height / numSegments) - gap;
+            let y = canvas.height - ((i + 1) * (h + gap));
+            ctx.fillRect(0, y, canvas.width, h);
+        }
+    }
+}
+
 function resize() { 
     for(let i=0; i<4; i++) { 
         if(sCtxs[i] && rCtxs[i]) {
