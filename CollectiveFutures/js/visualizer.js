@@ -11,10 +11,6 @@ function initVisualizer() {
         <div class="card">
             <div class="card-header">
                 <span class="ch-title" style="color:hsl(${i*90}, 100%, 60%)">CHANNEL ${i+1}</span>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button id="mute-btn-${i}" onclick="toggleMute(${i})" style="padding: 2px 6px; font-size: 0.7em; margin-left:10px;">MUTE</button>
-                    <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setVolume(${i}, this.value)" style="width: 50px;">
-                </div>
             </div>
             <canvas class="scope" id="scope-${i}"></canvas>
             <canvas class="roll" id="roll-${i}"></canvas>
