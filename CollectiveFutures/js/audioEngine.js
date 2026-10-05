@@ -287,7 +287,7 @@ class PolyChannel {
     
     play(pitch, velocity, durationMs) {
         if (this.muted) return;
-        const now = audioCtx.currentTime;
+        cconst now = audioCtx.currentTime + 0.015;
         const freq = 440 * Math.pow(2, (pitch - 69) / 12);
         
         // Voice Allocation
