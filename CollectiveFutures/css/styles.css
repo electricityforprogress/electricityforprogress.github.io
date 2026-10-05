@@ -86,8 +86,8 @@ body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font
     
     /* 2. Masks the animated background using your cleaned SVG */
     /* Update this URL if your SVG is in a subfolder like 'img/eforp-logo.svg' */
-    -webkit-mask: url('eforp-logo.svg') no-repeat center / contain;
-    mask: url('eforp-logo.svg') no-repeat center / contain;
+    -webkit-mask: url('./eforp-logo.svg') no-repeat center / contain;
+    mask: url('./eforp-logo.svg') no-repeat center / contain;
 }
 
 .right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
