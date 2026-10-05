@@ -23,20 +23,32 @@ function applyPitchMods(chIndex, rawPitch) { /* ... (Keep your original applyPit
 // --- 1. MODULATION & ENVELOPES ---
 
 class EnvelopeGen {
-    /** Helper to apply ADSR to an AudioParam based on its destination type */
     static apply(param, now, stopTime, envConfig, type, peakVal, baseVal = 0) {
         const { atk, dec, sus, rel, amt } = envConfig;
-        const silenceFloor = 0.00001; // Avoid 0 for exponential ramps
+        const silenceFloor = 0.00001; 
         
         param.cancelScheduledValues(now);
 
         if (type === 'amp') {
+            // --- ATTACK & DECAY ---
             param.setValueAtTime(silenceFloor, now);
             param.exponentialRampToValueAtTime(Math.max(peakVal * amt, 0.01), now + atk);
             param.setTargetAtTime(Math.max(peakVal * amt * sus, silenceFloor), now + atk, dec / 3);
             
+            // --- RELEASE ---
             param.cancelScheduledValues(stopTime); 
-            param.setTargetAtTime(silenceFloor, stopTime, rel / 3);
+            
+            // Smoothly grab whatever the current volume is if the note is cut off early
+            if (typeof param.cancelAndHoldAtTime === 'function') {
+                param.cancelAndHoldAtTime(stopTime);
+            }
+
+            // Exponentially drop to the near-silent floor
+            param.exponentialRampToValueAtTime(silenceFloor, stopTime + rel);
+            
+            // THE DRONE KILLER: Force the VCA to absolute mathematical zero right after 
+            // the release finishes to completely silence the voice.
+            param.linearRampToValueAtTime(0, stopTime + rel + 0.01); 
         } 
         else if (type === 'filter') {
             const targetCutoff = baseVal + (5000 * amt); 
@@ -45,6 +57,7 @@ class EnvelopeGen {
             param.setTargetAtTime(baseVal + ((targetCutoff - baseVal) * sus), now + atk, dec / 3);
             
             param.cancelScheduledValues(stopTime);
+            if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(stopTime);
             param.setTargetAtTime(baseVal, stopTime, rel / 3);
         } 
         else if (type === 'pitch') {
@@ -54,6 +67,7 @@ class EnvelopeGen {
             param.setTargetAtTime(detunePeak * sus, now + atk, dec / 3);
             
             param.cancelScheduledValues(stopTime);
+            if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(stopTime);
             param.setTargetAtTime(0, stopTime, rel / 3);
         }
     }
