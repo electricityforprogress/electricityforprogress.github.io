@@ -24,6 +24,7 @@ window.onload = () => {
     ensureSynths(); 
     initPiano(); 
     syncPianoUI(); 
+    buildMixerAndMidiUI();
     loadPresetsFromStorage();
     
     // Kick off the global render loop
