@@ -19,7 +19,50 @@ body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font
 /* Toolbar & Branding */
 .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 10px 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; position: relative; z-index: 100; }
 .brand-group { display: flex; align-items: center; gap: 10px; }
-.bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: -webkit-linear-gradient(45deg, #00f0ff, #39ff14); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.bio-brand { 
+    font-size: 1.4em; 
+    font-weight: bold; 
+    font-family: sans-serif; 
+    letter-spacing: -1px; 
+    
+    /* 
+       0-25%: The perfect resting Ice->Navy gradient
+       45-55%: The white light catching
+       75-100%: An identical resting Ice->Navy gradient to pause on
+    */
+    background: linear-gradient(
+        to right,
+        #c9ebff 0%,      /* Resting Ice start */
+        #001144 25%,     /* Resting Navy end */
+        
+        #c9ebff 45%,     /* Sweep approaching */
+        #ffffff 50%,     /* The bright center flash */
+        #001144 55%,     /* Sweep leaving */
+        
+        #c9ebff 75%,     /* Paused Ice start */
+        #001144 100%     /* Paused Navy end */
+    );
+    
+    /* Make the background 4x wider than the text so the resting frames fit perfectly */
+    background-size: 400% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    
+    /* 12 seconds total: Happens much less frequently */
+    animation: text-shimmer 12s ease-in-out infinite; 
+}
+
+@keyframes text-shimmer {
+    /* Rests on the left side (0%) which looks exactly like the original gradient */
+    0% { background-position: 0% center; }
+    
+    /* Takes 3 seconds (25% of 12s) to slide across smoothly, not instantly */
+    25% { background-position: 100% center; }
+    
+    /* Pauses on the right side (100%) for 9 seconds without a visual jump */
+    100% { background-position: 100% center; } 
+}
 .right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .status-offline { color: var(--red); margin-left: 5px; text-shadow: 0 0 5px var(--red); }
 
