@@ -56,27 +56,79 @@ function sendThresholdBLE(ch, val) {
 }
 
 function processBiodata(payload) {
-    // Check if the payload contains channel data
-    if(payload.ch) {
+    if (payload.ch) {
         payload.ch.forEach(p => {
             let i = p.c;
+            let rawPulse = p.p; 
+            let ch = chData[i];
             
-            // Map the new raw ESP32 pulse width directly 
-            let rawPulse = p.p;
+            // Get current channel settings
+            let pConfig = synthChannels[i] ? synthChannels[i].params : null;
+            if (!pConfig) return;
             
-            let finalPitch = p.n;
-            if (p.e === 1 && synthChannels[i]) {
-                let modifiedPitch = applyPitchMods(i, p.n);
-                if (modifiedPitch !== null) { 
-                    finalPitch = sendMidiNote(i, modifiedPitch, p.v, p.d);
-                    chData[i].notes.push({ n: finalPitch, t: Date.now(), dur: p.d, v: p.v });
+            // 1. Fill Analysis Block
+            ch.analysisBuffer.push(rawPulse);
+            
+            let finalPitch = null;
+            let isEvent = 0;
+
+            // 2. Block Analysis (Triggers only when array is full)
+            if (ch.analysisBuffer.length >= pConfig.sampleSize) {
+                let maxim = 0;
+                let minim = 1000000;
+                let averg = 0;
+                let stdevi = 0;
+                
+                for (let j = 0; j < ch.analysisBuffer.length; j++) {
+                    let val = ch.analysisBuffer[j];
+                    if (val > maxim) maxim = val;
+                    if (val < minim) minim = val;
+                    averg += val;
+                    stdevi += val * val; 
                 }
+                
+                averg = averg / pConfig.sampleSize;
+                
+                // Old Standard Deviation math
+                let variance = (stdevi / pConfig.sampleSize) - (averg * averg);
+                stdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
+                if (stdevi < 1.0) stdevi = 1.0;
+                
+                let delta = maxim - minim;
+                
+                // 3. Threshold Detection
+                if (delta > (stdevi * pConfig.threshold)) {
+                    let now = Date.now();
+                    if (now - ch.lastTrigger > 50) { // 50ms throttle
+                        
+                        let mapScale = (v, inMin, inMax, outMin, outMax) => (v - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+                        
+                        // Modulo mapping from older codebase
+                        let dur = 150 + mapScale(delta % 127, 0, 127, 100, 5500);
+                        let vel = mapScale(delta % 127, 0, 127, 80, 110);
+                        
+                        // Map averg%127 directly into the UI's Min/Max constraints
+                        let rawNote = mapScale(averg % 127, 0, 127, pConfig.minNote, pConfig.maxNote);
+                        
+                        // Apply Scale / Quantization 
+                        let modifiedPitch = applyPitchMods(i, rawNote);
+                        
+                        if (modifiedPitch !== null) {
+                            isEvent = 1;
+                            finalPitch = sendMidiNote(i, modifiedPitch, vel, dur);
+                            ch.notes.push({ n: finalPitch, t: now, dur: dur, v: vel });
+                        }
+                        ch.lastTrigger = now;
+                    }
+                }
+                
+                // 4. Reset Array for Next Sample Block
+                ch.analysisBuffer = [];
             }
             
-            chData[i].waveBuffer.push({ g: rawPulse, evt: p.e, n: finalPitch });
-            
-            // Buffer increased to 100 for higher speed telemetry smoothing
-            if (chData[i].waveBuffer.length > 100) chData[i].waveBuffer.shift();
+            // 5. Update Visualizer Pipeline
+            ch.waveBuffer.push({ g: rawPulse, evt: isEvent, n: finalPitch || p.n });
+            if (ch.waveBuffer.length > 100) ch.waveBuffer.shift();
         });
     }
 }
