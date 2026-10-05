@@ -187,3 +187,127 @@ function importPresets(event) {
     };
     reader.readAsText(file);
 }
+
+// --- Context UI State ---
+let activeLfoView = 'pitchLfo';
+let activeEnvView = 'ampEnv';
+
+function switchModView(type, targetView) {
+    if (type === 'lfo') activeLfoView = targetView;
+    if (type === 'env') activeEnvView = targetView;
+    syncUI(); // Re-render sliders and knobs to match the selected destination
+}
+
+function updateNestedSynth(group, param, value) {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    let targetObj = (group === 'lfo') ? p[activeLfoView] : p[activeEnvView];
+    
+    targetObj[param] = isNaN(value) ? value : parseFloat(value);
+    synthChannels[activeSynthIndex].applyParams();
+    updateModLEDs(); // Instantly visually update the LED amounts
+}
+
+// --- Dynamic Knobs ---
+function initKnobs() {
+    document.querySelectorAll('.knob-track').forEach(knob => {
+        let isDragging = false, startY = 0, startVal = 0;
+        const updateDial = (val) => {
+            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+            let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
+            knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+        };
+        updateDial(parseFloat(knob.dataset.val));
+        knob.addEventListener('mousedown', (e) => { isDragging = true; startY = e.clientY; startVal = parseFloat(knob.dataset.val); e.preventDefault(); });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+            let deltaY = startY - e.clientY, newVal;
+            if (isLog) {
+                let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
+                pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
+                newVal = Math.exp(Math.log(min) + pct * (Math.log(max) - Math.log(min)));
+            } else { newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); }
+            
+            knob.dataset.val = newVal; 
+            updateDial(newVal); 
+            
+            // Route data to the correct param level
+            const group = knob.dataset.group;
+            if (group) {
+                updateNestedSynth(group, knob.dataset.param, newVal);
+            } else {
+                updateActiveSynth(knob.dataset.param, newVal);
+            }
+        });
+        window.addEventListener('mouseup', () => isDragging = false);
+    });
+}
+
+function syncUI() {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    
+    // Sync Standard Selects
+    ['ui-scaleRoot', 'ui-scaleType', 'ui-mode'].forEach(id => { 
+        let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; 
+    });
+    
+    // Sync LFO and ENV Selects/Sliders mapped to current view
+    document.getElementById('ui-lfo-shape').value = p[activeLfoView].shape;
+    ['atk', 'dec', 'sus', 'rel'].forEach(id => {
+        let el = document.getElementById(`ui-env-${id}`);
+        if(el) el.value = p[activeEnvView][id];
+    });
+
+    document.getElementById('ui-bpm-display').innerText = Math.round(p.bpm).toString().padStart(3, '0');
+    
+    // Sync Context-Aware Knobs
+    document.querySelectorAll('.synth-inspector .knob-track').forEach(knob => {
+        const param = knob.dataset.param; 
+        const group = knob.dataset.group;
+        let val;
+        
+        if (group === 'lfo') val = p[activeLfoView][param];
+        else if (group === 'env') val = p[activeEnvView][param];
+        else val = p[param]; // Root level fallback (cutoff, res, bpm, etc.)
+
+        knob.dataset.val = val;
+        const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
+        let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
+        knob.querySelector('.knob-dial').style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+    });
+    
+    syncPianoUI();
+    updateModLEDs();
+}
+
+// Visual feedback for non-selected destinations
+function updateModLEDs() {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    
+    // Set LED opacities based on their 'amt' or 'depth'
+    const setLed = (id, val, maxVal = 1.0) => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = 0.1 + (0.9 * (val / maxVal));
+    };
+
+    setLed('ind-lfo-pitchLfo', p.pitchLfo.depth);
+    setLed('ind-lfo-filterLfo', p.filterLfo.depth);
+    setLed('ind-lfo-ampLfo', p.ampLfo.depth);
+    
+    setLed('ind-env-pitchEnv', p.pitchEnv.amt);
+    setLed('ind-env-filterEnv', p.filterEnv.amt);
+    setLed('ind-env-ampEnv', p.ampEnv.amt);
+}
+
+// --- Deleting Presets ---
+function clearAllPresets() {
+    if(confirm("Are you sure you want to delete all saved presets? This cannot be undone.")) {
+        localStorage.removeItem('biodataPresets');
+        globalPresets = {};
+        updatePresetDropdown();
+        alert("All presets have been cleared.");
+    }
+}
