@@ -195,6 +195,7 @@ class PolyChannel {
         this.params = {
             // Core logic
             bpm: 120, mode: 'poly', glide: 0.1,
+            threshold: 2.0, sampleSize: 32, 
             scaleRoot: '0', scaleType: 'pentatonic_minor', activeScaleBits: new Array(12).fill(true),
             minNote: 36, maxNote: 84, spread: 75, density: 100,
 
