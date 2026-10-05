@@ -8,6 +8,10 @@
     --text: #c9d1d9; 
     --border: #30363d; 
     --knob-bg: #21262d; 
+    /* Modulation Routing Colors */
+    --mod-pitch: #ff0055;  /* Red */
+    --mod-filter: #39ff14; /* Green */
+    --mod-amp: #00f0ff;    /* Cyan */
 }
 
 body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
@@ -86,5 +90,21 @@ select { background: var(--bg); color: var(--text); border: 1px solid var(--bord
 canvas { width: 100%; background: #000; border: 1px solid var(--border); margin-bottom: 10px; border-radius: 2px; }
 .scope { height: 80px; }
 .roll { height: 120px; flex-grow: 1;}
+
+/* Mod Selectors & LEDs */
+.mod-selectors { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
+.mod-selectors label { display: flex; align-items: center; gap: 5px; font-size: 0.7em; cursor: pointer; color: #888; font-weight: bold; }
+.mod-selectors input[type="radio"] { display: none; }
+.mod-selectors input[type="radio"]:checked + label { color: var(--text); }
+
+.mod-led { width: 10px; height: 10px; border-radius: 50%; opacity: 0.1; transition: opacity 0.2s; box-shadow: inset 0px 1px 2px rgba(255,255,255,0.4); }
+.led-pitch { background: var(--mod-pitch); box-shadow: 0 0 8px var(--mod-pitch); }
+.led-filter { background: var(--mod-filter); box-shadow: 0 0 8px var(--mod-filter); }
+.led-amp { background: var(--mod-amp); box-shadow: 0 0 8px var(--mod-amp); }
+
+/* Highlight the active label text based on destination */
+input[value="pitchLfo"]:checked ~ .label-text, input[value="pitchEnv"]:checked ~ .label-text { color: var(--mod-pitch); }
+input[value="filterLfo"]:checked ~ .label-text, input[value="filterEnv"]:checked ~ .label-text { color: var(--mod-filter); }
+input[value="ampLfo"]:checked ~ .label-text, input[value="ampEnv"]:checked ~ .label-text { color: var(--mod-amp); }
 
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
