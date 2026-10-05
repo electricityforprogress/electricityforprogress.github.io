@@ -49,7 +49,6 @@ function resize() {
 
 let lastBeatCount = 0;
 
-flet lastBeatCount = 0;
 
 function renderLoop() {
     const nowMs = performance.now();
