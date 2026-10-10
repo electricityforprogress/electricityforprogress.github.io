@@ -7,7 +7,6 @@ let sCtxs = [], rCtxs = [];
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
-    // Build everything as a single HTML string to prevent DOM overwriting errors
     let html = `
         <div style="grid-column: 1 / -1; display: flex; gap: 30px; background: #0a0d12; padding: 15px; border: 1px solid var(--border); border-radius: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
             <div style="color: var(--cyan); font-weight: bold; font-size: 1.1em; min-width: 120px;">SCOPE MENU</div>
@@ -28,7 +27,6 @@ function initVisualizer() {
         </div>
     `;
 
-    // Build the 4 Channel Cards
     for(let i=0; i<4; i++) {
         html += `
         <div class="card">
@@ -40,10 +38,8 @@ function initVisualizer() {
         </div>`;
     }
     
-    // Inject all at once
     dash.innerHTML = html;
 
-    // Attach listeners safely now that everything is guaranteed in the DOM
     document.getElementById('ui-timebase').addEventListener('input', (e) => {
         document.getElementById('ui-val-timebase').innerText = e.target.value + ' Samples';
     });
@@ -104,7 +100,6 @@ function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
 
-    // Bulletproof fetch of the live slider values
     const tbEl = document.getElementById('ui-timebase');
     const ydEl = document.getElementById('ui-ydepth');
     const targetTimebase = tbEl ? parseInt(tbEl.value) : 200;
@@ -188,21 +183,31 @@ function renderLoop() {
         });
     });
     
-    // Oscilloscope & Strip-Chart Rendering
     for(let i=0; i<4; i++) {
         if(!sCtxs[i]) continue;
-        
         let ch = chData[i];
         
-        // Jitter Buffer Drain
+        // --- CONSTANT VELOCITY JITTER BUFFER ---
         if (ch.renderQueue && ch.renderQueue.length > 0) {
-            let drainRate = Math.ceil(ch.renderQueue.length / 5);
-            for (let k = 0; k < drainRate; k++) {
+            if (typeof ch.drainAcc === 'undefined') { ch.drainAcc = 0; ch.drainVel = 1; ch.lastQ = 0; }
+            
+            // If the queue suddenly jumps in size, a new 100ms BLE chunk arrived.
+            // Calculate exactly how many samples to drip per visual frame to seamlessly empty it.
+            if (ch.renderQueue.length > ch.lastQ + 10) {
+                ch.drainVel = ch.renderQueue.length / 5.5; // ~90ms at 60fps
+            }
+            ch.lastQ = ch.renderQueue.length;
+            
+            ch.drainAcc += ch.drainVel;
+            let drainThisFrame = Math.floor(ch.drainAcc);
+            if (drainThisFrame > ch.renderQueue.length) drainThisFrame = ch.renderQueue.length;
+            
+            ch.drainAcc -= drainThisFrame;
+            for (let k = 0; k < drainThisFrame; k++) {
                 ch.waveBuffer.push(ch.renderQueue.shift());
             }
         }
         
-        // Enforce the user's Timebase (Zoom) limit
         while (ch.waveBuffer.length > targetTimebase) {
             ch.waveBuffer.shift();
         }
@@ -220,7 +225,6 @@ function renderLoop() {
             
             let range = max - min || 1;
             
-            // Apply User's Y-Axis Depth Override to stop micro-bouncing
             if (targetDepth > 0 && range < targetDepth) {
                 let center = min + (range / 2);
                 min = center - (targetDepth / 2);
@@ -228,7 +232,6 @@ function renderLoop() {
                 range = targetDepth;
             }
             
-            // 10% padding so the waveform doesn't touch the top/bottom pixels
             let paddedMin = min - (range * 0.1);
             let paddedRange = range * 1.2;
             
