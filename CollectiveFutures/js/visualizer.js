@@ -81,7 +81,6 @@ function renderLoop() {
                 if (abs > peak) peak = abs;
             }
             
-            // Gravity falloff
             synthChannels[i].vuLevel = synthChannels[i].vuLevel ? Math.max(peak, synthChannels[i].vuLevel - 0.04) : peak;
             masterPeak = Math.max(masterPeak, synthChannels[i].vuLevel);
             
@@ -156,7 +155,7 @@ function renderLoop() {
         });
     });
     
-    // Data Visualization Scopes
+    // Data Visualization Scopes (High-Efficiency Rendering)
     for(let i=0; i<4; i++) {
         if(!sCtxs[i]) continue;
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
@@ -164,11 +163,40 @@ function renderLoop() {
         let buf = chData[i].waveBuffer;
         
         if(buf.length > 1) {
-            let min = Math.min(...buf.map(b => b.g)), max = Math.max(...buf.map(b => b.g)), range = max - min || 1;
-            let pts = buf.map((b, idx) => ({ x: idx * (sw / (buf.length - 1)), y: sh - ((b.g - min) / range * (sh * 0.8)) - (sh * 0.1), e: b.evt, n: b.n }));
-            pts.forEach(p => { if(p.e === 1) { sCtx.strokeStyle = `hsla(${(p.n % 12) * 30}, 100%, 50%, 0.7)`; sCtx.lineWidth = 1; sCtx.beginPath(); sCtx.moveTo(p.x, 0); sCtx.lineTo(p.x, sh); sCtx.stroke(); } });
-            sCtx.strokeStyle = '#39ff14'; sCtx.lineWidth = 2; sCtx.beginPath(); sCtx.moveTo(pts[0].x, pts[0].y);
-            for (let j = 1; j < pts.length; j++) sCtx.lineTo(pts[j].x, pts[j].y); sCtx.stroke();
+            // Optimized Min/Max loop prevents memory garbage collection spikes
+            let min = 1000000, max = 0;
+            for(let j=0; j<buf.length; j++) {
+                if (buf[j].g < min) min = buf[j].g;
+                if (buf[j].g > max) max = buf[j].g;
+            }
+            let range = max - min || 1;
+            
+            sCtx.strokeStyle = '#39ff14'; 
+            sCtx.lineWidth = 2; 
+            sCtx.beginPath();
+            
+            for(let j=0; j<buf.length; j++) {
+                let x = j * (sw / (buf.length - 1));
+                let y = sh - ((buf[j].g - min) / range * (sh * 0.8)) - (sh * 0.1);
+                
+                // Draw event trigger spikes behind the waveform
+                if(buf[j].evt === 1 && buf[j].n) {
+                    sCtx.save();
+                    sCtx.strokeStyle = `hsla(${(buf[j].n % 12) * 30}, 100%, 50%, 0.7)`;
+                    sCtx.lineWidth = 1;
+                    sCtx.beginPath();
+                    sCtx.moveTo(x, 0);
+                    sCtx.lineTo(x, sh);
+                    sCtx.stroke();
+                    sCtx.restore();
+                    sCtx.beginPath(); // Resume main wave path
+                    sCtx.moveTo(x, y);
+                } else {
+                    if (j === 0) sCtx.moveTo(x, y);
+                    else sCtx.lineTo(x, y);
+                }
+            }
+            sCtx.stroke();
         }
         
         rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
