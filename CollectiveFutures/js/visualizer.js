@@ -170,7 +170,7 @@ function renderLoop() {
             let drainRate = Math.ceil(ch.renderQueue.length / 5);
             for (let k = 0; k < drainRate; k++) {
                 ch.waveBuffer.push(ch.renderQueue.shift());
-                if (ch.waveBuffer.length > 100) ch.waveBuffer.shift();
+                if (ch.waveBuffer.length > 600) ch.waveBuffer.shift();
             }
         }
         // ---------------------------------------
