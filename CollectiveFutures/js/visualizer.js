@@ -160,7 +160,7 @@ function renderLoop() {
         });
     });
     
-    // Data Visualization Scopes (High-Efficiency Rendering)
+// Data Visualization Scopes (High-Efficiency Rendering)
     for(let i=0; i<4; i++) {
         if(!sCtxs[i]) continue;
         
@@ -175,9 +175,6 @@ function renderLoop() {
         }
         // ---------------------------------------
 
-        let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
-        sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
-        let buf = chData[i].waveBuffer;
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
         sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
         let buf = chData[i].waveBuffer;
