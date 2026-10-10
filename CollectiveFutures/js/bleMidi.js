@@ -126,8 +126,8 @@ function processBiodata(payload) {
             
             ch.waveBuffer.push({ g: rawPulse, evt: isEvent, n: finalPitch });
             
-            // Expanded to 600 points (about half a second of history) so the wave is readable
-            if (ch.waveBuffer.length > 600) ch.waveBuffer.shift(); 
+            if (!ch.renderQueue) ch.renderQueue = [];
+            ch.renderQueue.push({ g: rawPulse, evt: isEvent, n: finalPitch });
         });
     }
 }
