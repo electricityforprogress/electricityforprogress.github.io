@@ -163,6 +163,21 @@ function renderLoop() {
     // Data Visualization Scopes (High-Efficiency Rendering)
     for(let i=0; i<4; i++) {
         if(!sCtxs[i]) continue;
+        
+        let ch = chData[i];
+        if (ch.renderQueue && ch.renderQueue.length > 0) {
+            // Drain ~20% of the queue per frame. Smooths bursts perfectly into 60fps.
+            let drainRate = Math.ceil(ch.renderQueue.length / 5);
+            for (let k = 0; k < drainRate; k++) {
+                ch.waveBuffer.push(ch.renderQueue.shift());
+                if (ch.waveBuffer.length > 600) ch.waveBuffer.shift();
+            }
+        }
+        // ---------------------------------------
+
+        let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
+        sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
+        let buf = chData[i].waveBuffer;
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
         sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
         let buf = chData[i].waveBuffer;
