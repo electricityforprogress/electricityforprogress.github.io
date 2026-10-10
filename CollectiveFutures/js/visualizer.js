@@ -70,13 +70,12 @@ function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
 
-    // Update Channel VUs & calculate Master Peak
     let masterPeak = 0;
     for (let i = 0; i < 4; i++) {
         if (synthChannels[i]) {
             let peak = 0;
             
-            // CRITICAL FIX: Only attempt to read audio data if the DSP analyser exists
+            // Safety check for DSP Analyser
             if (synthChannels[i].analyser && synthChannels[i].vuData) {
                 synthChannels[i].analyser.getFloatTimeDomainData(synthChannels[i].vuData);
                 for (let j = 0; j < synthChannels[i].vuData.length; j++) {
@@ -85,7 +84,6 @@ function renderLoop() {
                 }
             }
             
-            // Gravity falloff
             synthChannels[i].vuLevel = synthChannels[i].vuLevel ? Math.max(peak, synthChannels[i].vuLevel - 0.04) : peak;
             masterPeak = Math.max(masterPeak, synthChannels[i].vuLevel);
             
@@ -96,7 +94,6 @@ function renderLoop() {
     if (synthChannels[activeSynthIndex]) {
         const p = synthChannels[activeSynthIndex].params;
         
-        // BPM Flasher
         const msPerBeat = 60000 / p.bpm;
         const currentBeatCount = Math.floor(nowMs / msPerBeat);
         if (currentBeatCount !== lastBeatCount) {
@@ -108,7 +105,6 @@ function renderLoop() {
             }
         }
 
-        // Free-Running Multi-LFO LED Feedback
         const lfos = [
             { key: 'pitchLfo', id: 'ind-lfo-pitchLfo' },
             { key: 'filterLfo', id: 'ind-lfo-filterLfo' },
@@ -135,7 +131,6 @@ function renderLoop() {
         });
     }
 
-    // Modular S&H LFO Processing
     synthChannels.forEach(ch => {
         if(!ch.shState) ch.shState = { pitch: 0, filter: 0, amp: 0 };
         const p = ch.params;
@@ -160,27 +155,27 @@ function renderLoop() {
         });
     });
     
-// Data Visualization Scopes (High-Efficiency Rendering)
+    // Data Visualization Scopes 
     for(let i=0; i<4; i++) {
         if(!sCtxs[i]) continue;
         
         let ch = chData[i];
+        
+        // Jitter Buffer Drain: Smoothly feeds the 100ms BLE chunks into the 60fps canvas
         if (ch.renderQueue && ch.renderQueue.length > 0) {
-            // Drain ~20% of the queue per frame. Smooths bursts perfectly into 60fps.
             let drainRate = Math.ceil(ch.renderQueue.length / 5);
             for (let k = 0; k < drainRate; k++) {
                 ch.waveBuffer.push(ch.renderQueue.shift());
+                // Limits the width of the chart to 100 points for a real-time oscilloscope feel
                 if (ch.waveBuffer.length > 100) ch.waveBuffer.shift();
             }
         }
-        // ---------------------------------------
 
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
         sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
-        let buf = chData[i].waveBuffer;
+        let buf = ch.waveBuffer;
         
         if(buf.length > 1) {
-            // Optimized Min/Max loop prevents memory garbage collection spikes
             let min = 1000000, max = 0;
             for(let j=0; j<buf.length; j++) {
                 if (buf[j].g < min) min = buf[j].g;
@@ -196,7 +191,6 @@ function renderLoop() {
                 let x = j * (sw / (buf.length - 1));
                 let y = sh - ((buf[j].g - min) / range * (sh * 0.8)) - (sh * 0.1);
                 
-                // Draw event trigger spikes behind the waveform
                 if(buf[j].evt === 1 && buf[j].n) {
                     sCtx.save();
                     sCtx.strokeStyle = `hsla(${(buf[j].n % 12) * 30}, 100%, 50%, 0.7)`;
@@ -220,8 +214,8 @@ function renderLoop() {
         rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
         for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
         
-        chData[i].notes = chData[i].notes.filter(n => Date.now() - n.t < 4000);
-        chData[i].notes.forEach(note => {
+        ch.notes = ch.notes.filter(n => Date.now() - n.t < 4000);
+        ch.notes.forEach(note => {
             rCtx.fillStyle = `hsla(${(note.n % 12) * 30}, 100%, 50%, ${Math.max(0.3, note.v / 127)})`; 
             rCtx.fillRect(rw - ((Date.now() - note.t) / 4000 * rw) - ((note.dur / 4000) * rw), Math.max(0, rh - ((note.n / 127) * rh) - 4), ((note.dur / 4000) * rw), 8); 
         });
