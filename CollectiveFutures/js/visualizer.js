@@ -40,7 +40,7 @@ function drawSegmentedVU(canvas, level, isHorizontal = false) {
         if (threshold > 0.7) color = '#ffff00'; // Yellow
         if (threshold > 0.9) color = '#ff0055'; // Red
         
-        ctx.fillStyle = isOn ? color : '#111'; // #111 is unlit background LED
+        ctx.fillStyle = isOn ? color : '#111'; 
         
         if (isHorizontal) {
             let w = (canvas.width / numSegments) - gap;
@@ -74,13 +74,18 @@ function renderLoop() {
     let masterPeak = 0;
     for (let i = 0; i < 4; i++) {
         if (synthChannels[i]) {
-            synthChannels[i].analyser.getFloatTimeDomainData(synthChannels[i].vuData);
             let peak = 0;
-            for (let j = 0; j < synthChannels[i].vuData.length; j++) {
-                let abs = Math.abs(synthChannels[i].vuData[j]);
-                if (abs > peak) peak = abs;
+            
+            // CRITICAL FIX: Only attempt to read audio data if the DSP analyser exists
+            if (synthChannels[i].analyser && synthChannels[i].vuData) {
+                synthChannels[i].analyser.getFloatTimeDomainData(synthChannels[i].vuData);
+                for (let j = 0; j < synthChannels[i].vuData.length; j++) {
+                    let abs = Math.abs(synthChannels[i].vuData[j]);
+                    if (abs > peak) peak = abs;
+                }
             }
             
+            // Gravity falloff
             synthChannels[i].vuLevel = synthChannels[i].vuLevel ? Math.max(peak, synthChannels[i].vuLevel - 0.04) : peak;
             masterPeak = Math.max(masterPeak, synthChannels[i].vuLevel);
             
@@ -144,12 +149,12 @@ function renderLoop() {
                     
                     if (dest === 'pitch') { 
                         ch.voices.forEach(v => { 
-                            v.sources.osc1.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
-                            v.sources.sub.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
+                            if(v.sources.osc1.detuneNode) v.sources.osc1.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
+                            if(v.sources.sub.detuneNode) v.sources.sub.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
                         }); 
                     } 
                     else if (dest === 'filter') { ch.voices.forEach(v => v.vcf.detune.setTargetAtTime(shVal * lfoParam.depth * 2000, nowAudio, 0.02)); } 
-                    else if (dest === 'amp') { ch.ampLfoNode.gain.setTargetAtTime(1.0 + (shVal * lfoParam.depth), nowAudio, 0.02); }
+                    else if (dest === 'amp') { if(ch.ampLfoNode) ch.ampLfoNode.gain.setTargetAtTime(1.0 + (shVal * lfoParam.depth), nowAudio, 0.02); }
                 }
             }
         });
@@ -189,7 +194,7 @@ function renderLoop() {
                     sCtx.lineTo(x, sh);
                     sCtx.stroke();
                     sCtx.restore();
-                    sCtx.beginPath(); // Resume main wave path
+                    sCtx.beginPath(); 
                     sCtx.moveTo(x, y);
                 } else {
                     if (j === 0) sCtx.moveTo(x, y);
