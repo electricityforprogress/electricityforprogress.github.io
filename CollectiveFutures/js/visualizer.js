@@ -7,31 +7,30 @@ let sCtxs = [], rCtxs = [];
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
-    // Inject the new Scope Menu directly above the grid
-    let scopeMenu = document.createElement('div');
-    scopeMenu.style.cssText = "grid-column: 1 / -1; display: flex; gap: 30px; background: #0a0d12; padding: 15px; border: 1px solid var(--border); border-radius: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;";
-    scopeMenu.innerHTML = `
-        <div style="color: var(--cyan); font-weight: bold; font-size: 1.1em; min-width: 120px;">SCOPE MENU</div>
-        <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
-                <span>SPEED / TIMEBASE (X-AXIS)</span>
-                <span id="ui-val-timebase" style="color: var(--text);">200 Samples</span>
+    // Build everything as a single HTML string to prevent DOM overwriting errors
+    let html = `
+        <div style="grid-column: 1 / -1; display: flex; gap: 30px; background: #0a0d12; padding: 15px; border: 1px solid var(--border); border-radius: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
+            <div style="color: var(--cyan); font-weight: bold; font-size: 1.1em; min-width: 120px;">SCOPE MENU</div>
+            <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
+                    <span>SPEED / TIMEBASE (X-AXIS)</span>
+                    <span id="ui-val-timebase" style="color: var(--text);">200 Samples</span>
+                </div>
+                <input type="range" id="ui-timebase" min="20" max="1000" value="200" style="width: 100%; cursor: pointer;">
             </div>
-            <input type="range" id="ui-timebase" min="20" max="1000" value="200" style="width: 100%; cursor: pointer;">
-        </div>
-        <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
-                <span>DEPTH / ZOOM (Y-AXIS)</span>
-                <span id="ui-val-ydepth" style="color: var(--text);">Auto-Fit</span>
+            <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
+                    <span>DEPTH / ZOOM (Y-AXIS)</span>
+                    <span id="ui-val-ydepth" style="color: var(--text);">Auto-Fit</span>
+                </div>
+                <input type="range" id="ui-ydepth" min="0" max="5000" step="50" value="0" style="width: 100%; cursor: pointer;">
             </div>
-            <input type="range" id="ui-ydepth" min="0" max="5000" step="50" value="0" style="width: 100%; cursor: pointer;">
         </div>
     `;
-    dash.appendChild(scopeMenu);
 
     // Build the 4 Channel Cards
     for(let i=0; i<4; i++) {
-        dash.innerHTML += `
+        html += `
         <div class="card">
             <div class="card-header">
                 <span class="ch-title" style="color:hsl(${i*90}, 100%, 60%)">CHANNEL ${i+1}</span>
@@ -40,8 +39,11 @@ function initVisualizer() {
             <canvas class="roll" id="roll-${i}"></canvas>
         </div>`;
     }
+    
+    // Inject all at once
+    dash.innerHTML = html;
 
-    // Attach listeners to update the UI text labels dynamically
+    // Attach listeners safely now that everything is guaranteed in the DOM
     document.getElementById('ui-timebase').addEventListener('input', (e) => {
         document.getElementById('ui-val-timebase').innerText = e.target.value + ' Samples';
     });
@@ -102,9 +104,11 @@ function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
 
-    // Fetch the live slider values from the DOM
-    const targetTimebase = parseInt(document.getElementById('ui-timebase').value);
-    const targetDepth = parseInt(document.getElementById('ui-ydepth').value);
+    // Bulletproof fetch of the live slider values
+    const tbEl = document.getElementById('ui-timebase');
+    const ydEl = document.getElementById('ui-ydepth');
+    const targetTimebase = tbEl ? parseInt(tbEl.value) : 200;
+    const targetDepth = ydEl ? parseInt(ydEl.value) : 0;
 
     let masterPeak = 0;
     for (let i = 0; i < 4; i++) {
@@ -163,4 +167,108 @@ function renderLoop() {
     }
 
     synthChannels.forEach(ch => {
-        if(!ch.shState) ch.
+        if(!ch.shState) ch.shState = { pitch: 0, filter: 0, amp: 0 };
+        const p = ch.params;
+        ['pitch', 'filter', 'amp'].forEach(dest => {
+            const lfoParam = p[`${dest}Lfo`];
+            if (lfoParam.shape === 'random') {
+                if (nowMs - ch.shState[dest] > (1000 / lfoParam.rate)) {
+                    ch.shState[dest] = nowMs;
+                    const shVal = (Math.random() * 2) - 1; 
+                    if (dest === 'pitch') { 
+                        ch.voices.forEach(v => { 
+                            if(v.sources.osc1.detuneNode) v.sources.osc1.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
+                            if(v.sources.sub.detuneNode) v.sources.sub.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); 
+                        }); 
+                    } 
+                    else if (dest === 'filter') { ch.voices.forEach(v => v.vcf.detune.setTargetAtTime(shVal * lfoParam.depth * 2000, nowAudio, 0.02)); } 
+                    else if (dest === 'amp') { if(ch.ampLfoNode) ch.ampLfoNode.gain.setTargetAtTime(1.0 + (shVal * lfoParam.depth), nowAudio, 0.02); }
+                }
+            }
+        });
+    });
+    
+    // Oscilloscope & Strip-Chart Rendering
+    for(let i=0; i<4; i++) {
+        if(!sCtxs[i]) continue;
+        
+        let ch = chData[i];
+        
+        // Jitter Buffer Drain
+        if (ch.renderQueue && ch.renderQueue.length > 0) {
+            let drainRate = Math.ceil(ch.renderQueue.length / 5);
+            for (let k = 0; k < drainRate; k++) {
+                ch.waveBuffer.push(ch.renderQueue.shift());
+            }
+        }
+        
+        // Enforce the user's Timebase (Zoom) limit
+        while (ch.waveBuffer.length > targetTimebase) {
+            ch.waveBuffer.shift();
+        }
+
+        let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
+        sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
+        let buf = ch.waveBuffer;
+        
+        if(buf.length > 1) {
+            let min = 1000000, max = 0;
+            for(let j=0; j<buf.length; j++) {
+                if (buf[j].g < min) min = buf[j].g;
+                if (buf[j].g > max) max = buf[j].g;
+            }
+            
+            let range = max - min || 1;
+            
+            // Apply User's Y-Axis Depth Override to stop micro-bouncing
+            if (targetDepth > 0 && range < targetDepth) {
+                let center = min + (range / 2);
+                min = center - (targetDepth / 2);
+                max = center + (targetDepth / 2);
+                range = targetDepth;
+            }
+            
+            // 10% padding so the waveform doesn't touch the top/bottom pixels
+            let paddedMin = min - (range * 0.1);
+            let paddedRange = range * 1.2;
+            
+            sCtx.strokeStyle = '#39ff14'; 
+            sCtx.lineWidth = 2; 
+            sCtx.beginPath();
+            
+            for(let j=0; j<buf.length; j++) {
+                let x = j * (sw / (targetTimebase - 1));
+                let y = sh - ((buf[j].g - paddedMin) / paddedRange * sh);
+                
+                if(buf[j].evt === 1 && buf[j].n) {
+                    sCtx.save();
+                    sCtx.strokeStyle = `hsla(${(buf[j].n % 12) * 30}, 100%, 50%, 0.7)`;
+                    sCtx.lineWidth = 1;
+                    sCtx.beginPath();
+                    sCtx.moveTo(x, 0);
+                    sCtx.lineTo(x, sh);
+                    sCtx.stroke();
+                    sCtx.restore();
+                    sCtx.beginPath(); 
+                    sCtx.moveTo(x, y);
+                } else {
+                    if (j === 0) sCtx.moveTo(x, y);
+                    else sCtx.lineTo(x, y);
+                }
+            }
+            sCtx.stroke();
+        }
+        
+        rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
+        rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
+        for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
+        
+        ch.notes = ch.notes.filter(n => Date.now() - n.t < 4000);
+        ch.notes.forEach(note => {
+            rCtx.fillStyle = `hsla(${(note.n % 12) * 30}, 100%, 50%, ${Math.max(0.3, note.v / 127)})`; 
+            rCtx.fillRect(rw - ((Date.now() - note.t) / 4000 * rw) - ((note.dur / 4000) * rw), Math.max(0, rh - ((note.n / 127) * rh) - 4), ((note.dur / 4000) * rw), 8); 
+        });
+    }
+    
+    requestAnimationFrame(renderLoop);
+}
