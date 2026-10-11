@@ -13,21 +13,16 @@ let isSynthHidden = false; // Persistent state for the toggle button
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
-    // Inject a strict CSS stylesheet to enforce the 2x2 grid and prevent Canvas resizing bugs
+    // Strict CSS to enforce the 2x2 grid and prevent Canvas resizing feedback loops
     if (!document.getElementById('biodata-grid-styles')) {
         const style = document.createElement('style');
         style.id = 'biodata-grid-styles';
         style.innerHTML = `
             #biodata-visualizer-workspace {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: repeat(2, 1fr); /* Strictly forces 2x2 layout */
                 gap: 15px;
                 width: 100%;
-            }
-            @media (max-width: 800px) {
-                #biodata-visualizer-workspace {
-                    grid-template-columns: 1fr;
-                }
             }
             .canvas-wrapper {
                 position: relative;
@@ -54,7 +49,6 @@ function initVisualizer() {
         if(!chData[i]) chData[i] = { waveBuffer: [], renderQueue: [], notes: [], acc: {}, history: [] };
         chData[i].config = { zoom: 250, smooth: 0.05, freeze: false };
         
-        // Wrapped canvases in strict aspect boxes to prevent layout thrashing
         html += `
         <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px; border: 1px solid var(--border); border-radius: 4px; min-width: 0;">
             
@@ -112,7 +106,8 @@ function initVisualizer() {
             isSynthHidden = !isSynthHidden;
             
             synthPanels.forEach(panel => {
-                panel.style.display = isSynthHidden ? 'none' : '';
+                // Hard override to 'block' guarantees it becomes visible again
+                panel.style.display = isSynthHidden ? 'none' : 'block';
             });
             
             e.target.style.opacity = isSynthHidden ? '0.5' : '1.0';
@@ -127,13 +122,17 @@ function initVisualizer() {
     resize();
 }
 
+// Rock-solid resize function: measures the parent wrapper, not the canvas itself
 function resize() { 
     for(let i=0; i<4; i++) { 
         if(sCtxs[i] && rCtxs[i]) {
-            sCtxs[i].canvas.width = sCtxs[i].canvas.clientWidth; 
-            sCtxs[i].canvas.height = sCtxs[i].canvas.clientHeight; 
-            rCtxs[i].canvas.width = rCtxs[i].canvas.clientWidth; 
-            rCtxs[i].canvas.height = rCtxs[i].canvas.clientHeight; 
+            let sWrap = sCtxs[i].canvas.parentElement;
+            sCtxs[i].canvas.width = sWrap.clientWidth; 
+            sCtxs[i].canvas.height = sWrap.clientHeight; 
+            
+            let rWrap = rCtxs[i].canvas.parentElement;
+            rCtxs[i].canvas.width = rWrap.clientWidth; 
+            rCtxs[i].canvas.height = rWrap.clientHeight; 
         }
     } 
 }
