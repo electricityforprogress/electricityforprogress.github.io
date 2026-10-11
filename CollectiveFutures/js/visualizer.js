@@ -7,11 +7,9 @@ let sCtxs = [], rCtxs = [];
 
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
-    
-    // Nuke the external CSS class that was forcing the 1-column collapse too early
     dash.className = ''; 
     
-    // Enforce 2x2 layout on desktop, snap to 1 column on phones (< 768px)
+    // Inject responsive CSS
     if (!document.getElementById('biodata-grid-styles')) {
         const style = document.createElement('style');
         style.id = 'biodata-grid-styles';
@@ -22,11 +20,6 @@ function initVisualizer() {
                 gap: 15px !important;
                 width: 100% !important;
                 padding-bottom: 20px;
-            }
-            @media (max-width: 768px) {
-                #dashboard {
-                    grid-template-columns: 1fr !important;
-                }
             }
             .canvas-wrapper {
                 position: relative;
@@ -40,9 +33,23 @@ function initVisualizer() {
                 position: absolute;
                 top: 0; left: 0; width: 100%; height: 100%;
             }
-            /* Bulletproof UI hiding class */
             .ui-hidden {
                 display: none !important;
+            }
+            
+            /* MOBILE SPECIFIC LAYOUT (< 900px width) */
+            @media (max-width: 900px) {
+                #dashboard {
+                    grid-template-columns: 1fr !important; /* Stack into 1 global column */
+                }
+                .split-hud {
+                    flex-direction: column !important; /* Stack Roll and HUD vertically inside cards */
+                    height: auto !important;
+                }
+                .split-hud .canvas-wrapper {
+                    max-width: 100% !important;
+                    height: 100px !important;
+                }
             }
         `;
         document.head.appendChild(style);
@@ -77,7 +84,7 @@ function initVisualizer() {
                 <canvas class="scope" id="scope-${i}"></canvas>
             </div>
             
-            <div style="display: flex; gap: 15px; height: 130px; min-width: 0;">
+            <div class="split-hud" style="display: flex; gap: 15px; height: 130px; min-width: 0;">
                 <div class="canvas-wrapper" style="flex: 1; max-width: 50%; height: 100%;">
                     <canvas class="roll" id="roll-${i}"></canvas>
                 </div>
@@ -106,7 +113,6 @@ function initVisualizer() {
     resize();
 }
 
-// Global touch-safe function for Android/Mobile
 window.toggleSynthUI = function() {
     const synthPanel = document.getElementById('synth-inspector');
     const synthToggleBtn = document.getElementById('toggle-synth-btn');
@@ -115,7 +121,6 @@ window.toggleSynthUI = function() {
     const isHidden = synthPanel.classList.toggle('ui-hidden');
     if (synthToggleBtn) synthToggleBtn.style.opacity = isHidden ? '0.5' : '1.0';
     
-    // Force browser layout recalculation
     setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
         resize();
