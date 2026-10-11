@@ -46,8 +46,8 @@
             </div>
         </div>
 
-        <!-- FIXED SYNTH TOGGLE BUTTON -->
-        <button onclick="const s = document.getElementById('synth-inspector'); const isHidden = (s.style.display === 'none'); s.style.display = isHidden ? '' : 'none'; this.style.opacity = isHidden ? '1' : '0.5'; setTimeout(() => window.dispatchEvent(new Event('resize')), 100);" style="cursor: pointer; font-weight: bold; margin-left: 10px;">Synth</button>
+        <!-- Synth Visible toggle -->
+        <button id="toggle-synth-btn" style="cursor: pointer; font-weight: bold; margin-left: 10px;">Synth</button>
         
         <div class="dropdown-widget global-mixer-widget">
             <span style="font-size: 0.8em; color: #888;">MASTER</span>
