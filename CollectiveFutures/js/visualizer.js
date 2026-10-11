@@ -5,26 +5,13 @@
 const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
 let sCtxs = [], rCtxs = [];
 
-// Global touch-safe function for Android/Mobile
-window.toggleSynthUI = function() {
-    const synthPanel = document.getElementById('synth-inspector');
-    const synthToggleBtn = document.getElementById('toggle-synth-btn');
-    if (!synthPanel) return;
-
-    const isHidden = synthPanel.classList.toggle('ui-hidden');
-    if (synthToggleBtn) synthToggleBtn.style.opacity = isHidden ? '0.5' : '1.0';
-    
-    // Force browser layout recalculation
-    setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
-        resize();
-    }, 50);
-};
-
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
+    
+    // Nuke the external CSS class that was forcing the 1-column collapse too early
     dash.className = ''; 
     
+    // Enforce 2x2 layout on desktop, snap to 1 column on phones (< 768px)
     if (!document.getElementById('biodata-grid-styles')) {
         const style = document.createElement('style');
         style.id = 'biodata-grid-styles';
@@ -35,6 +22,11 @@ function initVisualizer() {
                 gap: 15px !important;
                 width: 100% !important;
                 padding-bottom: 20px;
+            }
+            @media (max-width: 768px) {
+                #dashboard {
+                    grid-template-columns: 1fr !important;
+                }
             }
             .canvas-wrapper {
                 position: relative;
@@ -48,6 +40,7 @@ function initVisualizer() {
                 position: absolute;
                 top: 0; left: 0; width: 100%; height: 100%;
             }
+            /* Bulletproof UI hiding class */
             .ui-hidden {
                 display: none !important;
             }
@@ -112,6 +105,22 @@ function initVisualizer() {
     window.addEventListener('resize', resize); 
     resize();
 }
+
+// Global touch-safe function for Android/Mobile
+window.toggleSynthUI = function() {
+    const synthPanel = document.getElementById('synth-inspector');
+    const synthToggleBtn = document.getElementById('toggle-synth-btn');
+    if (!synthPanel) return;
+
+    const isHidden = synthPanel.classList.toggle('ui-hidden');
+    if (synthToggleBtn) synthToggleBtn.style.opacity = isHidden ? '0.5' : '1.0';
+    
+    // Force browser layout recalculation
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        resize();
+    }, 50);
+};
 
 function resize() { 
     for(let i=0; i<4; i++) { 
