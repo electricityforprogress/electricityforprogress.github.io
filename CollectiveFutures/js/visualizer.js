@@ -3,10 +3,15 @@
  */
 
 let sCtxs = [], rCtxs = [];
-const VISUAL_POINTS = 250; // The canvas always holds exactly 250 points
+const VISUAL_POINTS = 250; 
+const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; // Red, Green, Blue, Purple
 
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
+    // Enforce 2x2 grid via flexbox logic in the container
+    dash.style.display = 'grid';
+    dash.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45%, 1fr))';
+    dash.style.gap = '15px';
     
     let html = `
         <div style="grid-column: 1 / -1; display: flex; gap: 30px; background: #0a0d12; padding: 15px; border: 1px solid var(--border); border-radius: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
@@ -14,28 +19,40 @@ function initVisualizer() {
             <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
                     <span>SPEED (DOWNSAMPLING)</span>
-                    <span id="ui-val-xspeed" style="color: var(--text);">1:6 Rate</span>
+                    <span id="ui-val-xspeed" style="color: var(--text);">1:2 Rate</span>
                 </div>
-                <input type="range" id="ui-xspeed" min="1" max="60" value="6" style="width: 100%; cursor: pointer;">
+                <input type="range" id="ui-xspeed" min="1" max="60" value="2" style="width: 100%; cursor: pointer;">
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
                     <span>SMOOTHING (LOW-PASS EMA)</span>
-                    <span id="ui-val-ysmooth" style="color: var(--text);">0.15 α</span>
+                    <span id="ui-val-ysmooth" style="color: var(--text);">0.05 α</span>
                 </div>
-                <input type="range" id="ui-ysmooth" min="0.01" max="1.0" step="0.01" value="0.15" style="width: 100%; cursor: pointer;">
+                <input type="range" id="ui-ysmooth" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 100%; cursor: pointer;">
             </div>
         </div>
     `;
 
     for(let i=0; i<4; i++) {
         html += `
-        <div class="card">
-            <div class="card-header">
-                <span class="ch-title" style="color:hsl(${i*90}, 100%, 60%)">CHANNEL ${i+1}</span>
+        <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px;">
+            <div class="card-header" style="color: ${CH_COLORS[i]}; font-size: 1.2em; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+                CHANNEL ${i+1}
             </div>
-            <canvas class="scope" id="scope-${i}"></canvas>
-            <canvas class="roll" id="roll-${i}"></canvas>
+            
+            <!-- Top: Main Scope -->
+            <canvas class="scope" id="scope-${i}" style="width: 100%; height: 180px; background: #000; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px;"></canvas>
+            
+            <!-- Bottom: Split Roll & HUD -->
+            <div style="display: flex; gap: 15px; height: 130px;">
+                <!-- Left: Square Piano Roll / History -->
+                <canvas class="roll" id="roll-${i}" style="flex: 1; max-width: 50%; height: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px;"></canvas>
+                
+                <!-- Right: HTML Text HUD -->
+                <div id="hud-${i}" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace;">
+                    <!-- HUD injected via JS -->
+                </div>
+            </div>
         </div>`;
     }
     
@@ -55,32 +72,6 @@ function initVisualizer() {
     resize();
 }
 
-function drawSegmentedVU(canvas, level, isHorizontal = false) {
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    const numSegments = isHorizontal ? 20 : 15;
-    const gap = 1;
-    
-    for (let i = 0; i < numSegments; i++) {
-        const threshold = (i + 1) / numSegments;
-        const isOn = level >= (i / numSegments);
-        let color = '#39ff14';
-        if (threshold > 0.7) color = '#ffff00';
-        if (threshold > 0.9) color = '#ff0055';
-        ctx.fillStyle = isOn ? color : '#111'; 
-        if (isHorizontal) {
-            let w = (canvas.width / numSegments) - gap;
-            ctx.fillRect(i * (w + gap), 0, w, canvas.height);
-        } else {
-            let h = (canvas.height / numSegments) - gap;
-            let y = canvas.height - ((i + 1) * (h + gap));
-            ctx.fillRect(0, y, canvas.width, h);
-        }
-    }
-}
-
 function resize() { 
     for(let i=0; i<4; i++) { 
         if(sCtxs[i] && rCtxs[i]) {
@@ -92,39 +83,13 @@ function resize() {
     } 
 }
 
-let lastBeatCount = 0;
-
 function renderLoop() {
     const nowMs = performance.now();
     const nowAudio = audioCtx.currentTime;
 
-    let masterPeak = 0;
-    for (let i = 0; i < 4; i++) {
-        if (synthChannels[i]) {
-            let peak = 0;
-            if (synthChannels[i].analyser && synthChannels[i].vuData) {
-                synthChannels[i].analyser.getFloatTimeDomainData(synthChannels[i].vuData);
-                for (let j = 0; j < synthChannels[i].vuData.length; j++) {
-                    let abs = Math.abs(synthChannels[i].vuData[j]);
-                    if (abs > peak) peak = abs;
-                }
-            }
-            synthChannels[i].vuLevel = synthChannels[i].vuLevel ? Math.max(peak, synthChannels[i].vuLevel - 0.04) : peak;
-            masterPeak = Math.max(masterPeak, synthChannels[i].vuLevel);
-            drawSegmentedVU(document.getElementById(`vu-${i}`), Math.min(1.0, synthChannels[i].vuLevel * 1.5), false);
-        }
-    }
-    
     if (synthChannels[activeSynthIndex]) {
         const p = synthChannels[activeSynthIndex].params;
         const msPerBeat = 60000 / p.bpm;
-        const currentBeatCount = Math.floor(nowMs / msPerBeat);
-        if (currentBeatCount !== lastBeatCount) {
-            lastBeatCount = currentBeatCount;
-            const bpmLed = document.getElementById('ui-bpm-led');
-            if(bpmLed) { bpmLed.classList.add('active'); setTimeout(() => bpmLed.classList.remove('active'), 50); }
-        }
-
         const lfos = [ { key: 'pitchLfo', id: 'ind-lfo-pitchLfo' }, { key: 'filterLfo', id: 'ind-lfo-filterLfo' }, { key: 'ampLfo', id: 'ind-lfo-ampLfo' } ];
         lfos.forEach(lfo => {
             const config = p[lfo.key];
@@ -161,18 +126,19 @@ function renderLoop() {
         if(!sCtxs[i]) continue;
         let ch = chData[i];
         
+        // --- PERFECT CONTINUOUS DRIP FEED ---
+        // Smears the 100ms BLE chunks perfectly evenly over the visual frames
         if (ch.renderQueue && ch.renderQueue.length > 0) {
-            if (typeof ch.drainAcc === 'undefined') { ch.drainAcc = 0; ch.drainVel = 1; ch.lastQ = 0; }
-            if (ch.renderQueue.length > ch.lastQ + 2) ch.drainVel = ch.renderQueue.length / 5.5; 
-            ch.lastQ = ch.renderQueue.length;
+            if (ch.dripFloat === undefined) ch.dripFloat = 0;
+            ch.dripFloat += (ch.renderQueue.length / 6); // 100ms = ~6 frames at 60fps
             
-            ch.drainAcc += ch.drainVel;
-            let drainThisFrame = Math.min(Math.floor(ch.drainAcc), ch.renderQueue.length);
-            ch.drainAcc -= drainThisFrame;
+            let drainThisFrame = Math.floor(ch.dripFloat);
+            if (drainThisFrame > ch.renderQueue.length) drainThisFrame = ch.renderQueue.length;
+            
+            ch.dripFloat -= drainThisFrame;
             for (let k = 0; k < drainThisFrame; k++) ch.waveBuffer.push(ch.renderQueue.shift());
         }
         
-        // The array is always trimmed to the constant visual width
         while (ch.waveBuffer.length > VISUAL_POINTS) ch.waveBuffer.shift();
 
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
@@ -180,26 +146,7 @@ function renderLoop() {
         let buf = ch.waveBuffer;
         
         if(buf.length > 1) {
-            // LAYER 3: BACKGROUND HISTORY
-            if (ch.history && ch.history.length > 1) {
-                let hMin = 1000000, hMax = 0;
-                ch.history.forEach(h => { if (h.min < hMin) hMin = h.min; if (h.max > hMax) hMax = h.max; });
-                let hRange = hMax - hMin || 1;
-                let getHistY = (val) => sh - ((val - hMin) / hRange * sh);
-                
-                sCtx.fillStyle = 'rgba(255, 255, 255, 0.04)'; 
-                sCtx.beginPath();
-                for(let j=0; j<ch.history.length; j++) {
-                    let x = sw - ((ch.history.length - 1 - j) * (sw / 300));
-                    if (j === 0) sCtx.moveTo(x, getHistY(ch.history[j].max)); else sCtx.lineTo(x, getHistY(ch.history[j].max));
-                }
-                for(let j=ch.history.length-1; j>=0; j--) {
-                    let x = sw - ((ch.history.length - 1 - j) * (sw / 300));
-                    sCtx.lineTo(x, getHistY(ch.history[j].min));
-                }
-                sCtx.fill();
-            }
-
+            // GRID LINES
             sCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             sCtx.lineWidth = 1;
             sCtx.beginPath();
@@ -207,7 +154,7 @@ function renderLoop() {
             for(let g=1; g<10; g++) { sCtx.moveTo(sw * (g/10), 0); sCtx.lineTo(sw * (g/10), sh); }
             sCtx.stroke();
 
-            // LAYER 2: MAIN TRACE (Auto-scales perfectly every frame)
+            // MAIN CLEAN TRACE 
             let min = 1000000, max = 0;
             for(let j=0; j<buf.length; j++) {
                 if (buf[j].s < min) min = buf[j].s;
@@ -218,13 +165,15 @@ function renderLoop() {
             let paddedRange = range * 1.2;
             let getPathY = (val) => sh - ((val - paddedMin) / paddedRange * sh);
 
-            sCtx.strokeStyle = '#39ff14'; 
+            // Colored based on channel mapping
+            sCtx.strokeStyle = CH_COLORS[i]; 
             sCtx.lineWidth = 2; 
             sCtx.beginPath();
             for(let j=0; j<buf.length; j++) {
                 let x = j * (sw / (VISUAL_POINTS - 1));
                 let y = getPathY(buf[j].s);
                 
+                // Draw Event Spikes behind main line
                 if(buf[j].evt === 1 && buf[j].n) {
                     sCtx.save();
                     sCtx.strokeStyle = `hsla(${(buf[j].n % 12) * 30}, 100%, 50%, 0.7)`;
@@ -236,85 +185,39 @@ function renderLoop() {
             }
             sCtx.stroke();
 
-            // LAYER 1: MICRO RAW INSET BOX
-            let insetW = sw * 0.35; 
-            let insetH = sh * 0.35; 
-            let insetX = sw - insetW - 10;
-            let insetY = sh - insetH - 10;
-
-            sCtx.fillStyle = 'rgba(10, 13, 18, 0.9)';
-            sCtx.strokeStyle = '#30363d';
-            sCtx.lineWidth = 1;
-            sCtx.fillRect(insetX, insetY, insetW, insetH);
-            sCtx.strokeRect(insetX, insetY, insetW, insetH);
-
-            let microLen = Math.min(buf.length, 100);
-            let microBuf = buf.slice(-microLen);
-            
-            let mMin = 1000000, mMax = 0;
-            for(let j=0; j<microBuf.length; j++) {
-                if (microBuf[j].r < mMin) mMin = microBuf[j].r;
-                if (microBuf[j].r > mMax) mMax = microBuf[j].r;
-            }
-            let mRange = mMax - mMin || 1;
-            
-            sCtx.strokeStyle = 'rgba(57, 255, 20, 0.6)';
-            sCtx.beginPath();
-            for(let j=0; j<microBuf.length; j++) {
-                let mx = insetX + (j * (insetW / (microBuf.length - 1)));
-                let my = insetY + insetH - ((microBuf[j].r - mMin) / mRange * insetH);
-                if (j===0) sCtx.moveTo(mx, my); else sCtx.lineTo(mx, my);
-            }
-            sCtx.stroke();
-            
-            sCtx.fillStyle = '#888';
-            sCtx.font = '9px monospace';
-            sCtx.textAlign = 'left';
-            sCtx.fillText('MICRO (RAW)', insetX + 4, insetY + 12);
-
-            // ANALYTICAL HUD
+            // --- HTML DOM HUD INJECTION ---
+            let hud = document.getElementById(`hud-${i}`);
             let curVal = buf[buf.length-1].s || 0;
-            sCtx.font = '10px monospace';
-            sCtx.fillStyle = '#888';
-            sCtx.fillText('SMOOTH ADMITTANCE', 10, 16);
-            sCtx.font = 'bold 16px monospace';
-            sCtx.fillStyle = '#39ff14';
-            sCtx.fillText(`${curVal.toFixed(1)} µS`, 10, 32);
+            let slw = (ch.slew || 0) * 100;
+            let tCol = slw > 0.1 ? CH_COLORS[i] : (slw < -0.1 ? '#ff0055' : '#888');
+            let tIcon = slw > 0.1 ? '▲' : (slw < -0.1 ? '▼' : '—');
             
-            let slewScale = (ch.slew || 0) * 100;
-            let tColor = slewScale > 0.5 ? '#39ff14' : (slewScale < -0.5 ? '#ff0055' : '#888');
-            let tIcon = slewScale > 0.5 ? '▲' : (slewScale < -0.5 ? '▼' : '—');
-            
-            sCtx.font = '10px monospace';
-            sCtx.fillStyle = '#888';
-            sCtx.fillText('SLEW / TREND', 150, 16);
-            sCtx.font = 'bold 16px monospace';
-            sCtx.fillStyle = tColor;
-            sCtx.fillText(`${tIcon} ${Math.abs(slewScale).toFixed(2)}`, 150, 32);
-
+            let hMin = 0, hMax = 0;
             if (ch.history && ch.history.length > 0) {
-                let hMin = 1000000, hMax = 0;
-                ch.history.forEach(h => { if (h.min < hMin) hMin = h.min; if (h.max > hMax) hMax = h.max; });
-                sCtx.font = '10px monospace';
-                sCtx.fillStyle = '#888';
-                sCtx.fillText(`5-MIN RANGE: ${hMin.toFixed(1)} µS - ${hMax.toFixed(1)} µS`, 10, sh - 10);
+                hMin = 1000000;
+                ch.history.forEach(h => { if(h.min<hMin) hMin=h.min; if(h.max>hMax) hMax=h.max; });
             }
+            
+            let pFlag = ch.peakFlag > 0 ? `<span style="color:#ffff00;">PEAK</span>` : ``;
+            let tFlag = ch.troughFlag > 0 ? `<span style="color:#00f0ff;">TROUGH</span>` : ``;
+            if(ch.peakFlag > 0) ch.peakFlag--;
+            if(ch.troughFlag > 0) ch.troughFlag--;
 
-            sCtx.textAlign = 'right';
-            if (ch.peakFlag > 0) {
-                sCtx.font = 'bold 14px monospace';
-                sCtx.fillStyle = '#ffff00';
-                sCtx.fillText(`[ PEAK ]`, sw - 10, 24);
-                ch.peakFlag--;
-            } else if (ch.troughFlag > 0) {
-                sCtx.font = 'bold 14px monospace';
-                sCtx.fillStyle = '#00f0ff';
-                sCtx.fillText(`[ TROUGH ]`, sw - 10, 24);
-                ch.troughFlag--;
-            }
+            hud.innerHTML = `
+                <div style="font-size: 10px; color: #888; display:flex; justify-content:space-between;">
+                    <span>ADMITTANCE</span> <b>${pFlag} ${tFlag}</b>
+                </div>
+                <div style="font-size: 22px; font-weight: bold; color: ${CH_COLORS[i]};">${curVal.toFixed(1)} µS</div>
+                
+                <div style="font-size: 10px; color: #888; margin-top: 5px;">SLEW / TREND</div>
+                <div style="font-size: 16px; font-weight: bold; color: ${tCol};">${tIcon} ${Math.abs(slw).toFixed(2)}</div>
+                
+                <div style="font-size: 10px; color: #888; margin-top: 5px;">5-MIN RANGE</div>
+                <div style="font-size: 12px; color: #ccc;">${hMin.toFixed(1)} - ${hMax.toFixed(1)}</div>
+            `;
         }
         
-        // 5-MIN ROLL RENDER
+        // --- 5-MIN ROLL / PIANO ROLL (Now a Square) ---
         rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
         rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
         for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
@@ -327,7 +230,8 @@ function renderLoop() {
             let pRange = hRange * 1.2;
             let getY = (val) => rh - ((val - pMin) / pRange * rh);
             
-            rCtx.fillStyle = 'rgba(57, 255, 20, 0.1)';
+            // Channel Colored Envelope
+            rCtx.fillStyle = CH_COLORS[i] + '1A'; // Adds 10% opacity hex to the channel color
             rCtx.beginPath();
             for(let j=0; j<ch.history.length; j++) {
                 let x = rw - ((ch.history.length - 1 - j) * (rw / 300));
@@ -339,7 +243,7 @@ function renderLoop() {
             }
             rCtx.fill();
             
-            rCtx.strokeStyle = 'rgba(57, 255, 20, 0.5)';
+            rCtx.strokeStyle = CH_COLORS[i] + '80'; // 50% opacity line
             rCtx.lineWidth = 1.5;
             rCtx.beginPath();
             for(let j=0; j<ch.history.length; j++) {
