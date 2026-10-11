@@ -8,16 +8,45 @@ const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff'];
 const VISUAL_POINTS = 250; 
 
 let sCtxs = [], rCtxs = [];
+let isSynthHidden = false; // Persistent state for the toggle button
 
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
-    // Create isolated workspace for scopes
+    // Inject a strict CSS stylesheet to enforce the 2x2 grid and prevent Canvas resizing bugs
+    if (!document.getElementById('biodata-grid-styles')) {
+        const style = document.createElement('style');
+        style.id = 'biodata-grid-styles';
+        style.innerHTML = `
+            #biodata-visualizer-workspace {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 15px;
+                width: 100%;
+            }
+            @media (max-width: 800px) {
+                #biodata-visualizer-workspace {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .canvas-wrapper {
+                position: relative;
+                width: 100%;
+                background: #000;
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .canvas-wrapper canvas {
+                position: absolute;
+                top: 0; left: 0; width: 100%; height: 100%;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
     const visWorkspace = document.createElement('div');
     visWorkspace.id = 'biodata-visualizer-workspace';
-    visWorkspace.style.display = 'grid';
-    visWorkspace.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45%, 1fr))';
-    visWorkspace.style.gap = '15px';
     
     let html = ``;
 
@@ -25,19 +54,19 @@ function initVisualizer() {
         if(!chData[i]) chData[i] = { waveBuffer: [], renderQueue: [], notes: [], acc: {}, history: [] };
         chData[i].config = { zoom: 250, smooth: 0.05, freeze: false };
         
-        // Compacted UI header with Flex-Wrap and shortened labels (Z, S, FRZ)
+        // Wrapped canvases in strict aspect boxes to prevent layout thrashing
         html += `
-        <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px; border: 1px solid var(--border); border-radius: 4px;">
+        <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px; border: 1px solid var(--border); border-radius: 4px; min-width: 0;">
             
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; gap: 5px;">
-                <span style="color: ${CH_COLORS[i]}; font-size: 1.1em; font-weight: bold; margin-right: auto;">CH ${i+1}</span>
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; gap: 10px;">
+                <span style="color: ${CH_COLORS[i]}; font-size: 1.1em; font-weight: bold;">CH ${i+1}</span>
                 
-                <div style="display: flex; gap: 10px; align-items: center; font-size: 10px; color: #888;">
+                <div style="display: flex; gap: 10px; align-items: center; font-size: 10px; color: #888; flex-wrap: nowrap;">
                     <label style="display: flex; align-items: center; gap: 3px;" title="Zoom (Timebase)">
-                        Z <input type="range" id="ch-zoom-${i}" min="50" max="1000" value="250" style="width: 50px; cursor: pointer; margin: 0;">
+                        Z <input type="range" id="ch-zoom-${i}" min="50" max="1000" value="250" style="width: 45px; min-width: 45px; cursor: pointer; margin: 0; padding: 0;">
                     </label>
                     <label style="display: flex; align-items: center; gap: 3px;" title="Smooth (EMA)">
-                        S <input type="range" id="ch-smooth-${i}" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 50px; cursor: pointer; margin: 0;">
+                        S <input type="range" id="ch-smooth-${i}" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 45px; min-width: 45px; cursor: pointer; margin: 0; padding: 0;">
                     </label>
                     <button id="ch-freeze-${i}" style="background: transparent; color: #888; border: 1px solid #444; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 9px; font-weight: bold;">
                         FRZ
@@ -45,11 +74,15 @@ function initVisualizer() {
                 </div>
             </div>
             
-            <canvas class="scope" id="scope-${i}" style="width: 100%; height: 180px; background: #000; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px;"></canvas>
+            <div class="canvas-wrapper" style="height: 180px; margin-bottom: 15px;">
+                <canvas class="scope" id="scope-${i}"></canvas>
+            </div>
             
-            <div style="display: flex; gap: 15px; height: 130px;">
-                <canvas class="roll" id="roll-${i}" style="flex: 1; max-width: 50%; height: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px;"></canvas>
-                <div id="hud-${i}" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace;"></div>
+            <div style="display: flex; gap: 15px; height: 130px; min-width: 0;">
+                <div class="canvas-wrapper" style="flex: 1; max-width: 50%; height: 100%;">
+                    <canvas class="roll" id="roll-${i}"></canvas>
+                </div>
+                <div id="hud-${i}" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace; min-width: 0; overflow: hidden;"></div>
             </div>
         </div>`;
     }
@@ -57,7 +90,7 @@ function initVisualizer() {
     visWorkspace.innerHTML = html;
     dash.appendChild(visWorkspace);
 
-    // Attach Per-Channel Event Listeners
+    // Attach Per-Channel Controls
     for(let i=0; i<4; i++) {
         document.getElementById(`ch-zoom-${i}`).addEventListener('input', (e) => chData[i].config.zoom = parseInt(e.target.value));
         document.getElementById(`ch-smooth-${i}`).addEventListener('input', (e) => chData[i].config.smooth = parseFloat(e.target.value));
@@ -69,26 +102,20 @@ function initVisualizer() {
         });
     }
 
-    // Bind to the external "Synth" button in your index.html
+    // Bulletproof Synth Toggle
     const synthToggleBtn = document.getElementById('toggle-synth-btn');
     if (synthToggleBtn) {
         synthToggleBtn.addEventListener('click', (e) => {
             let synthPanels = document.querySelectorAll(SYNTH_UI_SELECTOR);
             if (synthPanels.length === 0) return;
 
-            let isHidden = false;
+            isSynthHidden = !isSynthHidden;
+            
             synthPanels.forEach(panel => {
-                if (panel.style.display !== 'none') { 
-                    panel.style.display = 'none'; 
-                    isHidden = true; 
-                } else { 
-                    panel.style.display = ''; 
-                    isHidden = false; 
-                }
+                panel.style.display = isSynthHidden ? 'none' : '';
             });
             
-            // Visual feedback on the button
-            e.target.style.opacity = isHidden ? '0.5' : '1.0';
+            e.target.style.opacity = isSynthHidden ? '0.5' : '1.0';
             setTimeout(resize, 100); 
         });
     }
@@ -187,7 +214,7 @@ function renderLoop() {
         }
 
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
-        sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
+        sCtx.clearRect(0, 0, sw, sh);
         let buf = ch.waveBuffer;
         
         if(buf.length > 1) {
@@ -226,7 +253,6 @@ function renderLoop() {
             }
             sCtx.stroke();
 
-            // HUD
             let hud = document.getElementById(`hud-${i}`);
             let curVal = buf[buf.length-1].s || 0;
             let curTicks = buf[buf.length-1].ticks || 0;
@@ -246,19 +272,19 @@ function renderLoop() {
                     <span>ADMITTANCE</span> <b>${pFlag} ${tFlag}</b>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <span style="font-size: 20px; font-weight: bold; color: ${CH_COLORS[i]};">${curVal.toFixed(1)} µS</span>
-                    <span style="font-size: 14px; color: #ccc;">${kOhm.toFixed(1)} kΩ</span>
+                    <span style="font-size: 18px; font-weight: bold; color: ${CH_COLORS[i]};">${curVal.toFixed(1)} µS</span>
+                    <span style="font-size: 12px; color: #ccc;">${kOhm.toFixed(1)} kΩ</span>
                 </div>
                 
-                <div style="font-size: 10px; color: #888; margin-top: 5px;">RAW PULSE DURATION</div>
-                <div style="font-size: 14px; font-weight: bold; color: #ccc;">${Math.round(curTicks).toLocaleString()} Ticks</div>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;">PULSE DURATION</div>
+                <div style="font-size: 13px; font-weight: bold; color: #ccc;">${Math.round(curTicks).toLocaleString()} Ticks</div>
                 
-                <div style="font-size: 10px; color: #888; margin-top: 5px;">SLEW / TREND</div>
-                <div style="font-size: 16px; font-weight: bold; color: ${tCol};">${tIcon} ${Math.abs(slw).toFixed(2)}</div>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;">SLEW / TREND</div>
+                <div style="font-size: 14px; font-weight: bold; color: ${tCol};">${tIcon} ${Math.abs(slw).toFixed(2)}</div>
             `;
         }
         
-        rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
+        rCtx.clearRect(0, 0, rw, rh);
         rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
         for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
         
