@@ -8,28 +8,18 @@ const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; // Red, Green, B
 
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
-    // Enforce 2x2 grid via flexbox logic in the container
+    
+    // Clean 2x2 grid layout
     dash.style.display = 'grid';
     dash.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45%, 1fr))';
     dash.style.gap = '15px';
     
+    // Top Bar: Synth UI Toggle Button (replaces DSP sliders)
     let html = `
-        <div style="grid-column: 1 / -1; display: flex; gap: 30px; background: #0a0d12; padding: 15px; border: 1px solid var(--border); border-radius: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
-            <div style="color: var(--cyan); font-weight: bold; font-size: 1.1em; min-width: 120px;">DSP MATH</div>
-            <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
-                    <span>SPEED (DOWNSAMPLING)</span>
-                    <span id="ui-val-xspeed" style="color: var(--text);">1:2 Rate</span>
-                </div>
-                <input type="range" id="ui-xspeed" min="1" max="60" value="2" style="width: 100%; cursor: pointer;">
-            </div>
-            <div style="flex: 1; display: flex; flex-direction: column; min-width: 200px;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #888; font-weight: bold; margin-bottom: 5px;">
-                    <span>SMOOTHING (LOW-PASS EMA)</span>
-                    <span id="ui-val-ysmooth" style="color: var(--text);">0.05 α</span>
-                </div>
-                <input type="range" id="ui-ysmooth" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 100%; cursor: pointer;">
-            </div>
+        <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-bottom: 5px;">
+            <button id="toggle-synth-btn" style="background: #161b22; color: #39ff14; font-weight: bold; border: 1px solid var(--border); padding: 8px 16px; border-radius: 4px; cursor: pointer; text-transform: uppercase;">
+                Hide Synth Controls
+            </button>
         </div>
     `;
 
@@ -45,12 +35,8 @@ function initVisualizer() {
             
             <!-- Bottom: Split Roll & HUD -->
             <div style="display: flex; gap: 15px; height: 130px;">
-                <!-- Left: Square Piano Roll / History -->
                 <canvas class="roll" id="roll-${i}" style="flex: 1; max-width: 50%; height: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px;"></canvas>
-                
-                <!-- Right: HTML Text HUD -->
                 <div id="hud-${i}" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace;">
-                    <!-- HUD injected via JS -->
                 </div>
             </div>
         </div>`;
@@ -58,11 +44,18 @@ function initVisualizer() {
     
     dash.innerHTML = html;
 
-    document.getElementById('ui-xspeed').addEventListener('input', (e) => {
-        document.getElementById('ui-val-xspeed').innerText = '1:' + e.target.value + ' Rate';
-    });
-    document.getElementById('ui-ysmooth').addEventListener('input', (e) => {
-        document.getElementById('ui-val-ysmooth').innerText = e.target.value + ' α';
+    // Synthesizer Toggle Logic
+    document.getElementById('toggle-synth-btn').addEventListener('click', (e) => {
+        // Find common synthesizer container IDs/classes
+        let synthContainers = document.querySelectorAll('#synth-container, #synths, .synth-panel, .synth-wrap');
+        let isHidden = false;
+        synthContainers.forEach(el => {
+            if (el.style.display !== 'none') { el.style.display = 'none'; isHidden = true; }
+            else { el.style.display = ''; isHidden = false; }
+        });
+        e.target.innerText = isHidden ? 'Show Synth Controls' : 'Hide Synth Controls';
+        e.target.style.color = isHidden ? '#888' : '#39ff14';
+        setTimeout(resize, 100); // Trigger canvas resize after DOM shifts
     });
 
     sCtxs = [0,1,2,3].map(i => document.getElementById(`scope-${i}`).getContext('2d'));
@@ -89,7 +82,6 @@ function renderLoop() {
 
     if (synthChannels[activeSynthIndex]) {
         const p = synthChannels[activeSynthIndex].params;
-        const msPerBeat = 60000 / p.bpm;
         const lfos = [ { key: 'pitchLfo', id: 'ind-lfo-pitchLfo' }, { key: 'filterLfo', id: 'ind-lfo-filterLfo' }, { key: 'ampLfo', id: 'ind-lfo-ampLfo' } ];
         lfos.forEach(lfo => {
             const config = p[lfo.key];
@@ -126,17 +118,29 @@ function renderLoop() {
         if(!sCtxs[i]) continue;
         let ch = chData[i];
         
-        // --- PERFECT CONTINUOUS DRIP FEED ---
-        // Smears the 100ms BLE chunks perfectly evenly over the visual frames
+        // --- CONSTANT VELOCITY SMOOTH SCROLL ---
         if (ch.renderQueue && ch.renderQueue.length > 0) {
-            if (ch.dripFloat === undefined) ch.dripFloat = 0;
-            ch.dripFloat += (ch.renderQueue.length / 6); // 100ms = ~6 frames at 60fps
+            if (typeof ch.dripFloat === 'undefined') { ch.dripFloat = 0; ch.lastQ = 0; ch.drainVel = 1; }
             
+            // If a new 100ms BLE chunk arrived (queue suddenly jumped in size)
+            if (ch.renderQueue.length > ch.lastQ + 5) {
+                // Calculate exact velocity to bridge the gap until the next packet (approx 6 frames)
+                ch.drainVel = ch.renderQueue.length / 6.0; 
+            }
+            // Safety: gently slow down if we are running out of points to prevent a hard stop
+            if (ch.renderQueue.length < 3) ch.drainVel *= 0.8;
+            
+            ch.lastQ = ch.renderQueue.length;
+            
+            ch.dripFloat += ch.drainVel;
             let drainThisFrame = Math.floor(ch.dripFloat);
             if (drainThisFrame > ch.renderQueue.length) drainThisFrame = ch.renderQueue.length;
             
             ch.dripFloat -= drainThisFrame;
-            for (let k = 0; k < drainThisFrame; k++) ch.waveBuffer.push(ch.renderQueue.shift());
+            for (let k = 0; k < drainThisFrame; k++) {
+                ch.waveBuffer.push(ch.renderQueue.shift());
+            }
+            ch.lastQ = ch.renderQueue.length; // update after drain
         }
         
         while (ch.waveBuffer.length > VISUAL_POINTS) ch.waveBuffer.shift();
@@ -146,7 +150,7 @@ function renderLoop() {
         let buf = ch.waveBuffer;
         
         if(buf.length > 1) {
-            // GRID LINES
+            // MAIN SCOPE: GRID LINES
             sCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             sCtx.lineWidth = 1;
             sCtx.beginPath();
@@ -154,7 +158,6 @@ function renderLoop() {
             for(let g=1; g<10; g++) { sCtx.moveTo(sw * (g/10), 0); sCtx.lineTo(sw * (g/10), sh); }
             sCtx.stroke();
 
-            // MAIN CLEAN TRACE 
             let min = 1000000, max = 0;
             for(let j=0; j<buf.length; j++) {
                 if (buf[j].s < min) min = buf[j].s;
@@ -173,7 +176,6 @@ function renderLoop() {
                 let x = j * (sw / (VISUAL_POINTS - 1));
                 let y = getPathY(buf[j].s);
                 
-                // Draw Event Spikes behind main line
                 if(buf[j].evt === 1 && buf[j].n) {
                     sCtx.save();
                     sCtx.strokeStyle = `hsla(${(buf[j].n % 12) * 30}, 100%, 50%, 0.7)`;
@@ -185,18 +187,17 @@ function renderLoop() {
             }
             sCtx.stroke();
 
-            // --- HTML DOM HUD INJECTION ---
+            // --- HTML HUD UPDATED WITH TICKS AND kΩ ---
             let hud = document.getElementById(`hud-${i}`);
             let curVal = buf[buf.length-1].s || 0;
+            let curTicks = buf[buf.length-1].ticks || 0;
+            
+            // Formula: 1,000 / Admittance (µS) = Resistance (kΩ)
+            let kOhm = curVal > 0 ? (1000 / curVal) : 0;
+            
             let slw = (ch.slew || 0) * 100;
             let tCol = slw > 0.1 ? CH_COLORS[i] : (slw < -0.1 ? '#ff0055' : '#888');
             let tIcon = slw > 0.1 ? '▲' : (slw < -0.1 ? '▼' : '—');
-            
-            let hMin = 0, hMax = 0;
-            if (ch.history && ch.history.length > 0) {
-                hMin = 1000000;
-                ch.history.forEach(h => { if(h.min<hMin) hMin=h.min; if(h.max>hMax) hMax=h.max; });
-            }
             
             let pFlag = ch.peakFlag > 0 ? `<span style="color:#ffff00;">PEAK</span>` : ``;
             let tFlag = ch.troughFlag > 0 ? `<span style="color:#00f0ff;">TROUGH</span>` : ``;
@@ -207,17 +208,20 @@ function renderLoop() {
                 <div style="font-size: 10px; color: #888; display:flex; justify-content:space-between;">
                     <span>ADMITTANCE</span> <b>${pFlag} ${tFlag}</b>
                 </div>
-                <div style="font-size: 22px; font-weight: bold; color: ${CH_COLORS[i]};">${curVal.toFixed(1)} µS</div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <span style="font-size: 20px; font-weight: bold; color: ${CH_COLORS[i]};">${curVal.toFixed(1)} µS</span>
+                    <span style="font-size: 14px; color: #ccc;">${kOhm.toFixed(1)} kΩ</span>
+                </div>
+                
+                <div style="font-size: 10px; color: #888; margin-top: 5px;">RAW PULSE WIDTH</div>
+                <div style="font-size: 14px; font-weight: bold; color: #ccc;">${Math.round(curTicks)} Ticks</div>
                 
                 <div style="font-size: 10px; color: #888; margin-top: 5px;">SLEW / TREND</div>
                 <div style="font-size: 16px; font-weight: bold; color: ${tCol};">${tIcon} ${Math.abs(slw).toFixed(2)}</div>
-                
-                <div style="font-size: 10px; color: #888; margin-top: 5px;">5-MIN RANGE</div>
-                <div style="font-size: 12px; color: #ccc;">${hMin.toFixed(1)} - ${hMax.toFixed(1)}</div>
             `;
         }
         
-        // --- 5-MIN ROLL / PIANO ROLL (Now a Square) ---
+        // 5-MIN ROLL RENDER
         rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
         rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
         for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
@@ -230,8 +234,7 @@ function renderLoop() {
             let pRange = hRange * 1.2;
             let getY = (val) => rh - ((val - pMin) / pRange * rh);
             
-            // Channel Colored Envelope
-            rCtx.fillStyle = CH_COLORS[i] + '1A'; // Adds 10% opacity hex to the channel color
+            rCtx.fillStyle = CH_COLORS[i] + '1A'; 
             rCtx.beginPath();
             for(let j=0; j<ch.history.length; j++) {
                 let x = rw - ((ch.history.length - 1 - j) * (rw / 300));
@@ -243,7 +246,7 @@ function renderLoop() {
             }
             rCtx.fill();
             
-            rCtx.strokeStyle = CH_COLORS[i] + '80'; // 50% opacity line
+            rCtx.strokeStyle = CH_COLORS[i] + '80'; 
             rCtx.lineWidth = 1.5;
             rCtx.beginPath();
             for(let j=0; j<ch.history.length; j++) {
