@@ -47,7 +47,7 @@
         </div>
 
         <!-- Synth Visible toggle -->
-        <button id="toggle-synth-btn" style="cursor: pointer; font-weight: bold; margin-left: 10px;">Synth</button>
+        <button id="toggle-synth-btn" onclick="toggleSynthUI()" style="cursor: pointer; font-weight: bold; margin-left: 10px; opacity: 0.5;">Synth</button>
         
         <div class="dropdown-widget global-mixer-widget">
             <span style="font-size: 0.8em; color: #888;">MASTER</span>
@@ -61,7 +61,7 @@
     </div>
 </div>
 
-<div class="synth-inspector" id="synth-inspector">
+<div class="synth-inspector ui-hidden" id="synth-inspector">
     <div class="synth-tabs">
         <div class="synth-tab active" onclick="selectTab(0)"><div class="led" id="led-0"></div>CH 1</div>
         <div class="synth-tab" onclick="selectTab(1)"><div class="led" id="led-1"></div>CH 2</div>
