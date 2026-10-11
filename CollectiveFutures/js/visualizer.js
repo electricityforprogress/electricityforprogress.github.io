@@ -5,13 +5,26 @@
 const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
 let sCtxs = [], rCtxs = [];
 
+// Global touch-safe function for Android/Mobile
+window.toggleSynthUI = function() {
+    const synthPanel = document.getElementById('synth-inspector');
+    const synthToggleBtn = document.getElementById('toggle-synth-btn');
+    if (!synthPanel) return;
+
+    const isHidden = synthPanel.classList.toggle('ui-hidden');
+    if (synthToggleBtn) synthToggleBtn.style.opacity = isHidden ? '0.5' : '1.0';
+    
+    // Force browser layout recalculation
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        resize();
+    }, 50);
+};
+
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
-    
-    // Nuke the external CSS class that was forcing the 1-column collapse
     dash.className = ''; 
     
-    // Enforce an absolute, unbreakable 2x2 layout that CSS cannot override
     if (!document.getElementById('biodata-grid-styles')) {
         const style = document.createElement('style');
         style.id = 'biodata-grid-styles';
@@ -35,7 +48,6 @@ function initVisualizer() {
                 position: absolute;
                 top: 0; left: 0; width: 100%; height: 100%;
             }
-            /* Bulletproof UI hiding class */
             .ui-hidden {
                 display: none !important;
             }
@@ -91,27 +103,6 @@ function initVisualizer() {
             e.target.style.background = chData[i].config.freeze ? '#ff3333' : 'transparent';
             e.target.style.color = chData[i].config.freeze ? '#fff' : '#888';
             e.target.style.borderColor = chData[i].config.freeze ? '#ff3333' : '#444';
-        });
-    }
-
-    // --- BULLETPROOF SYNTH TOGGLE ---
-    const synthToggleBtn = document.getElementById('toggle-synth-btn');
-    const synthPanel = document.getElementById('synth-inspector');
-    
-    if (synthToggleBtn && synthPanel) {
-        // Strip out the old inline onclick just in case it was left in
-        synthToggleBtn.removeAttribute('onclick');
-        
-        synthToggleBtn.addEventListener('click', (e) => {
-            // Toggle the CSS class instead of manipulating inline style strings
-            const isHidden = synthPanel.classList.toggle('ui-hidden');
-            synthToggleBtn.style.opacity = isHidden ? '0.5' : '1.0';
-            
-            // Force browser to recalculate dimensions
-            setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-                resize();
-            }, 50);
         });
     }
 
