@@ -32,19 +32,16 @@ async function connectBLE() {
     try {
         const btn = document.getElementById('ble-status');
         if(btn) btn.innerText = 'INIT...';
-
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         ensureSynths(); 
         
         if(btn) btn.innerText = 'SCANNING...';
-        
         const device = await navigator.bluetooth.requestDevice({ 
             filters: [{ namePrefix: "biodata" }, { namePrefix: "Biodata" }], 
             optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"] 
         });
         
         if(btn) btn.innerText = 'CONNECTING...';
-        
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
         bleTxCharacteristic = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
@@ -65,9 +62,7 @@ async function connectBLE() {
                 } 
             }
         });
-        
         if(btn) { btn.innerText = 'ONLINE'; btn.style.color = 'var(--green)'; }
-        
     } catch (error) { 
         console.error("BLE Connect Error:", error);
         const btn = document.getElementById('ble-status');
@@ -86,7 +81,6 @@ function processBiodata(payload) {
         let chIdx = payload.ch;
         let ch = chData[chIdx];
         let pConfig = synthChannels[chIdx] ? synthChannels[chIdx].params : null;
-        
         if (!pConfig) return;
         
         if (!ch.analysisBuffer) ch.analysisBuffer = [];
@@ -95,24 +89,22 @@ function processBiodata(payload) {
         if (ch.emaTicks === undefined) ch.emaTicks = null;
         if (!ch.history) ch.history = [];
         if (!ch.acc) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
-        if (!ch.vis) ch.vis = { counter: 0, evt: 0, pitch: null };
 
         const CALIBRATION_FACTOR = 10000000; 
-        const DECIMATION_RATE = 2;   // Fixed rate for smooth visuals
-        const EMA_ALPHA = 0.05;      // Fixed smoothing
+        
+        // Hardcoded optimal smoothing for stable MIDI/Audio triggers
+        const AUDIO_EMA_ALPHA = 0.05; 
 
         payload.p.forEach(rawTicks => {
             ch.analysisBuffer.push(rawTicks);
             
-            // Math computations
             let rawAdmittance = CALIBRATION_FACTOR / rawTicks;
-            ch.ema = (ch.ema === null) ? rawAdmittance : (rawAdmittance * EMA_ALPHA) + (ch.ema * (1 - EMA_ALPHA));
+            ch.ema = (ch.ema === null) ? rawAdmittance : (rawAdmittance * AUDIO_EMA_ALPHA) + (ch.ema * (1 - AUDIO_EMA_ALPHA));
             ch.emaTicks = (ch.emaTicks === null) ? rawTicks : (rawTicks * 0.05) + (ch.emaTicks * 0.95);
 
             if (ch.lastEma !== undefined) {
                 let instantaneousSlew = ch.ema - ch.lastEma;
                 ch.slew = (ch.slew === undefined) ? instantaneousSlew : (instantaneousSlew * 0.05) + (ch.slew * 0.95);
-                
                 if (ch.lastSlew !== undefined) {
                     if (ch.lastSlew > 0 && ch.slew <= 0) ch.peakFlag = 45; 
                     if (ch.lastSlew < 0 && ch.slew >= 0) ch.troughFlag = 45;
@@ -170,17 +162,10 @@ function processBiodata(payload) {
                 ch.analysisBuffer = [];
             }
             
-            if (isEvent) { ch.vis.evt = 1; ch.vis.pitch = finalPitch; }
-            ch.vis.counter++;
-            
-            if (ch.vis.counter >= DECIMATION_RATE) {
-                if (!ch.renderQueue) ch.renderQueue = [];
-                // Added raw ticks to the payload for the HUD
-                ch.renderQueue.push({ r: rawAdmittance, s: ch.ema, evt: ch.vis.evt, n: ch.vis.pitch, ticks: ch.emaTicks });
-                ch.vis.counter = 0;
-                ch.vis.evt = 0;
-                ch.vis.pitch = null;
-            }
+            // Send pure RAW admittance to the visualizer queue. 
+            // The visualizer will now apply its own instant smoothing mathematically.
+            if (!ch.renderQueue) ch.renderQueue = [];
+            ch.renderQueue.push({ r: rawAdmittance, evt: isEvent, n: finalPitch, ticks: rawTicks });
         });
     }
 }
