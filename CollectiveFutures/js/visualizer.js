@@ -35,6 +35,10 @@ function initVisualizer() {
                 position: absolute;
                 top: 0; left: 0; width: 100%; height: 100%;
             }
+            /* Bulletproof UI hiding class */
+            .ui-hidden {
+                display: none !important;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -87,6 +91,27 @@ function initVisualizer() {
             e.target.style.background = chData[i].config.freeze ? '#ff3333' : 'transparent';
             e.target.style.color = chData[i].config.freeze ? '#fff' : '#888';
             e.target.style.borderColor = chData[i].config.freeze ? '#ff3333' : '#444';
+        });
+    }
+
+    // --- BULLETPROOF SYNTH TOGGLE ---
+    const synthToggleBtn = document.getElementById('toggle-synth-btn');
+    const synthPanel = document.getElementById('synth-inspector');
+    
+    if (synthToggleBtn && synthPanel) {
+        // Strip out the old inline onclick just in case it was left in
+        synthToggleBtn.removeAttribute('onclick');
+        
+        synthToggleBtn.addEventListener('click', (e) => {
+            // Toggle the CSS class instead of manipulating inline style strings
+            const isHidden = synthPanel.classList.toggle('ui-hidden');
+            synthToggleBtn.style.opacity = isHidden ? '0.5' : '1.0';
+            
+            // Force browser to recalculate dimensions
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                resize();
+            }, 50);
         });
     }
 
@@ -175,7 +200,10 @@ function renderLoop() {
                         break; 
                     }
                 }
-                if (ch.renderQueue.length > 500) ch.renderQueue = ch.renderQueue.slice(-100);
+                
+                if (ch.renderQueue.length > 500) {
+                    ch.renderQueue = ch.renderQueue.slice(-100);
+                }
             } else {
                 ch.lastFrameTime = nowMs;
             }
