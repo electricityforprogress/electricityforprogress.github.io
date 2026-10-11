@@ -3,7 +3,7 @@
  */
 
 // --- CONFIGURATION ---
-const SYNTH_UI_SELECTOR = '#synth-inspector'; // Targets your exact synth HTML wrapper
+const SYNTH_UI_SELECTOR = '#synth-inspector'; 
 const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
 const VISUAL_POINTS = 250; 
 
@@ -12,41 +12,35 @@ let sCtxs = [], rCtxs = [];
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
-    // 1. Create a dedicated, isolated workspace for the scopes so we don't destroy existing HTML
+    // Create isolated workspace for scopes
     const visWorkspace = document.createElement('div');
     visWorkspace.id = 'biodata-visualizer-workspace';
     visWorkspace.style.display = 'grid';
     visWorkspace.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45%, 1fr))';
     visWorkspace.style.gap = '15px';
     
-    // Top Bar: Smart Synth UI Toggle Button
-    let html = `
-        <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-bottom: 5px;">
-            <button id="toggle-synth-btn" style="background: #161b22; color: #39ff14; font-weight: bold; border: 1px solid var(--border); padding: 8px 16px; border-radius: 4px; cursor: pointer; text-transform: uppercase;">
-                Hide Synth Controls
-            </button>
-        </div>
-    `;
+    let html = ``;
 
     for(let i=0; i<4; i++) {
         if(!chData[i]) chData[i] = { waveBuffer: [], renderQueue: [], notes: [], acc: {}, history: [] };
         chData[i].config = { zoom: 250, smooth: 0.05, freeze: false };
         
+        // Compacted UI header with Flex-Wrap and shortened labels (Z, S, FRZ)
         html += `
         <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px; border: 1px solid var(--border); border-radius: 4px;">
             
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
-                <span style="color: ${CH_COLORS[i]}; font-size: 1.2em; font-weight: bold;">CHANNEL ${i+1}</span>
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; gap: 5px;">
+                <span style="color: ${CH_COLORS[i]}; font-size: 1.1em; font-weight: bold; margin-right: auto;">CH ${i+1}</span>
                 
-                <div style="display: flex; gap: 15px; align-items: center; font-size: 0.8em; color: #888;">
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                        ZOOM <input type="range" id="ch-zoom-${i}" min="50" max="1000" value="250" style="width: 70px; cursor: pointer;">
+                <div style="display: flex; gap: 10px; align-items: center; font-size: 10px; color: #888;">
+                    <label style="display: flex; align-items: center; gap: 3px;" title="Zoom (Timebase)">
+                        Z <input type="range" id="ch-zoom-${i}" min="50" max="1000" value="250" style="width: 50px; cursor: pointer; margin: 0;">
                     </label>
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                        SMOOTH <input type="range" id="ch-smooth-${i}" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 70px; cursor: pointer;">
+                    <label style="display: flex; align-items: center; gap: 3px;" title="Smooth (EMA)">
+                        S <input type="range" id="ch-smooth-${i}" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 50px; cursor: pointer; margin: 0;">
                     </label>
-                    <button id="ch-freeze-${i}" style="background: transparent; color: #888; border: 1px solid #444; padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 0.9em; font-weight: bold;">
-                        FREEZE
+                    <button id="ch-freeze-${i}" style="background: transparent; color: #888; border: 1px solid #444; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 9px; font-weight: bold;">
+                        FRZ
                     </button>
                 </div>
             </div>
@@ -61,7 +55,7 @@ function initVisualizer() {
     }
     
     visWorkspace.innerHTML = html;
-    dash.appendChild(visWorkspace); // Cleanly appends rather than destroying your synths
+    dash.appendChild(visWorkspace);
 
     // Attach Per-Channel Event Listeners
     for(let i=0; i<4; i++) {
@@ -75,31 +69,29 @@ function initVisualizer() {
         });
     }
 
-    // 2. Smart Synth Toggle: Only targets the exact element(s) you define
-    document.getElementById('toggle-synth-btn').addEventListener('click', (e) => {
-        let synthPanels = document.querySelectorAll(SYNTH_UI_SELECTOR);
-        if (synthPanels.length === 0) {
-            console.warn(`Smart Toggle: Could not find any elements matching '${SYNTH_UI_SELECTOR}'`);
-            return;
-        }
+    // Bind to the external "Synth" button in your index.html
+    const synthToggleBtn = document.getElementById('toggle-synth-btn');
+    if (synthToggleBtn) {
+        synthToggleBtn.addEventListener('click', (e) => {
+            let synthPanels = document.querySelectorAll(SYNTH_UI_SELECTOR);
+            if (synthPanels.length === 0) return;
 
-        let isHidden = false;
-        synthPanels.forEach(panel => {
-            if (panel.style.display !== 'none') { 
-                panel.style.display = 'none'; 
-                isHidden = true; 
-            } else { 
-                panel.style.display = ''; 
-                isHidden = false; 
-            }
+            let isHidden = false;
+            synthPanels.forEach(panel => {
+                if (panel.style.display !== 'none') { 
+                    panel.style.display = 'none'; 
+                    isHidden = true; 
+                } else { 
+                    panel.style.display = ''; 
+                    isHidden = false; 
+                }
+            });
+            
+            // Visual feedback on the button
+            e.target.style.opacity = isHidden ? '0.5' : '1.0';
+            setTimeout(resize, 100); 
         });
-        
-        e.target.innerText = isHidden ? 'Show Synth Controls' : 'Hide Synth Controls';
-        e.target.style.color = isHidden ? '#888' : '#39ff14';
-        
-        // Let the DOM settle, then resize the canvases
-        setTimeout(resize, 100); 
-    });
+    }
 
     sCtxs = [0,1,2,3].map(i => document.getElementById(`scope-${i}`).getContext('2d'));
     rCtxs = [0,1,2,3].map(i => document.getElementById(`roll-${i}`).getContext('2d'));
