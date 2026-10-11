@@ -8,10 +8,13 @@ navigator.requestMIDIAccess({ sysex: false }).then(access => {
         select.innerHTML = '<option value="none">No Output</option>'; 
         Array.from(access.outputs.values()).forEach(p => { 
             let opt = document.createElement('option'); 
-            opt.value = p.id; opt.text = p.name; select.appendChild(opt); 
+            opt.value = p.id; 
+            opt.text = p.name; 
+            select.appendChild(opt); 
         }); 
     }
-    pop(); access.onstatechange = pop; 
+    pop(); 
+    access.onstatechange = pop; 
     select.addEventListener('change', (e) => midiOutput = access.outputs.get(e.target.value) || null);
 }).catch(()=>{});
 
@@ -29,16 +32,19 @@ async function connectBLE() {
     try {
         const btn = document.getElementById('ble-status');
         if(btn) btn.innerText = 'INIT...';
+
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         ensureSynths(); 
         
         if(btn) btn.innerText = 'SCANNING...';
+        
         const device = await navigator.bluetooth.requestDevice({ 
             filters: [{ namePrefix: "biodata" }, { namePrefix: "Biodata" }], 
             optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"] 
         });
         
         if(btn) btn.innerText = 'CONNECTING...';
+        
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
         bleTxCharacteristic = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
@@ -51,14 +57,17 @@ async function connectBLE() {
         await rxChar.startNotifications();
         rxChar.addEventListener('characteristicvaluechanged', (e) => {
             bleBuffer += new TextDecoder().decode(e.target.value);
-            let lines = bleBuffer.split('\n'); bleBuffer = lines.pop(); 
+            let lines = bleBuffer.split('\n'); 
+            bleBuffer = lines.pop(); 
             for (let line of lines) { 
                 if (line.trim().startsWith('{')) { 
                     try { processBiodata(JSON.parse(line)); } catch(err){} 
                 } 
             }
         });
+        
         if(btn) { btn.innerText = 'ONLINE'; btn.style.color = 'var(--green)'; }
+        
     } catch (error) { 
         console.error("BLE Connect Error:", error);
         const btn = document.getElementById('ble-status');
@@ -77,31 +86,33 @@ function processBiodata(payload) {
         let chIdx = payload.ch;
         let ch = chData[chIdx];
         let pConfig = synthChannels[chIdx] ? synthChannels[chIdx].params : null;
+        
         if (!pConfig) return;
         
         if (!ch.analysisBuffer) ch.analysisBuffer = [];
         if (!ch.lastTrigger) ch.lastTrigger = 0;
         if (ch.ema === undefined) ch.ema = null;
+        if (ch.emaTicks === undefined) ch.emaTicks = null;
         if (!ch.history) ch.history = [];
         if (!ch.acc) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
         if (!ch.vis) ch.vis = { counter: 0, evt: 0, pitch: null };
 
         const CALIBRATION_FACTOR = 10000000; 
-        
-        // Lowered defaults for a smoother baseline experience
-        const xSpeedEl = document.getElementById('ui-xspeed');
-        const ySmoothEl = document.getElementById('ui-ysmooth');
-        const DECIMATION_RATE = xSpeedEl ? parseInt(xSpeedEl.value) : 2;
-        const EMA_ALPHA = ySmoothEl ? parseFloat(ySmoothEl.value) : 0.05;
+        const DECIMATION_RATE = 2;   // Fixed rate for smooth visuals
+        const EMA_ALPHA = 0.05;      // Fixed smoothing
 
         payload.p.forEach(rawTicks => {
             ch.analysisBuffer.push(rawTicks);
+            
+            // Math computations
             let rawAdmittance = CALIBRATION_FACTOR / rawTicks;
             ch.ema = (ch.ema === null) ? rawAdmittance : (rawAdmittance * EMA_ALPHA) + (ch.ema * (1 - EMA_ALPHA));
+            ch.emaTicks = (ch.emaTicks === null) ? rawTicks : (rawTicks * 0.05) + (ch.emaTicks * 0.95);
 
             if (ch.lastEma !== undefined) {
                 let instantaneousSlew = ch.ema - ch.lastEma;
                 ch.slew = (ch.slew === undefined) ? instantaneousSlew : (instantaneousSlew * 0.05) + (ch.slew * 0.95);
+                
                 if (ch.lastSlew !== undefined) {
                     if (ch.lastSlew > 0 && ch.slew <= 0) ch.peakFlag = 45; 
                     if (ch.lastSlew < 0 && ch.slew >= 0) ch.troughFlag = 45;
@@ -110,7 +121,8 @@ function processBiodata(payload) {
             }
             ch.lastEma = ch.ema;
 
-            ch.acc.sum += ch.ema; ch.acc.count++;
+            ch.acc.sum += ch.ema; 
+            ch.acc.count++;
             if (ch.ema < ch.acc.min) ch.acc.min = ch.ema;
             if (ch.ema > ch.acc.max) ch.acc.max = ch.ema;
 
@@ -146,6 +158,7 @@ function processBiodata(payload) {
                         let vel = mapScale(delta % 127, 0, 127, 80, 110);
                         let rawNote = mapScale(averg % 127, 0, 127, pConfig.minNote, pConfig.maxNote);
                         let modifiedPitch = applyPitchMods(chIdx, rawNote);
+                        
                         if (modifiedPitch !== null) {
                             isEvent = 1;
                             finalPitch = sendMidiNote(chIdx, modifiedPitch, vel, dur);
@@ -162,7 +175,8 @@ function processBiodata(payload) {
             
             if (ch.vis.counter >= DECIMATION_RATE) {
                 if (!ch.renderQueue) ch.renderQueue = [];
-                ch.renderQueue.push({ r: rawAdmittance, s: ch.ema, evt: ch.vis.evt, n: ch.vis.pitch });
+                // Added raw ticks to the payload for the HUD
+                ch.renderQueue.push({ r: rawAdmittance, s: ch.ema, evt: ch.vis.evt, n: ch.vis.pitch, ticks: ch.emaTicks });
                 ch.vis.counter = 0;
                 ch.vis.evt = 0;
                 ch.vis.pitch = null;
