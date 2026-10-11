@@ -2,23 +2,26 @@
  * js/visualizer.js
  */
 
-const SYNTH_UI_SELECTOR = '#synth-inspector'; 
 const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
-
 let sCtxs = [], rCtxs = [];
 
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
+    // Nuke the external CSS class that was forcing the 1-column collapse
+    dash.className = ''; 
+    
+    // Enforce an absolute, unbreakable 2x2 layout that CSS cannot override
     if (!document.getElementById('biodata-grid-styles')) {
         const style = document.createElement('style');
         style.id = 'biodata-grid-styles';
         style.innerHTML = `
-            #biodata-visualizer-workspace {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
-                width: 100%;
+            #dashboard {
+                display: grid !important;
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 15px !important;
+                width: 100% !important;
+                padding-bottom: 20px;
             }
             .canvas-wrapper {
                 position: relative;
@@ -36,16 +39,12 @@ function initVisualizer() {
         document.head.appendChild(style);
     }
     
-    const visWorkspace = document.createElement('div');
-    visWorkspace.id = 'biodata-visualizer-workspace';
-    
     let html = ``;
 
     for(let i=0; i<4; i++) {
         if(!chData[i]) chData[i] = { waveBuffer: [], renderQueue: [], notes: [], acc: {}, history: [] };
         chData[i].config = { zoom: 500, smooth: 0.05, freeze: false };
         
-        // Deep Zoom Slider (Max 5000)
         html += `
         <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px; border: 1px solid var(--border); border-radius: 4px; min-width: 0;">
             
@@ -78,8 +77,7 @@ function initVisualizer() {
         </div>`;
     }
     
-    visWorkspace.innerHTML = html;
-    dash.appendChild(visWorkspace);
+    dash.innerHTML = html;
 
     for(let i=0; i<4; i++) {
         document.getElementById(`ch-zoom-${i}`).addEventListener('input', (e) => chData[i].config.zoom = parseInt(e.target.value));
@@ -155,9 +153,7 @@ function renderLoop() {
         let ch = chData[i];
         if(!ch.config) ch.config = { zoom: 500, smooth: 0.05, freeze: false };
         
-        // 1. DATA INGESTION & DEEP CACHE
         if (ch.config.freeze) {
-            // When frozen, discard new incoming data to prevent queue blowout
             ch.renderQueue = []; 
             ch.lastFrameTime = nowMs;
         } else {
@@ -184,20 +180,16 @@ function renderLoop() {
                 ch.lastFrameTime = nowMs;
             }
 
-            // Always store a deep cache of 5,000 points regardless of zoom slider
             while (ch.waveBuffer.length > 5000) ch.waveBuffer.shift();
         }
 
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
         sCtx.clearRect(0, 0, sw, sh);
         
-        // 2. SLICE BY ZOOM & COMPUTE INSTANT SMOOTHING
-        // Pull exactly the number of points requested by the Zoom slider from the end of the deep cache
         let displayCount = Math.min(ch.config.zoom, ch.waveBuffer.length);
         let displayBuf = ch.waveBuffer.slice(-displayCount);
         
         if(displayBuf.length > 1) {
-            // Compute real-time EMA array based on the Smooth slider
             let smoothAlpha = ch.config.smooth;
             let visualS = new Float32Array(displayBuf.length);
             let currentEma = displayBuf[0].r;
@@ -210,7 +202,6 @@ function renderLoop() {
                 if (currentEma > max) max = currentEma;
             }
 
-            // Draw Grid
             sCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             sCtx.lineWidth = 1;
             sCtx.beginPath();
@@ -218,7 +209,6 @@ function renderLoop() {
             for(let g=1; g<10; g++) { sCtx.moveTo(sw * (g/10), 0); sCtx.lineTo(sw * (g/10), sh); }
             sCtx.stroke();
 
-            // Draw Smoothed Line
             let range = max - min || 1;
             let paddedMin = min - (range * 0.1);
             let paddedRange = range * 1.2;
@@ -231,7 +221,6 @@ function renderLoop() {
                 let x = j * (sw / (displayCount - 1));
                 let y = getPathY(visualS[j]);
                 
-                // Overlay MIDI Event Flags at correct X positions
                 if(displayBuf[j].evt === 1 && displayBuf[j].n) {
                     sCtx.save();
                     sCtx.strokeStyle = `hsla(${(displayBuf[j].n % 12) * 30}, 100%, 50%, 0.7)`;
@@ -243,9 +232,8 @@ function renderLoop() {
             }
             sCtx.stroke();
 
-            // 3. UPDATE HUD
             let hud = document.getElementById(`hud-${i}`);
-            let curVal = visualS[visualS.length-1] || 0; // Read from the instantly smoothed array
+            let curVal = visualS[visualS.length-1] || 0; 
             let curTicks = displayBuf[displayBuf.length-1].ticks || 0;
             let kOhm = curVal > 0 ? (1000 / curVal) : 0;
             
@@ -275,7 +263,6 @@ function renderLoop() {
             `;
         }
         
-        // 4. DRAW HISTORICAL ROLL
         rCtx.clearRect(0, 0, rw, rh);
         rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
         for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
