@@ -2,19 +2,24 @@
  * js/visualizer.js
  */
 
-let sCtxs = [], rCtxs = [];
+// --- CONFIGURATION ---
+const SYNTH_UI_SELECTOR = '#synth-inspector'; // Targets your exact synth HTML wrapper
+const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
 const VISUAL_POINTS = 250; 
-const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; // Red, Green, Blue, Purple
+
+let sCtxs = [], rCtxs = [];
 
 function initVisualizer() {
     const dash = document.getElementById('dashboard');
     
-    // Clean 2x2 grid layout
-    dash.style.display = 'grid';
-    dash.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45%, 1fr))';
-    dash.style.gap = '15px';
+    // 1. Create a dedicated, isolated workspace for the scopes so we don't destroy existing HTML
+    const visWorkspace = document.createElement('div');
+    visWorkspace.id = 'biodata-visualizer-workspace';
+    visWorkspace.style.display = 'grid';
+    visWorkspace.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45%, 1fr))';
+    visWorkspace.style.gap = '15px';
     
-    // Top Bar: Synth UI Toggle Button (replaces DSP sliders)
+    // Top Bar: Smart Synth UI Toggle Button
     let html = `
         <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-bottom: 5px;">
             <button id="toggle-synth-btn" style="background: #161b22; color: #39ff14; font-weight: bold; border: 1px solid var(--border); padding: 8px 16px; border-radius: 4px; cursor: pointer; text-transform: uppercase;">
@@ -24,38 +29,76 @@ function initVisualizer() {
     `;
 
     for(let i=0; i<4; i++) {
+        if(!chData[i]) chData[i] = { waveBuffer: [], renderQueue: [], notes: [], acc: {}, history: [] };
+        chData[i].config = { zoom: 250, smooth: 0.05, freeze: false };
+        
         html += `
-        <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px;">
-            <div class="card-header" style="color: ${CH_COLORS[i]}; font-size: 1.2em; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
-                CHANNEL ${i+1}
+        <div class="card" style="display: flex; flex-direction: column; background: #0d1117; padding: 15px; border: 1px solid var(--border); border-radius: 4px;">
+            
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+                <span style="color: ${CH_COLORS[i]}; font-size: 1.2em; font-weight: bold;">CHANNEL ${i+1}</span>
+                
+                <div style="display: flex; gap: 15px; align-items: center; font-size: 0.8em; color: #888;">
+                    <label style="display: flex; align-items: center; gap: 5px;">
+                        ZOOM <input type="range" id="ch-zoom-${i}" min="50" max="1000" value="250" style="width: 70px; cursor: pointer;">
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px;">
+                        SMOOTH <input type="range" id="ch-smooth-${i}" min="0.01" max="1.0" step="0.01" value="0.05" style="width: 70px; cursor: pointer;">
+                    </label>
+                    <button id="ch-freeze-${i}" style="background: transparent; color: #888; border: 1px solid #444; padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 0.9em; font-weight: bold;">
+                        FREEZE
+                    </button>
+                </div>
             </div>
             
-            <!-- Top: Main Scope -->
             <canvas class="scope" id="scope-${i}" style="width: 100%; height: 180px; background: #000; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px;"></canvas>
             
-            <!-- Bottom: Split Roll & HUD -->
             <div style="display: flex; gap: 15px; height: 130px;">
                 <canvas class="roll" id="roll-${i}" style="flex: 1; max-width: 50%; height: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px;"></canvas>
-                <div id="hud-${i}" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace;">
-                </div>
+                <div id="hud-${i}" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #0a0d12; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace;"></div>
             </div>
         </div>`;
     }
     
-    dash.innerHTML = html;
+    visWorkspace.innerHTML = html;
+    dash.appendChild(visWorkspace); // Cleanly appends rather than destroying your synths
 
-    // Synthesizer Toggle Logic
-    document.getElementById('toggle-synth-btn').addEventListener('click', (e) => {
-        // Find common synthesizer container IDs/classes
-        let synthContainers = document.querySelectorAll('#synth-container, #synths, .synth-panel, .synth-wrap');
-        let isHidden = false;
-        synthContainers.forEach(el => {
-            if (el.style.display !== 'none') { el.style.display = 'none'; isHidden = true; }
-            else { el.style.display = ''; isHidden = false; }
+    // Attach Per-Channel Event Listeners
+    for(let i=0; i<4; i++) {
+        document.getElementById(`ch-zoom-${i}`).addEventListener('input', (e) => chData[i].config.zoom = parseInt(e.target.value));
+        document.getElementById(`ch-smooth-${i}`).addEventListener('input', (e) => chData[i].config.smooth = parseFloat(e.target.value));
+        document.getElementById(`ch-freeze-${i}`).addEventListener('click', (e) => {
+            chData[i].config.freeze = !chData[i].config.freeze;
+            e.target.style.background = chData[i].config.freeze ? '#ff3333' : 'transparent';
+            e.target.style.color = chData[i].config.freeze ? '#fff' : '#888';
+            e.target.style.borderColor = chData[i].config.freeze ? '#ff3333' : '#444';
         });
+    }
+
+    // 2. Smart Synth Toggle: Only targets the exact element(s) you define
+    document.getElementById('toggle-synth-btn').addEventListener('click', (e) => {
+        let synthPanels = document.querySelectorAll(SYNTH_UI_SELECTOR);
+        if (synthPanels.length === 0) {
+            console.warn(`Smart Toggle: Could not find any elements matching '${SYNTH_UI_SELECTOR}'`);
+            return;
+        }
+
+        let isHidden = false;
+        synthPanels.forEach(panel => {
+            if (panel.style.display !== 'none') { 
+                panel.style.display = 'none'; 
+                isHidden = true; 
+            } else { 
+                panel.style.display = ''; 
+                isHidden = false; 
+            }
+        });
+        
         e.target.innerText = isHidden ? 'Show Synth Controls' : 'Hide Synth Controls';
         e.target.style.color = isHidden ? '#888' : '#39ff14';
-        setTimeout(resize, 100); // Trigger canvas resize after DOM shifts
+        
+        // Let the DOM settle, then resize the canvases
+        setTimeout(resize, 100); 
     });
 
     sCtxs = [0,1,2,3].map(i => document.getElementById(`scope-${i}`).getContext('2d'));
@@ -93,7 +136,6 @@ function renderLoop() {
             else if (config.shape === 'sawtooth') bright = phase;
             else if (config.shape === 'rampdown') bright = 1 - phase;
             else if (config.shape === 'random') bright = Math.random(); 
-
             const ledEl = document.getElementById(lfo.id);
             if (ledEl) { ledEl.style.opacity = 0.1 + (bright * (config.depth > 0 ? 0.9 : 0.25)); }
         });
@@ -117,40 +159,46 @@ function renderLoop() {
     for(let i=0; i<4; i++) {
         if(!sCtxs[i]) continue;
         let ch = chData[i];
+        if(!ch.config) ch.config = { zoom: 250, smooth: 0.05, freeze: false };
         
-        // --- CONSTANT VELOCITY SMOOTH SCROLL ---
-        if (ch.renderQueue && ch.renderQueue.length > 0) {
-            if (typeof ch.dripFloat === 'undefined') { ch.dripFloat = 0; ch.lastQ = 0; ch.drainVel = 1; }
-            
-            // If a new 100ms BLE chunk arrived (queue suddenly jumped in size)
-            if (ch.renderQueue.length > ch.lastQ + 5) {
-                // Calculate exact velocity to bridge the gap until the next packet (approx 6 frames)
-                ch.drainVel = ch.renderQueue.length / 6.0; 
+        if (ch.config.freeze) {
+            ch.renderQueue = []; 
+            ch.lastFrameTime = nowMs;
+        } else {
+            if (ch.renderQueue && ch.renderQueue.length > 0) {
+                let deltaMs = nowMs - (ch.lastFrameTime || nowMs);
+                ch.lastFrameTime = nowMs;
+                if (deltaMs > 100) deltaMs = 100; 
+
+                ch.timeAcc = (ch.timeAcc || 0) + deltaMs;
+
+                while (ch.renderQueue.length > 0) {
+                    let nextSample = ch.renderQueue[0];
+                    let sampleMs = nextSample.ticks / 240000; 
+
+                    if (ch.timeAcc >= sampleMs) {
+                        ch.timeAcc -= sampleMs;
+                        ch.waveBuffer.push(ch.renderQueue.shift());
+                    } else {
+                        break; 
+                    }
+                }
+                
+                if (ch.renderQueue.length > 500) {
+                    ch.renderQueue = ch.renderQueue.slice(-100);
+                }
+            } else {
+                ch.lastFrameTime = nowMs;
             }
-            // Safety: gently slow down if we are running out of points to prevent a hard stop
-            if (ch.renderQueue.length < 3) ch.drainVel *= 0.8;
-            
-            ch.lastQ = ch.renderQueue.length;
-            
-            ch.dripFloat += ch.drainVel;
-            let drainThisFrame = Math.floor(ch.dripFloat);
-            if (drainThisFrame > ch.renderQueue.length) drainThisFrame = ch.renderQueue.length;
-            
-            ch.dripFloat -= drainThisFrame;
-            for (let k = 0; k < drainThisFrame; k++) {
-                ch.waveBuffer.push(ch.renderQueue.shift());
-            }
-            ch.lastQ = ch.renderQueue.length; // update after drain
+
+            while (ch.waveBuffer.length > ch.config.zoom) ch.waveBuffer.shift();
         }
-        
-        while (ch.waveBuffer.length > VISUAL_POINTS) ch.waveBuffer.shift();
 
         let sCtx = sCtxs[i], rCtx = rCtxs[i], sw = sCtx.canvas.width, sh = sCtx.canvas.height, rw = rCtx.canvas.width, rh = rCtx.canvas.height;
         sCtx.fillStyle = '#000'; sCtx.fillRect(0, 0, sw, sh);
         let buf = ch.waveBuffer;
         
         if(buf.length > 1) {
-            // MAIN SCOPE: GRID LINES
             sCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             sCtx.lineWidth = 1;
             sCtx.beginPath();
@@ -168,12 +216,11 @@ function renderLoop() {
             let paddedRange = range * 1.2;
             let getPathY = (val) => sh - ((val - paddedMin) / paddedRange * sh);
 
-            // Colored based on channel mapping
             sCtx.strokeStyle = CH_COLORS[i]; 
             sCtx.lineWidth = 2; 
             sCtx.beginPath();
             for(let j=0; j<buf.length; j++) {
-                let x = j * (sw / (VISUAL_POINTS - 1));
+                let x = j * (sw / (ch.config.zoom - 1));
                 let y = getPathY(buf[j].s);
                 
                 if(buf[j].evt === 1 && buf[j].n) {
@@ -187,12 +234,10 @@ function renderLoop() {
             }
             sCtx.stroke();
 
-            // --- HTML HUD UPDATED WITH TICKS AND kΩ ---
+            // HUD
             let hud = document.getElementById(`hud-${i}`);
             let curVal = buf[buf.length-1].s || 0;
             let curTicks = buf[buf.length-1].ticks || 0;
-            
-            // Formula: 1,000 / Admittance (µS) = Resistance (kΩ)
             let kOhm = curVal > 0 ? (1000 / curVal) : 0;
             
             let slw = (ch.slew || 0) * 100;
@@ -213,15 +258,14 @@ function renderLoop() {
                     <span style="font-size: 14px; color: #ccc;">${kOhm.toFixed(1)} kΩ</span>
                 </div>
                 
-                <div style="font-size: 10px; color: #888; margin-top: 5px;">RAW PULSE WIDTH</div>
-                <div style="font-size: 14px; font-weight: bold; color: #ccc;">${Math.round(curTicks)} Ticks</div>
+                <div style="font-size: 10px; color: #888; margin-top: 5px;">RAW PULSE DURATION</div>
+                <div style="font-size: 14px; font-weight: bold; color: #ccc;">${Math.round(curTicks).toLocaleString()} Ticks</div>
                 
                 <div style="font-size: 10px; color: #888; margin-top: 5px;">SLEW / TREND</div>
                 <div style="font-size: 16px; font-weight: bold; color: ${tCol};">${tIcon} ${Math.abs(slw).toFixed(2)}</div>
             `;
         }
         
-        // 5-MIN ROLL RENDER
         rCtx.fillStyle = '#000'; rCtx.fillRect(0, 0, rw, rh);
         rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
         for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
