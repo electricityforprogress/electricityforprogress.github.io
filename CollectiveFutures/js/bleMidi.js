@@ -4,58 +4,75 @@
 
 navigator.requestMIDIAccess({ sysex: false }).then(access => {
     const select = document.getElementById('midi-out-select');
-    const pop = () => { select.innerHTML = '<option value="none">No Output</option>'; Array.from(access.outputs.values()).forEach(p => { let opt = document.createElement('option'); opt.value = p.id; opt.text = p.name; select.appendChild(opt); }); }
-    pop(); access.onstatechange = pop; select.addEventListener('change', (e) => midiOutput = access.outputs.get(e.target.value) || null);
+    const pop = () => { 
+        select.innerHTML = '<option value="none">No Output</option>'; 
+        Array.from(access.outputs.values()).forEach(p => { 
+            let opt = document.createElement('option'); 
+            opt.value = p.id; 
+            opt.text = p.name; 
+            select.appendChild(opt); 
+        }); 
+    }
+    pop(); 
+    access.onstatechange = pop; 
+    select.addEventListener('change', (e) => midiOutput = access.outputs.get(e.target.value) || null);
 }).catch(()=>{});
 
 function sendMidiNote(channel, pitch, velocity, duration) {
     if (synthChannels[channel]) synthChannels[channel].play(pitch, velocity, duration);
-    
     if (midiOutput) { 
         let midiCh = synthChannels[channel].params.midiOutCh || channel; 
         midiOutput.send([0x90 + midiCh, pitch, velocity]); 
-        setTimeout(() => { 
-            if (midiOutput) midiOutput.send([0x80 + midiCh, pitch, 0]); 
-        }, duration); 
+        setTimeout(() => { if (midiOutput) midiOutput.send([0x80 + midiCh, pitch, 0]); }, duration); 
     }
     return pitch; 
 }
 
 async function connectBLE() {
-    if (audioCtx.state === 'suspended') await audioCtx.resume();
-    ensureSynths(); 
-    
     try {
+        const btn = document.getElementById('ble-status');
+        if(btn) btn.innerText = 'INIT...';
+
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        ensureSynths(); 
+        
+        if(btn) btn.innerText = 'SCANNING...';
+        
         const device = await navigator.bluetooth.requestDevice({ 
             filters: [{ namePrefix: "biodata" }, { namePrefix: "Biodata" }], 
             optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"] 
         });
-        document.getElementById('ble-status').innerText = 'CONNECTING...';
+        
+        if(btn) btn.innerText = 'CONNECTING...';
+        
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
         bleTxCharacteristic = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
         const rxChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
         
         device.addEventListener('gattserverdisconnected', () => { 
-            document.getElementById('ble-status').innerText = 'OFFLINE'; 
-            document.getElementById('ble-status').style.color = 'var(--red)'; 
+            if(btn) { btn.innerText = 'OFFLINE'; btn.style.color = 'var(--red)'; }
         });
         
         await rxChar.startNotifications();
         rxChar.addEventListener('characteristicvaluechanged', (e) => {
             bleBuffer += new TextDecoder().decode(e.target.value);
-            let lines = bleBuffer.split('\n'); bleBuffer = lines.pop(); 
+            let lines = bleBuffer.split('\n'); 
+            bleBuffer = lines.pop(); 
             for (let line of lines) { 
                 if (line.trim().startsWith('{')) { 
                     try { processBiodata(JSON.parse(line)); } catch(err){} 
                 } 
             }
         });
-        document.getElementById('ble-status').innerText = 'ONLINE'; 
-        document.getElementById('ble-status').style.color = 'var(--green)';
+        
+        if(btn) { btn.innerText = 'ONLINE'; btn.style.color = 'var(--green)'; }
+        
     } catch (error) { 
         console.error("BLE Connect Error:", error);
-        document.getElementById('ble-status').innerText = 'FAILED'; 
+        const btn = document.getElementById('ble-status');
+        if(btn) { btn.innerText = 'FAILED'; btn.style.color = 'var(--red)'; }
+        alert("Bluetooth Error: " + error.message);
     }
 }
 
@@ -81,7 +98,6 @@ function processBiodata(payload) {
 
         const CALIBRATION_FACTOR = 10000000; 
         
-        // --- LIVE DSP COMPUTATION VALUES ---
         const xSpeedEl = document.getElementById('ui-xspeed');
         const ySmoothEl = document.getElementById('ui-ysmooth');
         const DECIMATION_RATE = xSpeedEl ? parseInt(xSpeedEl.value) : 6;
@@ -90,7 +106,6 @@ function processBiodata(payload) {
         payload.p.forEach(rawTicks => {
             ch.analysisBuffer.push(rawTicks);
             
-            // --- MATHEMATICAL SMOOTHING (Y-AXIS CONTROL) ---
             let rawAdmittance = CALIBRATION_FACTOR / rawTicks;
             ch.ema = (ch.ema === null) ? rawAdmittance : (rawAdmittance * EMA_ALPHA) + (ch.ema * (1 - EMA_ALPHA));
 
@@ -106,7 +121,8 @@ function processBiodata(payload) {
             }
             ch.lastEma = ch.ema;
 
-            ch.acc.sum += ch.ema; ch.acc.count++;
+            ch.acc.sum += ch.ema; 
+            ch.acc.count++;
             if (ch.ema < ch.acc.min) ch.acc.min = ch.ema;
             if (ch.ema > ch.acc.max) ch.acc.max = ch.ema;
 
@@ -154,5 +170,16 @@ function processBiodata(payload) {
                 ch.analysisBuffer = [];
             }
             
-            // --- MATHEMATICAL DOWNSAMPLING (X-AXIS CONTROL) ---
-            if (is
+            if (isEvent) { ch.vis.evt = 1; ch.vis.pitch = finalPitch; }
+            ch.vis.counter++;
+            
+            if (ch.vis.counter >= DECIMATION_RATE) {
+                if (!ch.renderQueue) ch.renderQueue = [];
+                ch.renderQueue.push({ r: rawAdmittance, s: ch.ema, evt: ch.vis.evt, n: ch.vis.pitch });
+                ch.vis.counter = 0;
+                ch.vis.evt = 0;
+                ch.vis.pitch = null;
+            }
+        });
+    }
+}
