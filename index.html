@@ -3,349 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biodata Studio - Master Grid</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <style>
-        .pro-slider { -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: transparent; outline: none; margin: 8px 0; }
-        .pro-slider::-webkit-slider-thumb, .dual-slider-input::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 20px; border-radius: 2px; background: #aaa; cursor: pointer; border: 1px solid #111; box-shadow: inset 0 0 2px #fff, 0 1px 3px rgba(0,0,0,0.8); pointer-events: auto; }
-        
-        .dual-slider-container { position: relative; width: 100%; height: 20px; margin: 5px 0; }
-        .dual-slider-track { position: absolute; top: 7px; left: 0; right: 0; height: 6px; background: #333; border-radius: 3px; z-index: 0; }
-        .dual-slider-fill { position: absolute; top: 7px; height: 6px; background: var(--cyan); z-index: 1; border-radius: 3px; }
-        .dual-slider-input { position: absolute; top: 0; left: 0; width: 100%; height: 20px; -webkit-appearance: none; background: transparent; pointer-events: none; z-index: 2; margin: 0; outline: none; }
+    <title>Electricity for Progress</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" href="/favicon/apple-touch-icon.png">
 
-        .piano-wrapper { position: relative; height: 100%; background: #111; border: 1px solid var(--border); border-radius: 3px; display: flex; width: 100%; margin: 0; }
-        .key-w { flex: 1; background: #ddd; border-right: 1px solid #999; border-bottom: 2px solid #bbb; border-radius: 0 0 3px 3px; box-sizing: border-box; }
-        .key-w:last-child { border-right: none; }
-        .key-b { position: absolute; background: #222; width: 9%; height: 60%; top: 0; border-radius: 0 0 3px 3px; border: 1px solid #000; border-top: none; }
-        .key-w.active { background: var(--cyan); box-shadow: inset 0 0 10px rgba(255,255,255,0.5); border-bottom-color: var(--cyan); }
-        .key-b.active { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
-        .cs { left: 9.5%; } .ds { left: 23.5%; } .fs { left: 52%; } .gs { left: 66.5%; } .as { left: 81%; }
-        
-        .synth-module h3 { font-size: 13px !important; }
-        .knob-label { font-size: 11px !important; }
-        .slider-label { font-size: 12px !important; }
-
-        .dropdown-widget::after { content: ""; position: absolute; top: 100%; left: 0; width: 100%; height: 20px; background: transparent; z-index: 10; }
-        
-        /* Mobile MIDI Panel Clamp */
-        .dropdown-content.midi-panel { max-width: 90vw; box-sizing: border-box; }
-        .midi-ch-grid select { width: 100%; box-sizing: border-box; }
-
-        canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !important; }
-        canvas#master-vu-hz { width: 80px !important; height: 16px !important; margin: 0 !important; }
-        
-        #mixer-dropdown-content { flex-wrap: nowrap !important; overflow-x: auto; justify-content: flex-start; gap: 0px !important; padding: 5px !important; width: auto; max-width: 90vw; right: 0; left: auto; }
-        .strip { display: flex; flex-direction: column; align-items: center; gap: 8px; background: transparent; padding: 5px 4px !important; border: none; border-radius: 0; border-right: 1px solid var(--border); flex: 1; min-width: 0; }
-        .strip:last-child { border-right: none; }
-
-        @media (max-width: 650px) {
-            .right-controls { width: 100%; justify-content: space-between; }
-            #toggle-synth-btn, .global-mixer-widget { flex: 1 1 45%; justify-content: center; margin-top: 5px; }
-        }
-        
-        .bio-brand { background: -webkit-linear-gradient(45deg, #00f0ff, #007799); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        
-		.logo-shimmer {
-            display: inline-block;
-            width: 28px; 
-            height: 28px;
-            background: linear-gradient(to right, #007799 0%, #00f0ff 25%, #007799 45%, #ffffff 50%, #00f0ff 55%, #007799 75%, #00f0ff 100%);
-            background-size: 400% 100%;
-            animation: text-shimmer 12s ease-in-out infinite;
-            
-            /* Explicit Masking Properties */
-            -webkit-mask-image: url('/css/eforp-logo.svg');
-            -webkit-mask-size: contain;
-            -webkit-mask-repeat: no-repeat;
-            -webkit-mask-position: center;
-            
-            mask-image: url('/css/eforp-logo.svg');
-            mask-size: contain;
-            mask-repeat: no-repeat;
-            mask-position: center;
-        }
-    </style>
+    <!-- One centralized stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<div class="toolbar">
-    <div class="brand-group">
-        <div class="logo-shimmer"></div>
-        <span class="bio-brand">bioQuad</span>
-    </div>
+    <!-- Integrated Canvas -->
+    <canvas id="starfieldCanvas"></canvas>
 
-    <div class="control-group right-controls">
-        <button id="btn-ble" onclick="connectBLE()">CONNECT BLE <span id="ble-status" class="status-offline">●</span></button>
+    <!-- Navigation Component Placeholder -->
+    <div id="nav-placeholder"></div>
 
-        <div class="dropdown-widget">
-            <button>MIDI ⚙️</button>
-            <div class="dropdown-content midi-panel">
-                <label>Clock:</label>
-                <select id="midi-clock-dir" onchange="window.midiClockMode = this.value; syncUI();"><option value="out">MIDI Clock OUT (Master)</option><option value="in">MIDI Clock IN (Sync)</option></select>
-                <label>Master Out:</label>
-                <select id="midi-out-select"><option value="none">No Output</option></select>
-                <hr>
-                <div class="midi-ch-grid">
-                    <span>CH 1</span><select id="ui-midi-ch-0" onchange="updateMidiChannel(0, this.value)"></select>
-                    <span>CH 2</span><select id="ui-midi-ch-1" onchange="updateMidiChannel(1, this.value)"></select>
-                    <span>CH 3</span><select id="ui-midi-ch-2" onchange="updateMidiChannel(2, this.value)"></select>
-                    <span>CH 4</span><select id="ui-midi-ch-3" onchange="updateMidiChannel(3, this.value)"></select>
-                </div>
-            </div>
-        </div>
-
-        <div class="dropdown-widget">
-            <button>PRESETS ▼</button>
-            <div class="dropdown-content preset-panel">
-                <select id="preset-select" onchange="loadPreset(this.value)"><option value="">-- Select --</option></select>
-                <button onclick="savePreset()">SAVE</button>
-                <button onclick="exportPresets()">↓ EXPORT</button>
-                <button onclick="document.getElementById('import-file').click()">↑ IMPORT</button>
-                <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
-                <button class="danger" onclick="clearAllPresets()">🗑️ CLEAR</button>
-            </div>
-        </div>
-
-        <button id="toggle-synth-btn" onclick="toggleSynthUI()" style="cursor: pointer; font-weight: bold; margin-left: 10px; opacity: 0.5;">Synth</button>
-        
-        <div class="dropdown-widget global-mixer-widget">
-            <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; height: 100%;"><canvas id="master-vu-hz" width="80" height="16" style="background:#000; border-radius:3px;"></canvas></div>
-            <button id="btn-master-mute" class="danger" onclick="toggleMasterMute()" style="padding: 3px 8px; font-size: 12px; border-radius:3px;">MUTE</button>
+    <main>
+        <article>
+            <h1>Biodata Sonification</h1>
             
-            <div class="dropdown-content mixer-dropdown" id="mixer-dropdown-content">
-                <!-- Javascript will inject the Channel Strips here -->
-            </div>
-        </div>
-    </div>
-</div>
+            <p><strong>Hold on … plants playing music, come on, really? Yes! And by listening closely you may find a better understanding of plants and of yourself!</strong></p>
 
-<div class="synth-inspector ui-hidden" id="synth-inspector">
-    <div class="synth-tabs">
-        <div class="synth-tab active" onclick="selectTab(0)"><div class="led" id="led-0"></div>CH 1</div>
-        <div class="synth-tab" onclick="selectTab(1)"><div class="led" id="led-1"></div>CH 2</div>
-        <div class="synth-tab" onclick="selectTab(2)"><div class="led" id="led-2"></div>CH 3</div>
-        <div class="synth-tab" onclick="selectTab(3)"><div class="led" id="led-3"></div>CH 4</div>
-    </div>
-    
-    <div class="synth-controls" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: stretch;">
-        
-        <!-- CARD 1: DETECTION & DENSITY -->
-        <div class="synth-module" style="flex: 1 1 300px; padding: 15px;">
-            <h3>DETECTION & DENSITY</h3>
+            <p>By measuring microcurrent fluctuations occurring across the surface of a plant’s leaf, this Biodata Sonification device generates MIDI notes when a change in conductivity is detected, allowing a user to listen into the invisible biological processes occurring within plants.</p>
+
+            <figure>
+                <img src="/images/Biodata_Afternoon_02-mp3-image.png" alt="Noise installation at Philadelphia's Art Alliance">
+                <figcaption>‘Noise’ installation at Philadelphia’s Art Alliance</figcaption>
+            </figure>
+
+            <p>Here you can see two electrodes are connected to the leaves of a Snake Plant using ‘Tens’ style sticky pads, which are reusable, washable, and ‘plant-safe’.</p>
+
+            <h2>How it works….</h2>
+
+            <p>Tiny changes in electrical conductivity are measured between the electrodes and fed into a programmable microcontroller. Changes are detected using averages and standard deviation calculations which turn on LEDs and produce MIDI Notes and Control Changes. The circuit used to detect biological galvanic conductance is based on a 555 timer IC set as an astable multivibrator, similar to a simple lie-detector.</p>
+
+            <p>The exploration and practice of Biodata Sonification can allow a student, musician, scientist, or florist to listen in on the secret life of plants, and understand how your tools work!</p>
+
+            <h2>Development and Future of Biodata Sonification</h2>
+
+            <p>This device began as an interactive human touch music project with my friends Jon Shapiro and Gus Depenbrock, developing into a plant-focused system with Data Garden and growing as I designed the MIDI Sprout, the project evolved further with my work at Haverford College using a wifi daughter board for the Adafruit Circuit Playground, and now continues as a part of my educational Biodata Sonification project using the Adafruit Feather ecosystem providing serial MIDI, Bluetooth MIDI, WiFi MIDI, or even direct translation of biodata into musical sounds!</p>
+
+            <p>One key aspect of this biodata system is the electrical isolation of the plant sensor, similar to a medical device, we need to ensure that the plant is not impacted by the sensor in order to detect how it reacts to stimulus ‘in nature’. One way this is done is by using MIDI which is opto-isolated, an additional level of separation can be provided by bluetooth and wifi wireless connections. USB connections are usually not isolated, and special circuitry is required in order to have charging, USB/MIDI, or other ‘wired’ connectivity. This also means that using battery power is much preferred over having the device plugged into a power supply.</p>
+
+            <p>Bluetooth MIDI is very well implemented on most Android and iPhones, as well as modern computers, making it a great way to connect one (or perhaps two) biodata systems to a computer/phone.</p>
+
+            <p>While working with Biodata Sonification I have found that connecting multiple plants to produce music can be very challenging, and the desire to collaborate with other plants over long distances is strong. In order for plants from multiple locations to be monitored/listened to simultaneously, we can use RTP-MIDI. This service allows MIDI to be sent over a local (wifi/ethernet) or external (internet) networks. By using services like <a href="https://mclarenlabs.com/#rtpmidi" target="_blank" rel="noreferrer noopener">McLaren Labs MIDI Cloud</a> who provide MIDI Chat Rooms, we can connect multiple MIDI streams and listen to plants from around the world!</p>
+
+            <figure>
+                <img src="/images/Biodata_ESP32.webp?width=2400&optimize=medium" alt="">
+            </figure>
+
+            <p>After a series of iterations, I always have errors and mistakes on my first run of circuit boards, I have a successful Bill of Materials listing (BOM) and designs for a Biodata Feather Wing circuit board. This daughter board should work with many of Adafruit’s Feather main boards, while this has been specifically built for the ESP32-S3 Feather. I’m hopeful it will additionally work with some of the Bluetooth boards, will just need to ensure the pins in usage for the IO and serial port for MIDI are not conflicting.</p>
+
+            <p>For those who want to build their own or review the details of of the system works, all of the files and so much more are available on my Electricity for Progress <a href="https://github.com/electricityforprogress/" target="_blank" rel="noreferrer noopener">GitHub repository</a>.</p>
+
+                      <p>These are instructions for assembling the Biodata Sonification device using an ESP32-S3 Feather and a solderless breadboard</p>
+            <iframe src="https://docs.google.com/presentation/d/e/2PACX-1vQv2lf3BtgonvkuruCsEbNgXGyKHLv037CAQ4u2NWHtBqVPHp6yxi93E4WfXM578tWJ4q-WRs86Cgee/pubembed?start=false&loop=true&delayms=3000" frameborder="0" width="660" height="560" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+
+            <p>I also have designed a neat (simple) 3D printed enclosure which allows a LiPo battery to be stacked along with the Feather and Biodata boards. Check it out on <a href="https://www.tinkercad.com/things/ijBz9vMCgHg" target="_blank" rel="noreferrer noopener">Tinkercad</a>.</p>
+
+            <h2>What is MIDI ?</h2>
+
+            <p>MIDI is a language for computers to talk to synthesizers, drum machines, and other electronic devices in order to play music. Classic synthesizers in the 80’s began to adopt the MIDI 5-pin DIN standard connector allowing interconnectivity for synchronization of timing/beats and allowing elaborate and repeatable programming of multiple devices. This revolutionized recording studios and live stage production, bringing a new level of digital control of instrumentation. In the modern day using big DIN cables does feel clunky and cumbersome, now BLE bluetooth and WIFI RTP-MIDI can allow wireless connections between music making devices, phones, computers, and even the internet.</p>
+
+            <p>Standard MIDI specifications allow connected devices to be ‘electrically isolated’ using optical transistors on the Input of any MIDI synthesizer. By ensuring electrical isolation, MIDI prevents old synths which may be in poor repair from destroying any other equipment it is connected to. This also limits any noise which would be present in the audio output of an interconnected synth or drum machine.</p>
+
+            <p>Review <a href="https://learn.sparkfun.com/tutorials/midi-tutorial/hardware--electronic-implementation" target="_blank" rel="noreferrer noopener">Sparkfun’s MIDI information</a> page for excellent details about MIDI circuits, pinouts, and how MIDI is used!</p>
+
+            <figure>
+                <img src="/images/MIDI_sparkfun_circuit.png" alt="Sparkfun MIDI Circuit">
+            </figure>
+
+            <p>For these reasons I have chosen MIDI as the musical data transport for this system. The plant and electrodes are provided with some level of electrical isolation, and MIDI can be easily used with keyboards, computers, and many other musical devices.</p>
+
+            <h2>What does it all mean?</h2>
+
+            <p>Ask a botanist, biologist, philosopher, or florist and try it for yourself! While there are always flourishes and strange/exciting events heard when interacting with a plant, as an engineer I personally am interested in the longer sets of raw data. I want to better understand how the plants change over many days, cycles, seasons, and how using this type of recorded data may be able to help measure and track plants in nature, in the office, on the farm, and in the lab under study.</p>
+
+            <p>The data which is produced by the Biodata Sonification system is not inherently ‘musical’ in itself. The biodata readings do not occur ‘on beat’, rather a note is generated when a change is detected within the plant with pitch corresponding amount of change. This is sometimes a criticism of the device, as users hope that plant music will sound magical ‘out of the box plant’. It can be challenging to use the relatively thick data stream of MIDI notes, while the threshold knob on the Biodata system can help to reduce the number of notes. As many users can attest, the rich MIDI data can be very useful for creating lush multi-instrumental soundscapes. Filters added to the MIDI data can allow ‘scaling’ and limiting of notes. Scaling of the notes can quickly take the raw biodata and make it sound musical or like a lullabye. Personally, I prefer working with the Raw data in hopes of better understanding the environmental conditions which influence changes and patterns.</p>
+
+            <p>When it comes to Biodata Sonification experimentation is key, and you may never hear the ‘same’ sounds again! The notes coming out of my system sound and ‘feel’ fairly random (a common criticism), but over long periods of time there are very real patterns which emerge and these are the daily cycles of activity happening within each plant. The algorithm detects changes in electrical conductivity, and the ‘amount of change’ is represented by a number/musical note.</p>
+
+            <p>Below is an image of MIDI data over a 16 hour session with a Monstera on top and a trusty Snake Plant at the bottom. You can see the ‘waves’ and changes in the overall pitch, density, and distribution of the notes. This type of process is really hard to ‘hear’ during a brief performance, and if the performance is at the wrong time of day (or in the wrong environment) there might not be any notes at all! Plants play a long-game and the patient are rewarded.</p>
+
+            <figure>
+                <img src="https://web.archive.org/web/20240707060428im_/https://electricityforprogress.com/wp-content/uploads/2021/06/BiodataMIDI_example_long-1-1024x476.png" alt="16 Hour Biodata Sonification session Monstera and Snake Plant">
+                <figcaption>16 Hour Biodata Sonification session Monstera and Snake Plant</figcaption>
+            </figure>
+
+            <p>Below you will find an image showing raw MIDI Biodata which was recorded over multiple days from the Snake Plant sitting on my office desk. Laid out in a row the colored Clips show examples of MIDI data from different times of day. You can easily see by the distribution of notes in each Clip that the overall pitch or root note varies throughout the day, while the structure of the biodata signal is similar in each segment.</p>
+
+            <figure>
+                <img src="https://web.archive.org/web/20240707060428im_/https://electricityforprogress.com/wp-content/uploads/2020/08/Biodata_Clips-1-1024x169.png" alt="MIDI data captured from Snake Plant over multiple days">
+                <figcaption>MIDI data captured from Snake Plant over multiple days</figcaption>
+            </figure>
+
+            <p>You can see in the second ‘brown’ clip that the MIDI notes appear to be slowly moving downward in pitch. You can also see the final ‘magenta’ clip from the ‘early morning’ shows notes very tightly distributed compared against the ‘orange’ clip from earlier in the evening.</p>
+
+            <ul>
+                <li>We can see two ‘parallel’ rows of notes with flourish and outliers near the high and low band of MIDI.</li>
+                <li>In the Evening segment the low notes are well below C2</li>
+                <li>We can see that by the Morning the lowest notes have crept up around C2</li>
+                <li>In the third image the data from the Afternoon shows the lowest notes well above C2</li>
+            </ul>
+
+            <p>This upward flow is a very common type of progression seen in the Biodata throughout a normal day. Had I recorded data for longer, the signals would have slowly (and sometimes abruptly) reduced back down to lower octaves. The ebbs and flows of the plant’s biological cycle.</p>
+
+            <p>I have included audio recordings of the ‘sonification’ of this MIDI data and links to the MIDI tracks themselves which are considerably longer. For this rendering I am using the ‘Chimes and Bow’ Instrument in Live 9 which splits the low notes to a low bowed bass string, spooky mid tones, and high notes in crispy chimes.</p>
+
+            <figure>
+                <img src="/images/Biodata_Evening01_MIDIroll.png" alt="Snake Plant Biodata Evening 01">
+                <figcaption>Snake Plant Biodata Evening 01</figcaption>
+            </figure>
+
+            <figure>
+                <audio controls src="/images/Evening-01_MIDI.mid"></audio>
+            </figure>
+
             
-            <div style="margin-top: 10px;">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888;">
-                    <span>DETECTION THRESHOLD</span>
-                    <span id="ui-thresh-display" style="color: #ccc; font-weight: bold;">2.00x</span>
-                </div>
-                <div style="position: relative; height: 28px; margin-top: 6px;">
-                    <canvas id="vu-threshold" style="position: absolute; top: 4px; left: 0; width: 100%; height: 20px; background: #111; border-radius: 4px; pointer-events: none; border: 1px solid #222; box-sizing: border-box;"></canvas>
-                    <input type="range" id="ui-slider-threshold" class="pro-slider" min="0.5" max="5.0" step="0.01" value="2.00" style="position: absolute; top: 11px; left: 0; margin: 0; width: 100%; z-index: 2; background: transparent;">
-                </div>
-            </div>
+        </article>
+    </main>
 
-            <div style="margin-top: 20px;">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888;">
-                    <span>DENSITY GATE PROBABILITY</span>
-                    <span id="ui-density-display" style="color: var(--cyan); font-weight: bold;">100%</span>
-                </div>
-                <div style="position: relative; height: 28px; margin-top: 6px;">
-                    <canvas id="vu-density" style="position: absolute; top: 4px; left: 0; width: 100%; height: 20px; background: #111; border-radius: 4px; pointer-events: none; border: 1px solid #222; box-sizing: border-box;"></canvas>
-                    <input type="range" id="ui-slider-density" class="pro-slider" min="0" max="100" value="100" style="position: absolute; top: 11px; left: 0; margin: 0; width: 100%; z-index: 2; background: transparent;">
-                </div>
-            </div>
+    <!-- Footer Component Placeholder -->
+    <div id="footer-placeholder"></div>
 
-            <div style="margin-top: 20px;">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888;">
-                    <span>ANALYSIS WINDOW SIZE</span>
-                    <span id="ui-window-display" style="color: var(--cyan); font-weight: bold;">40 TICKS</span>
-                </div>
-                <input type="range" id="ui-slider-window" class="pro-slider" min="10" max="200" value="40" style="background: #333; margin-top: 10px; width: 100%;">
-            </div>
-        </div>
-
-        <!-- CARD 2: MASTER BIORHYTHM -->
-        <div class="synth-module clock-module" style="flex: 1 1 300px; padding: 15px; display: flex; flex-direction: column; justify-content: center;">
-            <h3 style="color: #fff; text-shadow: 0 0 5px var(--cyan);">MASTER TEMPO & SYNC</h3>
-            
-            <div style="display: flex; justify-content: space-around; align-items: center; margin-top: 10px;">
-                <button onclick="tapTempo()" id="ui-tap-btn" style="display: flex; flex-direction: column; align-items: center; padding: 10px 20px; background: #111; border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">
-                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                        <div class="led" id="ui-bpm-led" style="margin: 0; box-shadow: none;"></div>
-                        <span style="font-size: 13px; font-weight: bold; color: #888;">TAP</span>
-                    </div>
-                    <div class="digital-display" id="ui-bpm-display" style="font-size: 32px; padding: 4px 12px; margin: 0; color: var(--red);">120</div>
-                </button>
-                
-                <div style="display: flex; gap: 15px;">
-                    <div class="knob-container">
-                        <div class="knob-track" id="master-tempo-knob" data-param="bpm" data-min="60" data-max="240" data-val="120"><div class="knob-dial"><div class="knob-indicator"></div></div></div>
-                        <div class="knob-label">BPM</div>
-                    </div>
-                </div>
-            </div>
-
-            <div style="margin-top: 35px; width: 100%;">
-                <div style="font-size: 12px; color: #888; text-align: center; font-weight: bold; margin-bottom: 8px;">CHANNEL GRID QUANTIZATION</div>
-                <input type="range" class="pro-slider" id="ui-quantize" min="0" max="8" value="0" style="margin: 10px 0; background: #333; width: 100%;">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666; padding: 0 2px; font-weight:bold;">
-                    <span style="color:var(--cyan);font-weight:bold;">FR</span><span>/64</span><span>/32</span><span>/16</span><span>/8</span><span>/4</span><span>/4T</span><span>/2</span><span>1B</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PIPELINE LAYER 2: MIDI SCALING (Full Row) -->
-    <div class="synth-controls" style="margin-top: 15px;">
-        <div class="synth-module" style="flex: 1 1 100%; min-width: 350px; padding: 15px; min-height: 220px;">
-            <h3>MIDI FILTRATION & SCALING</h3>
-            
-            <div style="display: flex; gap: 20px; align-items: stretch; margin-top: 15px; height: 100%;">
-                
-                <!-- Far Left: Velocity Block -->
-                <div style="display: flex; flex-direction: column; align-items: center; width: 35px; flex-shrink: 0; justify-content: center;">
-                    <div style="font-size: 11px; color: #888; font-weight: bold; margin-bottom: 4px;">VEL</div>
-                    <div id="ui-vel-max-txt" style="font-size: 11px; color: #ccc; margin-bottom: 6px;">110</div>
-                    <div style="position: relative; width: 16px; height: 120px;">
-                        <div style="position: absolute; left: 0; top: 120px; transform: rotate(-90deg); transform-origin: top left; width: 120px; height: 16px;">
-                            <div class="dual-slider-track" style="top: 5px; height: 6px;"></div>
-                            <div class="dual-slider-fill" id="vel-fill" style="top: 5px; height: 6px;"></div>
-                            <input type="range" id="ui-vel-min" class="dual-slider-input" min="0" max="127" value="60">
-                            <input type="range" id="ui-vel-max" class="dual-slider-input" min="0" max="127" value="110">
-                        </div>
-                    </div>
-                    <div id="ui-vel-min-txt" style="font-size: 11px; color: #ccc; margin-top: 6px;">60</div>
-                </div>
-
-                <!-- Main Right Section -->
-                <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 15px;">
-                    
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <span style="font-size: 11px; color: #888; font-weight: bold; width: 50px;">SCALE</span>
-                        <select id="ui-scaleRoot" class="routing-select compact" onchange="updateActiveSynth('scaleRoot', this.value); applyScalePreset();" style="flex: 0 0 60px; font-size: 12px; padding: 4px; margin:0;">
-                            <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
-                        </select>
-                        <select id="ui-scaleType" class="routing-select compact" onchange="updateActiveSynth('scaleType', this.value); applyScalePreset();" style="flex: 0 1 140px; font-size: 12px; padding: 4px; margin:0;">
-                            <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor">Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 2px;">
-                            <span>NOTE RANGE</span>
-                            <span id="note-range-text" style="color: #ccc; font-weight: bold;">C2 (36) ↔ C6 (84)</span>
-                        </div>
-                        <div class="dual-slider-container">
-                            <div class="dual-slider-track"></div>
-                            <div class="dual-slider-fill" id="note-fill"></div>
-                            <input type="range" id="ui-note-min" class="dual-slider-input" min="0" max="127" value="36">
-                            <input type="range" id="ui-note-max" class="dual-slider-input" min="0" max="127" value="84">
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 20px; align-items: stretch; height: 65px;">
-                        <div class="piano-wrapper" id="piano-keys">
-                            <div class="key-w" id="key-0"></div><div class="key-w" id="key-2"></div><div class="key-w" id="key-4"></div><div class="key-w" id="key-5"></div><div class="key-w" id="key-7"></div><div class="key-w" id="key-9"></div><div class="key-w" id="key-11"></div>
-                            <div class="key-b cs" id="key-1"></div><div class="key-b ds" id="key-3"></div><div class="key-b fs" id="key-6"></div><div class="key-b gs" id="key-8"></div><div class="key-b as" id="key-10"></div>
-                        </div>
-                        
-                        <div style="display: flex; gap: 10px; margin-bottom: -4px;">
-                            <div class="knob-container">
-                                <div class="knob-track" data-param="durMult" data-min="0.1" data-max="5.0" data-val="1.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div>
-                                <div class="knob-label">DURATION</div>
-                            </div>
-                            <div class="knob-container">
-                                <div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div>
-                                <div class="knob-label">SPREAD</div>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PIPELINE LAYER 3: AUDIO ENGINE -->
-    <div class="synth-controls" style="margin-top: 15px;">
-        <div class="synth-module osc-module">
-            <h3>VOICE</h3>
-            <select id="ui-mode" class="routing-select compact" onchange="updateActiveSynth('mode', this.value)">
-                <option value="poly">Polyphonic</option><option value="mono">Monophonic</option><option value="303">303 Slide</option>
-            </select>
-            <select id="ui-wave" class="routing-select compact" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
-                <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="noise">Noise</option>
-            </select>
-            <div class="knob-row">
-                <div class="knob-container"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">GLIDE</div></div>
-                <div class="knob-container"><div class="knob-track" data-param="sub.level" data-group="sources" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">SUB</div></div>
-            </div>
-        </div>
-        
-        <div class="synth-module filter-module">
-            <h3>FILTER</h3>
-            <div class="filter-stack">
-                <div class="knob-container"><div class="knob-track" data-param="cutoff" data-group="filter" data-min="100" data-max="10000" data-val="2000" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">CUTOFF</div></div>
-                <div class="knob-container"><div class="knob-track" data-param="res" data-group="filter" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RES</div></div>
-            </div>
-        </div>
-
-        <div class="synth-module lfo-module">
-            <h3>LFO</h3>
-            <div class="mod-selectors lfo-selectors">
-                <label><input type="radio" name="activeLfo" value="pitchLfo" checked onchange="switchModView('lfo', this.value)"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span class="label-text">PITCH</span></label>
-                <label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value)"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span class="label-text">FILTER</span></label>
-                <label><input type="radio" name="activeLfo" value="ampLfo" onchange="switchModView('lfo', this.value)"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span class="label-text">AMP</span></label>
-            </div>
-            
-            <div style="display: flex; justify-content: center; gap: 5px; margin-bottom: 10px;">
-                <select id="ui-lfo-shape" class="routing-select compact" style="margin: 0; width: 70px;" onchange="updateNestedSynth('lfo', 'shape', this.value)">
-                    <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Tri</option><option value="sawtooth">Up</option><option value="rampdown">Down</option><option value="random">S&H</option>
-                </select>
-                <select id="ui-lfo-rateMode" class="routing-select compact" style="margin: 0; width: 50px;" onchange="window.updateLfoRateMode(this.value)">
-                    <option value="lo">LO</option><option value="hi">HI</option>
-                </select>
-            </div>
-            
-            <div class="knob-row">
-                <div class="knob-container"><div class="knob-track" data-param="rate" data-group="lfo" data-min="0.01" data-max="20" data-val="2.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">RATE</div></div>
-                <div class="knob-container"><div class="knob-track" data-param="depth" data-group="lfo" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMT</div></div>
-            </div>
-        </div>
-
-        <div class="synth-module env-module">
-            <h3>ENVELOPE</h3>
-            <div class="env-layout">
-                <div class="mod-selectors env-selectors">
-                    <label><input type="radio" name="activeEnv" value="pitchEnv" onchange="switchModView('env', this.value)"><div class="mod-led led-pitch" id="ind-env-pitchEnv"></div> <span class="label-text">PITCH</span></label>
-                    <label><input type="radio" name="activeEnv" value="filterEnv" onchange="switchModView('env', this.value)"><div class="mod-led led-filter" id="ind-env-filterEnv"></div> <span class="label-text">FILTER</span></label>
-                    <label><input type="radio" name="activeEnv" value="ampEnv" checked onchange="switchModView('env', this.value)"><div class="mod-led led-amp" id="ind-env-ampEnv"></div> <span class="label-text">AMP</span></label>
-                </div>
-                
-                <div class="env-amount">
-                    <div class="knob-container"><div class="knob-track" data-param="amt" data-group="env" data-min="0" data-max="1" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
-                </div>
-
-                <div class="slider-group">
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-env-atk" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'atk', this.value)"><div class="slider-label">A</div></div>
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-env-dec" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'dec', this.value)"><div class="slider-label">D</div></div>
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-env-sus" min="0" max="1" step="0.01" oninput="updateNestedSynth('env', 'sus', this.value)"><div class="slider-label">S</div></div>
-                    <div class="slider-col"><input type="range" class="v-slider" id="ui-env-rel" min="0.01" max="4" step="0.01" oninput="updateNestedSynth('env', 'rel', this.value)"><div class="slider-label">R</div></div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="grid" id="dashboard"></div>
-
-<script src="js/globals.js"></script>
-<script src="js/audioEngine.js"></script>
-<script src="js/uiController.js"></script>
-<script src="js/visualizer.js"></script>
-<script src="js/bleMidi.js"></script>
-<script src="js/main.js"></script>
+    <!-- Centralized Scripts -->
+    <script src="/js/loader.js"></script>
+    <script src="/js/starfield.js"></script>
 
 </body>
 </html>
