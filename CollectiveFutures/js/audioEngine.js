@@ -32,15 +32,18 @@ class MasterFXBus {
         this.dlyFilter = window.audioCtx.createBiquadFilter();
         this.dlyFilter.type = 'lowpass';
         
-        this.dlyToRev = window.audioCtx.createGain(); // The Cascade Bus
+        this.dlyToMaster = window.audioCtx.createGain(); // NEW: Dry Delay Out
+        this.dlyToRev = window.audioCtx.createGain();    // The Cascade Bus
         
         this.dlyIn.connect(this.delay);
         this.delay.connect(this.feedback);
         this.feedback.connect(this.dlyFilter);
         this.dlyFilter.connect(this.delay);
         
-        // Split output: To Master AND to Reverb Input
-        this.delay.connect(window.masterGain);
+        // Split output: To Master AND to Reverb Input via Crossfader
+        this.delay.connect(this.dlyToMaster);
+        this.dlyToMaster.connect(window.masterGain);
+        
         this.delay.connect(this.dlyToRev);
         this.dlyToRev.connect(this.revIn);
 
@@ -68,23 +71,22 @@ class MasterFXBus {
         return impulse;
     }
 
-	updateParams(p) {
-        // SAFETY NET: Provide safe fallback numbers if a parameter is missing or undefined
+    updateParams(p) {
         const dlyTime = (p && p.dly && p.dly.time !== undefined) ? p.dly.time : 0.5;
         const dlyFbk = (p && p.dly && p.dly.feedback !== undefined) ? p.dly.feedback : 0.5;
         const dlyTone = (p && p.dly && p.dly.tone !== undefined) ? p.dly.tone : 2000;
-        const dlyToRev = (p && p.dly && p.dly.toRev !== undefined) ? p.dly.toRev : 0.2;
+        const cascade = (p && p.dly && p.dly.toRev !== undefined) ? p.dly.toRev : 0.2;
         
         const revSize = (p && p.rev && p.rev.size !== undefined) ? p.rev.size : 2.0;
         const revDamp = (p && p.rev && p.rev.damp !== undefined) ? p.rev.damp : 3000;
 
-        // Apply parameters safely
         this.delay.delayTime.setTargetAtTime(dlyTime, window.audioCtx.currentTime, 0.1);
         this.feedback.gain.setTargetAtTime(dlyFbk, window.audioCtx.currentTime, 0.1);
         this.dlyFilter.frequency.setTargetAtTime(dlyTone, window.audioCtx.currentTime, 0.1);
         
-        // Update cascade bleed
-        this.dlyToRev.gain.setTargetAtTime(dlyToRev, window.audioCtx.currentTime, 0.1);
+        // Equal Power Crossfade for the Delay Cascade
+        this.dlyToRev.gain.setTargetAtTime(Math.sin(cascade * Math.PI / 2), window.audioCtx.currentTime, 0.1);
+        this.dlyToMaster.gain.setTargetAtTime(Math.cos(cascade * Math.PI / 2), window.audioCtx.currentTime, 0.1);
         
         if (this.lastRevTime !== revSize) {
             clearTimeout(this.revTimer);
