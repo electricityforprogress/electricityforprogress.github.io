@@ -27,15 +27,7 @@
         .dual-slider-track { position: absolute; top: 7px; left: 0; right: 0; height: 6px; background: #333; border-radius: 3px; z-index: 0; }
         .dual-slider-fill { position: absolute; top: 7px; height: 6px; background: var(--cyan); z-index: 1; border-radius: 3px; }
         .dual-slider-input { position: absolute; top: 0; left: 0; width: 100%; height: 20px; -webkit-appearance: none; background: transparent; pointer-events: none; z-index: 2; margin: 0; outline: none; }
-
-        .piano-wrapper { position: relative; height: 100%; background: #111; border: 1px solid var(--border); border-radius: 3px; display: flex; width: 100%; margin: 0; }
-        .key-w { flex: 1; background: #ddd; border-right: 1px solid #999; border-bottom: 2px solid #bbb; border-radius: 0 0 3px 3px; box-sizing: border-box; }
-        .key-w:last-child { border-right: none; }
-        .key-b { position: absolute; background: #222; width: 9%; height: 60%; top: 0; border-radius: 0 0 3px 3px; border: 1px solid #000; border-top: none; }
-        .key-w.active { background: var(--cyan); box-shadow: inset 0 0 10px rgba(255,255,255,0.5); border-bottom-color: var(--cyan); }
-        .key-b.active { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
-        .cs { left: 9.5%; } .ds { left: 23.5%; } .fs { left: 52%; } .gs { left: 66.5%; } .as { left: 81%; }
-        
+      
         .synth-module h3 { font-size: 13px !important; margin: 0 0 5px 0 !important; padding-bottom: 2px !important; }
         .knob-label { font-size: 11px !important; }
         .slider-group { position: relative; padding-bottom: 20px; }
@@ -344,9 +336,9 @@
                     <label><input type="radio" name="activeFx" value="rev" onchange="switchModView('fx', this.value)"><div class="mod-led led-amp" id="ind-fx-rev"></div> <span class="label-text">REV</span></label>
                 </div>
                 
-                <!-- The Channel Specific Send / Mix Amount -->
+			<!-- The Channel Specific Send / Mix Amount -->
                 <div class="env-amount">
-                    <div class="knob-container"><div class="knob-track" id="fx-send-knob" data-param="drv" data-group="fx" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMT <span style="display:block; color:var(--cyan);">(CH)</span></div></div>
+                    <div class="knob-container"><div class="knob-track" id="fx-send-knob" data-param="drv" data-group="fx" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">AMOUNT</div></div>
                 </div>
 
                 <!-- CH INSERT: Distortion Parameters -->
@@ -355,17 +347,17 @@
                     <div class="knob-container"><div class="knob-track" data-param="drvTone" data-group="fx" data-min="100" data-max="10000" data-log="true" data-val="2000"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">TONE</div></div>
                 </div>
 
-				<!-- GLOBAL BUS: Delay Parameters -->
-                <div class="slider-group fx-params fx-dly-params" style="align-items: center; display: none; justify-content: flex-start !important;">
+                <!-- GLOBAL BUS: Delay Parameters -->
+                <div class="slider-group fx-params fx-dly-params" style="align-items: center; display: none;">
                     <div class="knob-container"><div class="knob-track" data-param="time" data-group="globalFx.dly" data-min="0.01" data-max="10.0" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">TIME</div></div>
                     <div class="knob-container"><div class="knob-track" data-param="feedback" data-group="globalFx.dly" data-min="0" data-max="0.95" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div><div class="knob-label">FDBK</div></div>
                     
-                    <!-- NEW Vertical Slider for Cascade Bleed -->
-                    <div style="display: flex; flex-direction: column; align-items: center; height: 100%; margin-left: 5px;">
-                        <div class="slider-col" style="height: 35px; margin-top: 10px;">
-                            <input type="range" class="v-slider" id="ui-fx-torev" min="0" max="1" step="0.01" value="0.2" oninput="updateNestedSynth('globalFx.dly', 'toRev', this.value)" style="top: 12px; left: -32px; width: 45px;">
+                    <!-- Aligned Vertical Slider for Cascade Crossfade -->
+                    <div class="knob-container">
+                        <div style="width: 40px; height: 40px; position: relative; margin: 0 auto 5px auto; background: var(--knob-bg); border: 2px solid var(--border); border-radius: 4px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);">
+                            <input type="range" class="pro-slider" id="ui-fx-torev" min="0" max="1" step="0.01" value="0.2" oninput="updateNestedSynth('globalFx.dly', 'toRev', this.value)" style="position: absolute; width: 32px; top: 12px; left: 4px; transform: rotate(-90deg); margin: 0;">
                         </div>
-                        <div class="knob-label" style="color:var(--mod-amp); margin-top: 8px;">> REV</div>
+                        <div class="knob-label" style="color:var(--mod-amp);">> REV</div>
                     </div>
                 </div>
 
