@@ -36,24 +36,11 @@
         canvas { image-rendering: pixelated; }
         .glass-panel { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(51, 65, 85, 0.5); }
         
-        .logo-container {
-            width: 48px;
-            height: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: breathe 4s infinite alternate ease-in-out;
-        }
-        
-        .logo-container svg {
-            width: 100%;
-            height: 100%;
-        }
+        .logo-container { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; animation: breathe 4s infinite alternate ease-in-out; }
+        .logo-container svg { width: 100%; height: 100%; }
         
         .shimmer-text {
-            background: linear-gradient(
-                to right, #60a5fa 0%, #a7f3d0 25%, #60a5fa 45%, #ffffff 50%, #a7f3d0 55%, #60a5fa 75%, #a7f3d0 100%     
-            );
+            background: linear-gradient(to right, #60a5fa 0%, #a7f3d0 25%, #60a5fa 45%, #ffffff 50%, #a7f3d0 55%, #60a5fa 75%, #a7f3d0 100%);
             background-size: 400% 100%;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -61,16 +48,8 @@
             animation: text-shimmer 12s ease-in-out infinite; 
         }
         
-        @keyframes text-shimmer {
-            0% { background-position: 0% center; }
-            25% { background-position: 100% center; }
-            100% { background-position: 100% center; } 
-        }
-        
-        @keyframes breathe {
-            0% { filter: drop-shadow(0 0 2px rgba(51, 181, 229, 0.3)) brightness(0.85); }
-            100% { filter: drop-shadow(0 0 14px rgba(51, 181, 229, 1)) drop-shadow(0 0 28px rgba(51, 181, 229, 0.6)) brightness(1.3); }
-        }
+        @keyframes text-shimmer { 0% { background-position: 0% center; } 25% { background-position: 100% center; } 100% { background-position: 100% center; } }
+        @keyframes breathe { 0% { filter: drop-shadow(0 0 2px rgba(51, 181, 229, 0.3)) brightness(0.85); } 100% { filter: drop-shadow(0 0 14px rgba(51, 181, 229, 1)) drop-shadow(0 0 28px rgba(51, 181, 229, 0.6)) brightness(1.3); } }
     </style>
 </head>
 <body class="min-h-screen flex flex-col font-sans overflow-x-hidden">
@@ -174,17 +153,6 @@
             for (let output of midiAccess.outputs.values()) {
                 if (output.name.toLowerCase().includes("biostrike")) isConnected = true;
             }
-        
-            const bleStatus = document.getElementById("status-ble");
-            if (bleStatus) {
-                if (isConnected) {
-                    bleStatus.classList.replace("bg-slate-500", "bg-bio-500");
-                    bleStatus.classList.add("animate-pulse");
-                } else {
-                    bleStatus.classList.replace("bg-bio-500", "bg-slate-500");
-                    bleStatus.classList.remove("animate-pulse");
-                }
-            }
         }
 
         async function connectBle() {
@@ -229,34 +197,45 @@
                 line = line.trim();
                 if (!line) continue;
 
-                if (line.startsWith("M:")) {
-                    const parts = line.split(":");
-                    const note = parseInt(parts[1], 10);
-                    const vel = parseInt(parts[2], 10);
-                    handleMidiHit(note, vel);
-                }
-                else if (line.startsWith("CFG:")) {
-                    const parts = line.split(":");
-                    state.globalChannel = parseInt(parts[1], 10);
-                    document.getElementById('global-channel').value = state.globalChannel;
-
-                    for (let i = 0; i < 8; i++) {
-                        if (parts[i + 2]) { 
-                            const chParams = parts[i + 2].split(",");
-                            state.channels[i].note = parseInt(chParams[0], 10);
-                            state.channels[i].minPwm = parseInt(chParams[1], 10);
-                            state.channels[i].maxPwm = parseInt(chParams[2], 10);
-                            state.channels[i].duration = parseInt(chParams[3], 10);
+                // Failsafe Try/Catch blocks rogue MTU chunks from crashing the thread
+                try {
+                    if (line.startsWith("S:") || line.startsWith("M:")) {
+                        const parts = line.split(":");
+                        const noteOrCh = parseInt(parts[1], 10);
+                        const vel = parseInt(parts[2], 10);
+                        
+                        if (line.startsWith("M:")) {
+                            handleMidiHit(noteOrCh, vel);
                         }
                     }
-                    renderChannels(); 
+                    else if (line.startsWith("C:")) {
+                        const parts = line.split(":");
+                        const ch = parseInt(parts[1], 10);
+                        const chParams = parts[2].split(",");
+                        
+                        if (chParams.length === 4) {
+                            state.channels[ch].note = parseInt(chParams[0], 10);
+                            state.channels[ch].minPwm = parseInt(chParams[1], 10);
+                            state.channels[ch].maxPwm = parseInt(chParams[2], 10);
+                            state.channels[ch].duration = parseInt(chParams[3], 10);
+                            
+                            // Render once the last channel arrives
+                            if (ch === 7) renderChannels(); 
+                        }
+                    }
+                    else if (line.startsWith("GCH:")) {
+                        state.globalChannel = parseInt(line.split(":")[1], 10);
+                        document.getElementById('global-channel').value = state.globalChannel;
+                    }
+                } catch (e) {
+                    console.error("Ignored BLE fragment:", line);
                 }
             }
         }
 
         const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
         
-        // FIXED: Ableton anchors C3 = Note 60. Subtracting 2 correctly aligns the octave string.
+        // Ableton alignment Math
         function getNoteString(noteNum) {
             const octave = Math.floor(noteNum / 12) - 2;
             return `${noteNames[noteNum % 12]}${octave} (${noteNum})`;
@@ -360,10 +339,8 @@
 
         function handleMidiHit(note, velocity) {
             const now = performance.now();
-            // All notes get added to the piano roll now
             state.pianoRoll.push({ note: note, velocity: velocity, x: 0, time: now });
             
-            // Only perfectly mapped notes trigger the channel UI meters
             const channel = state.channels.find(c => c.note === note);
             if (channel) {
                 let targetPwm = Math.round(Math.min(255, Math.max(0, mapRange(velocity, 1, 127, channel.minPwm, channel.maxPwm)))); 
@@ -385,7 +362,6 @@
 
         function testStrike(chIndex) { 
             const vel = parseInt(document.getElementById('global-test-vel').value);
-            // Simulate the raw MIDI incoming packet over GATT so it plots identically
             sendCmd(`TEST:${chIndex}:${vel}\n`);
             handleMidiHit(state.channels[chIndex].note, vel);
         }
@@ -426,13 +402,11 @@
                 let note = state.pianoRoll[i];
                 note.x += 3; 
                 
-                // If a note falls far outside the mapped range, clamp it so it's still visible
                 let drawNote = Math.max(minNote, Math.min(maxNote, note.note));
                 const normalizedY = 1 - ((drawNote - minNote) / noteRange);
                 const y = normalizedY * canvas.height;
                 
                 const mappedChannel = state.channels.find(c => c.note === note.note);
-                // Unmapped ghost notes will draw as grey
                 ctx.fillStyle = mappedChannel ? mappedChannel.color : `rgba(148, 163, 184, ${note.velocity/127 + 0.2})`; 
                 ctx.shadowBlur = mappedChannel ? 10 : 0; ctx.shadowColor = ctx.fillStyle;
                 ctx.fillRect(canvas.width - note.x, y - 2, Math.max(2, (note.velocity / 127) * 20), 5);
@@ -484,17 +458,6 @@
             requestAnimationFrame(drawLoop);
             setTimeout(() => handleMidiHit(60, 100), 500); 
         });
-    </script>
-
-    <!-- Register Service Worker for PWA -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker registered', reg))
-                    .catch(err => console.error('Service Worker registration failed', err));
-            });
-        }
     </script>
 </body>
 </html>
