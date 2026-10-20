@@ -37,7 +37,7 @@
             border-radius: 50%; 
             background: #34d399; 
             cursor: pointer; 
-            margin-top: -10px; 
+            margin-top: -6px; 
             box-shadow: 0 0 10px rgba(52, 211, 153, 0.5); 
         }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
@@ -93,7 +93,7 @@
             
             <div class="flex items-center gap-4">
                 <div class="flex items-center gap-2 bg-surface-100 px-3 py-1.5 rounded-lg border border-slate-700">
-                    <label class="text-xs font-semibold text-slate-300">Test Vel: <span id="test-vel-label" class="text-bio-300 font-mono">100</span></label>
+                    <label class="text-xs font-semibold text-slate-300">Test: <span id="test-vel-label" class="text-bio-300 font-mono">100</span></label>
                     <input type="range" id="global-test-vel" min="1" max="127" value="100" oninput="document.getElementById('test-vel-label').innerText=this.value" class="w-24">
                 </div>
                 <button id="demo-btn" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded transition-colors" onclick="toggleDemoMode()">
@@ -185,7 +185,7 @@
                 const statusIndicator = document.getElementById("status-gatt");
                 statusIndicator.classList.replace("bg-yellow-500", "bg-bio-500");
                 statusIndicator.classList.add("animate-pulse");
-                document.getElementById("text-gatt").innerText = "GATT Connected";
+                document.getElementById("text-gatt").innerText = "Connected";
                 
                 sendCmd("?\n"); 
             } catch (err) {
@@ -199,7 +199,7 @@
             const statusIndicator = document.getElementById("status-gatt");
             statusIndicator.classList.replace("bg-bio-500", "bg-yellow-500");
             statusIndicator.classList.remove("animate-pulse");
-            document.getElementById("text-gatt").innerText = "Web App Disconnected";
+            document.getElementById("text-gatt").innerText = "Disconnected";
         }
 
         function sendCmd(cmdStr) {
