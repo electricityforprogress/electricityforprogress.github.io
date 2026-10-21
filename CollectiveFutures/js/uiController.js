@@ -522,6 +522,10 @@ function updateNestedSynth(group, param, value) {
 function initKnobs() {
     document.querySelectorAll('.knob-track').forEach(knob => {
         let isDragging = false, startY = 0, startVal = 0;
+        
+        // Force touch-action via JS to bypass mobile CSS caching
+        knob.style.touchAction = 'none';
+
         const updateDial = (val) => {
             const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
             let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
@@ -531,22 +535,12 @@ function initKnobs() {
         
         let initVal = parseFloat(knob.dataset.val);
         if (!isNaN(initVal)) updateDial(initVal);
-        
-        knob.addEventListener('pointerdown', (e) => { 
-            isDragging = true; 
-            startY = e.clientY; 
-            startVal = parseFloat(knob.dataset.val); 
-            
-            // Lock the touch to this specific knob even if the finger drifts away
-            knob.setPointerCapture(e.pointerId);
-            e.preventDefault(); 
-        });
-        
-        // Listen on the knob itself, not the global window
-        knob.addEventListener('pointermove', (e) => {
+
+        const handleMove = (clientY) => {
             if (!isDragging) return;
             const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
-            let deltaY = startY - e.clientY, newVal;
+            let deltaY = startY - clientY, newVal;
+            
             if (isLog) {
                 let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
                 pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
@@ -561,17 +555,40 @@ function initKnobs() {
             const group = knob.dataset.group;
             if (group) updateNestedSynth(group, knob.dataset.param, newVal);
             else updateActiveSynth(knob.dataset.param, newVal);
-        });
+        };
         
-        // Release the lock when the touch ends or is canceled by the OS
-        knob.addEventListener('pointerup', (e) => {
-            isDragging = false;
-            knob.releasePointerCapture(e.pointerId);
+        // --- 1. DESKTOP MOUSE EVENTS ---
+        knob.addEventListener('mousedown', (e) => { 
+            isDragging = true; startY = e.clientY; 
+            startVal = parseFloat(knob.dataset.val); 
+            e.preventDefault(); 
         });
-        knob.addEventListener('pointercancel', (e) => {
-            isDragging = false;
-            knob.releasePointerCapture(e.pointerId);
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) handleMove(e.clientY);
         });
+        window.addEventListener('mouseup', () => isDragging = false);
+
+        // --- 2. NATIVE MOBILE TOUCH EVENTS ---
+        // Unlike mouse events, touch events implicitly lock to the originating element 
+        // even if your thumb drifts completely off the knob track.
+        knob.addEventListener('touchstart', (e) => { 
+            isDragging = true; 
+            startY = e.touches[0].clientY; 
+            startVal = parseFloat(knob.dataset.val); 
+            // Instantly blocks the browser from interpreting the initial touch as a scroll
+            e.preventDefault(); 
+        }, { passive: false });
+        
+        knob.addEventListener('touchmove', (e) => {
+            if (isDragging) {
+                // Strictly blocks viewport scrolling while dragging
+                e.preventDefault(); 
+                handleMove(e.touches[0].clientY);
+            }
+        }, { passive: false });
+
+        knob.addEventListener('touchend', () => isDragging = false);
+        knob.addEventListener('touchcancel', () => isDragging = false);
     });
 }
 
