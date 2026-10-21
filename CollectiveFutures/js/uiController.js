@@ -532,12 +532,18 @@ function initKnobs() {
         let initVal = parseFloat(knob.dataset.val);
         if (!isNaN(initVal)) updateDial(initVal);
         
-        knob.addEventListener('mousedown', (e) => { 
-            isDragging = true; startY = e.clientY; 
+        knob.addEventListener('pointerdown', (e) => { 
+            isDragging = true; 
+            startY = e.clientY; 
             startVal = parseFloat(knob.dataset.val); 
+            
+            // Lock the touch to this specific knob even if the finger drifts away
+            knob.setPointerCapture(e.pointerId);
             e.preventDefault(); 
         });
-        window.addEventListener('mousemove', (e) => {
+        
+        // Listen on the knob itself, not the global window
+        knob.addEventListener('pointermove', (e) => {
             if (!isDragging) return;
             const min = parseFloat(knob.dataset.min), max = parseFloat(knob.dataset.max), isLog = knob.dataset.log === "true";
             let deltaY = startY - e.clientY, newVal;
@@ -545,7 +551,9 @@ function initKnobs() {
                 let pct = (Math.log(startVal) - Math.log(min)) / (Math.log(max) - Math.log(min));
                 pct = Math.max(0, Math.min(1, pct + (deltaY / 150)));
                 newVal = Math.exp(Math.log(min) + pct * (Math.log(max) - Math.log(min)));
-            } else { newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); }
+            } else { 
+                newVal = Math.max(min, Math.min(max, startVal + (deltaY / 150) * (max - min))); 
+            }
             
             knob.dataset.val = newVal; 
             updateDial(newVal); 
@@ -554,7 +562,16 @@ function initKnobs() {
             if (group) updateNestedSynth(group, knob.dataset.param, newVal);
             else updateActiveSynth(knob.dataset.param, newVal);
         });
-        window.addEventListener('mouseup', () => isDragging = false);
+        
+        // Release the lock when the touch ends or is canceled by the OS
+        knob.addEventListener('pointerup', (e) => {
+            isDragging = false;
+            knob.releasePointerCapture(e.pointerId);
+        });
+        knob.addEventListener('pointercancel', (e) => {
+            isDragging = false;
+            knob.releasePointerCapture(e.pointerId);
+        });
     });
 }
 
