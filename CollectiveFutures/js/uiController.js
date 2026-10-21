@@ -64,14 +64,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let bpmDisplay = document.getElementById('ui-bpm-display');
     if (bpmDisplay) {
         let isDraggingBpm = false, startY = 0, startBpm = 120;
-        bpmDisplay.addEventListener('mousedown', (e) => {
+        bpmDisplay.addEventListener('pointerdown', (e) => {
             if (window.midiClockMode === 'in') return; 
             isDraggingBpm = true;
             startY = e.clientY;
             startBpm = window.masterBPM;
             e.preventDefault();
         });
-        window.addEventListener('mousemove', (e) => {
+        window.addEventListener('pointermove', (e) => {
             if (!isDraggingBpm) return;
             let deltaY = startY - e.clientY; 
             let newBpm = startBpm + (deltaY * 0.5); 
@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
             window.masterBPM = newBpm;
             syncUI(); 
         });
-        window.addEventListener('mouseup', () => { isDraggingBpm = false; });
+        window.addEventListener('pointerup', () => { isDraggingBpm = false; });
     }
 
     const attachSlider = (id, paramKey, labelId, formatFn) => {
