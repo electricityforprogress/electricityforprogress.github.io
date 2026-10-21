@@ -67,19 +67,38 @@ window.applySpreadCurve = function(normPitch, spread) {
     return 0.5 + (sign * Math.pow(Math.abs(deviation) * 2, pow) / 2);
 };
 
-window.scaleNote = function(rawNote, scaleType, root) {
-    if (scaleType === 'chromatic') return rawNote;
-    let scale = window.SCALES[scaleType] || window.SCALES['major'];
-    root = parseInt(root);
-    let octave = Math.floor(rawNote / 12);
-    let noteClass = rawNote % 12;
-    let shiftedClass = (noteClass - root + 12) % 12;
-    let closest = scale[0], minDiff = 12;
-    for (let i = 0; i < scale.length; i++) {
-        let diff = Math.abs(scale[i] - shiftedClass);
-        if (diff < minDiff) { minDiff = diff; closest = scale[i]; }
+window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote = 0, maxNote = 127) {
+    let allowedClasses = [];
+    
+    // 1. Gather valid note classes (0-11) based on scale mode
+    if (scaleType === 'custom' && activeScaleBits) {
+        for (let i = 0; i < 12; i++) {
+            if (activeScaleBits[i]) allowedClasses.push(i);
+        }
+        // Fallback to clamping if all piano keys are somehow disabled
+        if (allowedClasses.length === 0) return Math.max(minNote, Math.min(maxNote, rawNote)); 
+    } else if (scaleType !== 'chromatic') {
+        let scale = window.SCALES[scaleType] || window.SCALES['major'];
+        root = parseInt(root);
+        for (let i = 0; i < scale.length; i++) {
+            allowedClasses.push((scale[i] + root) % 12);
+        }
+    } else {
+        // Chromatic just strictly clamps to bounds
+        return Math.max(minNote, Math.min(maxNote, rawNote));
     }
-    return (octave * 12) + closest + root;
+
+    // 2. Search outward for the closest valid note that is ALSO within the min/max bounds
+    for (let offset = 0; offset < 12; offset++) {
+        let upNote = rawNote + offset;
+        let downNote = rawNote - offset;
+
+        if (upNote <= maxNote && allowedClasses.includes(upNote % 12)) return upNote;
+        if (downNote >= minNote && allowedClasses.includes((downNote % 12 + 12) % 12)) return downNote;
+    }
+
+    // 3. Ultimate fallback clamp
+    return Math.max(minNote, Math.min(maxNote, rawNote));
 };
 
 window.globalFX = {
