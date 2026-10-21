@@ -146,6 +146,14 @@ select { background: var(--bg); color: var(--text); border: 1px solid var(--bord
 .knob-label { font-size: 0.7em; color: #888; text-transform: uppercase; font-weight:bold; line-height:1.2; }
 .knob-label span { font-size:0.7em; color:#555; }
 
+.knob,
+.slider,
+.control-surface {
+    touch-action: none;          /* Disables default browser scrolling, panning, and pinch-zoom on touch */
+    user-select: none;           /* Prevents accidental text/UI selection while dragging */
+    -webkit-user-select: none;   /* iOS Safari support */
+}
+
 .slider-group { display: flex; justify-content: space-evenly; height: 120px; align-items: flex-start; padding-top:10px; width:55%; }
 .slider-col { position: relative; width: 20px; height: 100%; }
 .v-slider { -webkit-appearance: none; position: absolute; width: 100px; height: 4px; background: var(--border); top: 45px; left: -40px; transform: rotate(-90deg); outline: none; cursor: pointer; }
