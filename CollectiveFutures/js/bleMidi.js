@@ -205,8 +205,14 @@ window.processBiodata = function(payload) {
                             let spread = pConfig.spread !== undefined ? pConfig.spread : 75;
                             let shapedPitch = window.applySpreadCurve(rawPitchNorm, spread);
                             let rawNote = Math.round(window.mapScale(shapedPitch, 0, 1.0, pConfig.minNote || 36, pConfig.maxNote || 84));
-                            
-                            finalPitch = window.scaleNote(rawNote, pConfig.scaleType || 'chromatic', pConfig.scaleRoot || 0);
+                            finalPitch = window.scaleNote(
+                                rawNote, 
+                                pConfig.scaleType || 'chromatic', 
+                                pConfig.scaleRoot || 0,
+                                pConfig.activeScaleBits,     // Adds the custom piano UI states
+                                pConfig.minNote || 36,       // Enforces the bottom of the range
+                                pConfig.maxNote || 84        // Enforces the top of the range
+                            );
                             isEvent = 1;
                             
                             if (window.masterStartTime === undefined) window.masterStartTime = window.audioCtx.currentTime;
