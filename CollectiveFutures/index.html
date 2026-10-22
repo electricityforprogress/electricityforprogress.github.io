@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collective Futures</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="css/styles.css?v=11">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
@@ -355,6 +356,17 @@
 <script src="js/main.js?v=11"></script>
 
 <script>
+    // Register Service Worker for Offline PWA Support
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                console.log('ServiceWorker registration successful');
+            }).catch(err => {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+    }
+
     // Global click listener to automatically close dropdowns
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.dropdown-widget')) {
