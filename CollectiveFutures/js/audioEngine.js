@@ -19,7 +19,7 @@ class MasterFXBus {
         if (!window.globalFX) {
             window.globalFX = {
                 dly: { time: 0.5, feedback: 0.5, tone: 2000, toRev: 0.2 },
-                rev: { size: 2.0, damp: 3000 }
+                rev: { size: 2.0, damp: 3000, hpf: 100 }
             };
         }
         
@@ -32,15 +32,14 @@ class MasterFXBus {
         this.dlyFilter = window.audioCtx.createBiquadFilter();
         this.dlyFilter.type = 'lowpass';
         
-        this.dlyToMaster = window.audioCtx.createGain(); // NEW: Dry Delay Out
-        this.dlyToRev = window.audioCtx.createGain();    // The Cascade Bus
+        this.dlyToMaster = window.audioCtx.createGain();
+        this.dlyToRev = window.audioCtx.createGain();
         
         this.dlyIn.connect(this.delay);
         this.delay.connect(this.feedback);
         this.feedback.connect(this.dlyFilter);
         this.dlyFilter.connect(this.delay);
         
-        // Split output: To Master AND to Reverb Input via Crossfader
         this.delay.connect(this.dlyToMaster);
         this.dlyToMaster.connect(window.masterGain);
         
@@ -48,11 +47,15 @@ class MasterFXBus {
         this.dlyToRev.connect(this.revIn);
 
         // 2. ALGORITHMIC REVERB
+        this.revHpf = window.audioCtx.createBiquadFilter();
+        this.revHpf.type = 'highpass';
         this.convolver = window.audioCtx.createConvolver();
         this.revFilter = window.audioCtx.createBiquadFilter();
         this.revFilter.type = 'lowpass';
         
-        this.revIn.connect(this.convolver);
+        // Routing: revIn -> revHpf -> convolver -> revFilter -> masterGain
+        this.revIn.connect(this.revHpf);
+        this.revHpf.connect(this.convolver);
         this.convolver.connect(this.revFilter);
         this.revFilter.connect(window.masterGain);
         
@@ -79,12 +82,12 @@ class MasterFXBus {
         
         const revSize = (p && p.rev && p.rev.size !== undefined) ? p.rev.size : 2.0;
         const revDamp = (p && p.rev && p.rev.damp !== undefined) ? p.rev.damp : 3000;
+        const revHpf = (p && p.rev && p.rev.hpf !== undefined) ? p.rev.hpf : 100;
 
         this.delay.delayTime.setTargetAtTime(dlyTime, window.audioCtx.currentTime, 0.1);
         this.feedback.gain.setTargetAtTime(dlyFbk, window.audioCtx.currentTime, 0.1);
         this.dlyFilter.frequency.setTargetAtTime(dlyTone, window.audioCtx.currentTime, 0.1);
         
-        // Equal Power Crossfade for the Delay Cascade
         this.dlyToRev.gain.setTargetAtTime(Math.sin(cascade * Math.PI / 2), window.audioCtx.currentTime, 0.1);
         this.dlyToMaster.gain.setTargetAtTime(Math.cos(cascade * Math.PI / 2), window.audioCtx.currentTime, 0.1);
         
@@ -96,6 +99,7 @@ class MasterFXBus {
             }, 250); 
         }
         this.revFilter.frequency.setTargetAtTime(revDamp, window.audioCtx.currentTime, 0.1);
+        this.revHpf.frequency.setTargetAtTime(revHpf, window.audioCtx.currentTime, 0.1);
     }
 }
 
@@ -158,8 +162,12 @@ class AnalogOscillator extends SourceModule {
         this.osc.start();
     }
     setFrequency(freq, time, glide) {
-        if (glide > 0) this.osc.frequency.linearRampToValueAtTime(freq, time + glide);
-        else { this.osc.frequency.cancelScheduledValues(time); this.osc.frequency.setValueAtTime(freq, time); }
+        if (glide > 0) {
+            this.osc.frequency.setTargetAtTime(freq, time, glide / 3); // smoother glide
+        } else { 
+            this.osc.frequency.cancelScheduledValues(time); 
+            this.osc.frequency.setValueAtTime(freq, time); 
+        }
     }
 }
 
@@ -179,7 +187,6 @@ class NoiseGenerator extends SourceModule {
     }
 }
 
-// NEW: Pure math-based drum synthesis mapped to General MIDI
 class ProceduralDrums {
     static trigger(note, time, vel, destination) {
         const ctx = window.audioCtx;
@@ -272,6 +279,8 @@ class ProceduralDrums {
 class SynthVoice {
     constructor(channelOut) {
         this.activeUntil = 0;
+        this.lastTriggerTime = 0;
+        this.currentPitch = 0;
         this.sources = {
             osc1: new AnalogOscillator('sawtooth'),
             sub: new AnalogOscillator('square'),
@@ -311,8 +320,8 @@ class SynthVoice {
     trigger(pitch, freq, velocity, now, stopTime, params) {
         this.activeUntil = stopTime + params.ampEnv.rel;
         
-        const is303 = (params.mode === '303');
-        const isMono = (params.mode === 'mono');
+        const isMono = (Math.round(params.voices || 5) === 1);
+        const is303 = (params.legato === 1);
         const isDrums = (params.sources.osc1.type === 'drums');
         const overlapping = (now < this.activeUntil);
         
@@ -326,7 +335,7 @@ class SynthVoice {
             this.sources.sub.setFrequency(freq / 2, now, glideTime);
         }
 
-        const skipEnvelopes = (is303 && overlapping);
+        const skipEnvelopes = (is303 && isMono && overlapping);
 
         if (!skipEnvelopes) {
             EnvelopeGen.apply(this.vca.gain, now, stopTime, params.ampEnv, 'amp', velocity / 127);
@@ -354,22 +363,18 @@ class PolyChannel {
         this.params = JSON.parse(JSON.stringify(window.defaultParams));
         this.params.midiOutCh = id;
 
-        // 1. Channel Summing Bus (Where voices go before effects)
         this.voiceMix = window.audioCtx.createGain();
 
-        // 2. The Per-Channel Distortion Insert
         this.distNode = window.audioCtx.createWaveShaper();
         this.distNode.oversample = '4x';
         this.distFilter = window.audioCtx.createBiquadFilter();
         this.distFilter.type = 'lowpass';
-        this.distOut = window.audioCtx.createGain(); // Wet Signal
-        this.dryOut = window.audioCtx.createGain();  // Dry Signal
+        this.distOut = window.audioCtx.createGain(); 
+        this.dryOut = window.audioCtx.createGain();  
 
-        // 3. The Final Channel Out
         this.channelOut = window.audioCtx.createGain(); 
         this.channelOut.gain.value = this.masterVolume;
         
-        // Insert Routing
         this.voiceMix.connect(this.distNode);
         this.distNode.connect(this.distFilter);
         this.distFilter.connect(this.distOut);
@@ -379,7 +384,6 @@ class PolyChannel {
         this.distOut.connect(this.channelOut);
         this.dryOut.connect(this.channelOut);
 
-        // Core Out Routing
         this.analyser = window.audioCtx.createAnalyser();
         this.channelOut.connect(this.analyser);
         
@@ -387,7 +391,6 @@ class PolyChannel {
         this.channelOut.connect(this.ampLfoNode); 
         this.ampLfoNode.connect(window.masterGain); 
 
-        // 4. Global FX Sends
         this.sends = { dly: window.audioCtx.createGain(), rev: window.audioCtx.createGain() };
         this.channelOut.connect(this.sends.dly);
         this.channelOut.connect(this.sends.rev);
@@ -405,9 +408,8 @@ class PolyChannel {
         Object.values(this.lfos).forEach(lfo => { lfo.osc.connect(lfo.gain); lfo.osc.start(); });
         this.lfos.amp.gain.connect(this.ampLfoNode.gain);
 
-        // Feed voices into the new voiceMix bus
         this.voices = [];
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 8; i++) {
             let voice = new SynthVoice(this.voiceMix);
             this.lfos.pitch.gain.connect(voice.sources.osc1.detuneNode);
             this.lfos.pitch.gain.connect(voice.sources.sub.detuneNode);
@@ -427,20 +429,15 @@ class PolyChannel {
         this.channelOut.gain.value = this.params.muted ? 0 : this.params.mixVol; 
     }
 
-    // THE ASYMMETRICAL HARD CLIPPER
     makeDistortionCurve(amount) {
         let n = 44100, curve = new Float32Array(n);
-        let drive = Math.max(1, amount); // Up to 100x gain boost
+        let drive = Math.max(1, amount); 
         
         for (let i = 0; i < n; ++i) {
             let x = i * 2 / n - 1;
             let y = x * drive;
-            
-            // Asymmetrical hard clip
-            if (y > 1.0) y = 1.0 + (y - 1.0) * 0.05; // Slight rubber band on positive
-            else if (y < -0.8) y = -0.8; // Absolute brick wall on negative
-            
-            // Output normalization
+            if (y > 1.0) y = 1.0 + (y - 1.0) * 0.05; 
+            else if (y < -0.8) y = -0.8; 
             curve[i] = y * 0.7; 
         }
         return curve;
@@ -448,7 +445,7 @@ class PolyChannel {
 
     applyParams() {
         const p = this.params;
-        if (!p.fx) p.fx = { drv: 0, drvGrit: 10, drvTone: 2000, dly: 0, rev: 0 };
+        if (!p.fx) p.fx = { drv: 0, drvGrit: 10, drvTone: 2000, drvLvl: 1.0, dly: 0, rev: 0 };
 
         const configureLFO = (lfoKey, config, depthMult) => {
             const lfo = this.lfos[lfoKey];
@@ -464,15 +461,13 @@ class PolyChannel {
         configureLFO('filter', p.filterLfo, 2000); 
         configureLFO('amp', p.ampLfo, 1.0);       
 
-        // 1. Configure the Channel Distortion Insert
         this.distNode.curve = this.makeDistortionCurve(p.fx.drvGrit);
         this.distFilter.frequency.setTargetAtTime(p.fx.drvTone, window.audioCtx.currentTime, 0.05);
         
-        // Dry/Wet Mix for Distortion (AMT Knob)
-        this.distOut.gain.setTargetAtTime(p.fx.drv, window.audioCtx.currentTime, 0.05);
+        let drvLvl = p.fx.drvLvl !== undefined ? p.fx.drvLvl : 1.0;
+        this.distOut.gain.setTargetAtTime(p.fx.drv * drvLvl, window.audioCtx.currentTime, 0.05);
         this.dryOut.gain.setTargetAtTime(1.0 - p.fx.drv, window.audioCtx.currentTime, 0.05);
 
-        // 2. Set Global FX Send Amounts
         this.sends.dly.gain.setTargetAtTime(p.fx.dly, window.audioCtx.currentTime, 0.05);
         this.sends.rev.gain.setTargetAtTime(p.fx.rev, window.audioCtx.currentTime, 0.05);
 
@@ -480,28 +475,60 @@ class PolyChannel {
     }
     
     play(pitch, velocity, durationMs, scheduleTime) {
-        const now = scheduleTime || (audioCtx.currentTime + 0.015); 
+        const now = scheduleTime || (window.audioCtx.currentTime + 0.015); 
         const freq = 440 * Math.pow(2, (pitch - 69) / 12);
         
-        if (this.params.mode === 'poly') { 
-            let freeIdx = -1;
-            for (let i = 0; i < 5; i++) { 
-                if (now >= this.voices[i].activeUntil) { freeIdx = i; break; } 
+        let maxVoices = this.params.voices !== undefined ? Math.round(this.params.voices) : 5;
+        let stealMode = this.params.stealMode || 'oldest';
+        
+        let targetIdx = -1;
+        let oldestTime = now + 1000;
+        let oldestIdx = 0;
+        let lowestPitch = 1000;
+        let lowestIdx = 0;
+        let highestPitch = -1;
+        let highestIdx = 0;
+
+        if (maxVoices === 1) {
+            targetIdx = 0; // Pure Monophonic
+        } else {
+            // Find free voice or track metadata for stealing
+            for (let i = 0; i < maxVoices; i++) {
+                let v = this.voices[i];
+                if (now >= v.activeUntil) { 
+                    targetIdx = i; break; 
+                }
+                
+                let tTime = v.lastTriggerTime || 0;
+                if (tTime < oldestTime) { oldestTime = tTime; oldestIdx = i; }
+                
+                let p = v.currentPitch || 0;
+                if (p < lowestPitch) { lowestPitch = p; lowestIdx = i; }
+                if (p > highestPitch) { highestPitch = p; highestIdx = i; }
             }
-            if (freeIdx === -1) return false; 
-            this.voiceIndex = freeIdx; 
-        } else { 
-            this.voiceIndex = 0; 
+            
+            // NOTE STEALING LOGIC
+            if (targetIdx === -1 && stealMode !== 'none') {
+                if (stealMode === 'lowest') targetIdx = lowestIdx;
+                else if (stealMode === 'highest') targetIdx = highestIdx;
+                else targetIdx = oldestIdx; // default to oldest
+            }
         }
         
+        if (targetIdx === -1) return false; // Dropped note because 'none' steal mode
+        
+        this.voiceIndex = targetIdx;
         this.lastTriggerTime = now; 
         this.lastDuration = Math.min(durationMs / 1000, 8.0); 
         const stopTime = now + this.lastDuration;
         
-        this.voices[this.voiceIndex].activeUntil = stopTime + this.params.ampEnv.rel;
+        let v = this.voices[this.voiceIndex];
+        v.activeUntil = stopTime + this.params.ampEnv.rel;
+        v.lastTriggerTime = now;
+        v.currentPitch = pitch;
         
         if (!this.params.muted && !window.isMasterMuted) {
-            this.voices[this.voiceIndex].trigger(pitch, freq, velocity, now, stopTime, this.params);
+            v.trigger(pitch, freq, velocity, now, stopTime, this.params);
         }
         return true; 
     }
