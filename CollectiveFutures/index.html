@@ -19,10 +19,9 @@
     <div class="control-group right-controls">
         <button id="btn-ble" onclick="connectBLE()" style="width: 135px; display: flex; justify-content: space-between; align-items: center; text-align: left;">CONNECT <span id="ble-status" class="status-offline">●</span></button>
 
-    <div class="dropdown-widget" onclick="this.classList.toggle('show'); event.stopPropagation();">
-            <button>MIDI</button>
-            <div class="dropdown-content midi-panel" style="max-width: 90vw; box-sizing: border-box;">
-                <label>Clock:</label>
+<div class="dropdown-widget">
+            <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();">MIDI</button>
+            <div class="dropdown-content midi-panel" style="max-width: 90vw; box-sizing: border-box;" onclick="event.stopPropagation();">                <label>Clock:</label>
                 <select id="midi-clock-dir" style="width: 100%; box-sizing: border-box;" onchange="window.midiClockMode = this.value; syncUI();"><option value="out">MIDI Clock OUT (Master)</option><option value="in">MIDI Clock IN (Sync)</option></select>
                 <label>Master Out:</label>
                 <select id="midi-out-select" style="width: 100%; box-sizing: border-box;"><option value="none">No Output</option></select>
@@ -34,12 +33,11 @@
                     <span>CH 4</span><select id="ui-midi-ch-3" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(3, this.value)"></select>
                 </div>
             </div>
-        </div>
+</div>
 
-        <div class="dropdown-widget" onclick="this.classList.toggle('show'); event.stopPropagation();">
-            <button>PRESETS</button>
-            <div class="dropdown-content preset-panel" style="min-width: 240px; padding: 12px; gap: 6px;">
-                <select id="preset-select" onchange="loadPreset(this.value)" style="width: 100%; margin-bottom: 4px;"><option value="">-- Select --</option></select>
+<div class="dropdown-widget">
+            <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();">PRESETS ▼</button>
+            <div class="dropdown-content preset-panel" style="min-width: 240px; padding: 12px; gap: 6px; right: 0; left: auto;" onclick="event.stopPropagation();">                <select id="preset-select" onchange="loadPreset(this.value)" style="width: 100%; margin-bottom: 4px;"><option value="">-- Select --</option></select>
                 <div style="display: flex; gap: 4px;">
                     <button onclick="savePreset(false)" style="flex: 1;">SAVE</button>
                     <button onclick="savePreset(true)" style="flex: 0 0 auto; width: 55px;">NEW</button>
@@ -54,7 +52,7 @@
                     <button class="danger" onclick="clearAllPresets()" style="flex: 0 0 auto; width: 55px;">ALL</button>
                 </div>
             </div>
-        </div>
+</div>
 
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; background: #0a0d12; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px;">
             <div style="display: flex; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--border);">
@@ -64,12 +62,11 @@
             </div>
             
             <button id="toggle-synth-btn" onclick="toggleSynthUI()" style="cursor: pointer; font-weight: bold; opacity: 0.5;">SYNTH</button>
-            <div class="dropdown-widget" style="display: flex; align-items: center; gap: 8px;" onclick="this.classList.toggle('show'); event.stopPropagation();">
-                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; height: 100%;"><canvas id="master-vu-hz" width="80" height="16" style="background:#000; border-radius:3px; margin: 0 !important;"></canvas></div>
+            <div class="dropdown-widget" style="display: flex; align-items: center; gap: 8px;">
+                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; height: 100%; cursor: pointer;" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();"><canvas id="master-vu-hz" width="80" height="16" style="background:#000; border-radius:3px; margin: 0 !important;"></canvas></div>
                 <button id="btn-master-mute" class="danger" onclick="toggleMasterMute(); event.stopPropagation();" style="padding: 3px 8px; font-size: 12px; border-radius:3px;">MUTE</button>
-                <div class="dropdown-content mixer-dropdown" id="mixer-dropdown-content"></div>
-            </div>
-        </div>
+                <div class="dropdown-content mixer-dropdown" id="mixer-dropdown-content" onclick="event.stopPropagation();"></div>
+            </div>        </div>
     </div>
 </div>
 
@@ -163,19 +160,19 @@
             <div class="control-row">
                 
         <div class="col-wrap" style="width: 80px; align-items: center;">
-                    <div class="control-area" style="flex-direction: column; gap: 8px; align-items: center; height: auto; width: 100%; margin-top: -2px;">
-                        <select id="ui-wave" class="pill-select" style="width: 100%;" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
-                            <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="noise">Noise</option><option value="drums">Drum Kit</option>
+                    <div class="control-area" style="flex-direction: column; gap: 6px; align-items: center; height: auto; width: 100%; margin-top: 8px;">
+                        <select id="ui-wave" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
+                            <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Tri</option><option value="sine">Sine</option><option value="noise">Noise</option><option value="drums">Drums</option>
                         </select>
                         <select id="ui-steal" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateActiveSynth('stealMode', this.value)">
-                            <option value="oldest">Oldest</option><option value="lowest">Lowest</option><option value="highest">Highest</option><option value="none">None</option>
+                            <option value="oldest">Stl: Old</option><option value="lowest">Stl: Low</option><option value="highest">Stl: High</option><option value="none">Stl: Off</option>
                         </select>
-                        <div class="pill-toggle" id="legato-wrapper" style="width: 85%;">
+                        <div class="pill-toggle" id="legato-wrapper" style="width: 65%; height: 14px; margin-top: 2px;">
                             <input type="checkbox" id="ui-legato" onchange="updateActiveSynth('legato', this.checked ? 1 : 0)">
-                            <label for="ui-legato" style="line-height: 16px; font-size: 7px;">LEGATO</label>
+                            <label for="ui-legato" style="line-height: 14px; font-size: 8px;">LEGATO</label>
                         </div>
                     </div>
-        </div>
+                </div>
                 
                 <div class="divider"></div>
 
