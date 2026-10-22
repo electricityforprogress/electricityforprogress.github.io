@@ -70,13 +70,12 @@ window.applySpreadCurve = function(normPitch, spread) {
 window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote = 0, maxNote = 127) {
     let allowedClasses = [];
     
-    // 1. Gather valid note classes (0-11) based on scale mode
+    // 1. Gather valid note classes (0-11)
     if (scaleType === 'custom' && activeScaleBits) {
         for (let i = 0; i < 12; i++) {
             if (activeScaleBits[i]) allowedClasses.push(i);
         }
-        // Fallback to clamping if all piano keys are somehow disabled
-        if (allowedClasses.length === 0) return Math.max(minNote, Math.min(maxNote, rawNote)); 
+        if (allowedClasses.length === 0) allowedClasses = [0,2,4,5,7,9,11]; 
     } else if (scaleType !== 'chromatic') {
         let scale = window.SCALES[scaleType] || window.SCALES['major'];
         root = parseInt(root);
@@ -84,21 +83,25 @@ window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote =
             allowedClasses.push((scale[i] + root) % 12);
         }
     } else {
-        // Chromatic just strictly clamps to bounds
-        return Math.max(minNote, Math.min(maxNote, rawNote));
+        allowedClasses = [0,1,2,3,4,5,6,7,8,9,10,11];
     }
 
-    // 2. Search outward for the closest valid note that is ALSO within the min/max bounds
-    for (let offset = 0; offset < 12; offset++) {
-        let upNote = rawNote + offset;
-        let downNote = rawNote - offset;
-
-        if (upNote <= maxNote && allowedClasses.includes(upNote % 12)) return upNote;
-        if (downNote >= minNote && allowedClasses.includes((downNote % 12 + 12) % 12)) return downNote;
+    // 2. Generate a strict, sorted array of ONLY the valid MIDI notes within the bounds
+    let validNotes = [];
+    for (let note = minNote; note <= maxNote; note++) {
+        if (allowedClasses.includes(note % 12)) validNotes.push(note);
     }
+    
+    if (validNotes.length === 0) return Math.max(minNote, Math.min(maxNote, 60));
 
-    // 3. Ultimate fallback clamp
-    return Math.max(minNote, Math.min(maxNote, rawNote));
+    // 3. Convert the incoming rawNote back into a 0.0 - 1.0 percentage across the slider bounds
+    let pct = (rawNote - minNote) / (maxNote - minNote || 1);
+    
+    // 4. Map that percentage evenly across the available valid notes
+    let index = Math.round(pct * (validNotes.length - 1));
+    index = Math.max(0, Math.min(validNotes.length - 1, index));
+    
+    return validNotes[index];
 };
 
 window.globalFX = {
