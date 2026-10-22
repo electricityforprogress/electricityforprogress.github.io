@@ -21,13 +21,15 @@
     --fx-color: var(--orange);
 }
 
-body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; }
+body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; }
+
+/* Constrain overall app width on desktop to match mobile */
+.toolbar, .synth-inspector, #dashboard { width: 100%; max-width: 380px; box-sizing: border-box; }
 
 /* --- TOOLBAR & BRANDING --- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 10px 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; position: relative; z-index: 100; }
 .brand-group { display: flex; align-items: center; gap: 10px; }
-.bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: -webkit-linear-gradient(45deg, #c9ebff, #0066cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.logo-shimmer { display: inline-block; width: 28px; height: 28px; background: linear-gradient(90deg, #007799 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, #007799 100%); background-size: 200% 100%; animation: text-shimmer 4s linear infinite; -webkit-mask: url('./eforp-logo.svg') no-repeat center center; -webkit-mask-size: contain; mask: url('./eforp-logo.svg') no-repeat center center; mask-size: contain; }
+.bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: linear-gradient(90deg, #007799, #00f0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }.logo-shimmer { display: inline-block; width: 28px; height: 28px; background: linear-gradient(90deg, #007799 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, #007799 100%); background-size: 200% 100%; animation: text-shimmer 4s linear infinite; -webkit-mask: url('./eforp-logo.svg') no-repeat center center; -webkit-mask-size: contain; mask: url('./eforp-logo.svg') no-repeat center center; mask-size: contain; }
 @keyframes text-shimmer { 0% { background-position: 200% center; } 100% { background-position: 0% center; } }
 
 .right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -43,9 +45,7 @@ button.danger:hover { background: var(--red); color: var(--bg); }
 .dropdown-widget { position: relative; display: inline-block; }
 .dropdown-content { display: none; position: absolute; top: 100%; right: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.9); z-index: 100; flex-direction: column; gap: 10px; min-width: 200px; margin-top: 8px; }
 
-/* Mixer Hover Bridge Fix */
-.dropdown-widget::after { content: ""; position: absolute; top: 100%; left: 0; width: 100%; height: 15px; background: transparent; z-index: 10; }
-.dropdown-widget:hover .dropdown-content { display: flex; }
+.dropdown-widget.show .dropdown-content { display: flex; }
 
 .midi-ch-grid { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: center; font-size: 0.8em; }
 .mixer-dropdown { flex-direction: row; min-width: 320px; justify-content: space-between; flex-wrap: nowrap !important; overflow-x: auto; padding: 5px !important; width: auto; max-width: 90vw; }
@@ -139,9 +139,13 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .knob-dial { width: 100%; height: 100%; position: absolute; transform: rotate(-135deg); pointer-events: none; }
 .knob-indicator { width: 2px; height: 10px; margin: 2px auto 0 auto; border-radius: 1px; transition: background 0.4s ease, box-shadow 0.4s ease; }
 
-.scale-module .knob-indicator { background: var(--cyan); box-shadow: 0 0 4px var(--cyan); }
-.mod-module .knob-indicator { background: var(--mod-color); box-shadow: 0 0 4px var(--mod-color); }
-.voice-module .knob-indicator { background: #fff; box-shadow: 0 0 4px #fff; }
+/* !important forces mobile browsers to respect the custom color over native inputs */
+.scale-module .knob-indicator { background: var(--cyan) !important; box-shadow: 0 0 4px var(--cyan) !important; }
+.mod-module .knob-indicator { background: var(--mod-color) !important; box-shadow: 0 0 4px var(--mod-color) !important; }
+.voice-module .knob-indicator { background: #ffffff !important; box-shadow: 0 0 4px #ffffff !important; }
+
+/* Injects the channel color into the Mixer Volume sliders */
+.strip-controls .v-slider::-webkit-slider-thumb { background: var(--slider-color, #fff) !important; box-shadow: 0 0 5px var(--slider-color, #fff) !important; }
 .fx-filter-knob .knob-indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
 .fx-dynamic-knob .knob-indicator { background: var(--fx-color); box-shadow: 0 0 4px var(--fx-color); }
 
