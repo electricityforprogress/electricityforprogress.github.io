@@ -34,7 +34,8 @@ window.SCALES = {
 };
 
 window.defaultParams = {
-    mixVol: 0.8, muted: false, mode: 'poly', glide: 0.1,
+    mixVol: 0.8, muted: false, 
+    voices: 5, stealMode: 'oldest', legato: 0, glide: 0.1,
     sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.5 }, noise: { level: 0.0 } },
     filter: { cutoff: 2000, res: 6 },
     
@@ -48,7 +49,7 @@ window.defaultParams = {
     filterEnv: { atk: 0.05, dec: 0.2, sus: 0.4, rel: 0.6, amt: 0.5 },
     ampEnv: { atk: 0.05, dec: 0.2, sus: 0.4, rel: 0.6, amt: 1.0 },
     
-    fx: { drv: 0, drvGrit: 10, drvTone: 2000, dly: 0, rev: 0 },
+    fx: { drv: 0, drvGrit: 10, drvTone: 2000, drvLvl: 1.0, dly: 0, rev: 0 },
     
     threshold: 2.0, density: 100, quantize: 0, sampleSize: 40,
     minNote: 36, maxNote: 84, velMin: 60, velMax: 110,
@@ -70,7 +71,7 @@ window.applySpreadCurve = function(normPitch, spread) {
 window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote = 0, maxNote = 127) {
     let allowedClasses = [];
     
-    // 1. Gather valid note classes (0-11)
+    // 1. Gather valid note classes (0-11) based on scale mode
     if (scaleType === 'custom' && activeScaleBits) {
         for (let i = 0; i < 12; i++) {
             if (activeScaleBits[i]) allowedClasses.push(i);
@@ -106,5 +107,5 @@ window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote =
 
 window.globalFX = {
     dly: { time: 0.5, feedback: 0.5, tone: 2000, toRev: 0.2 },
-    rev: { size: 2.0, damp: 3000 }
+    rev: { size: 2.0, damp: 3000, hpf: 100 }
 };
