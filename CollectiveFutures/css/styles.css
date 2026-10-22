@@ -23,8 +23,9 @@
 
 body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; }
 
-/* Constrain overall app width on desktop to match mobile */
-.toolbar, .synth-inspector, #dashboard { width: 100%; max-width: 380px; box-sizing: border-box; }
+/* Allow wide layout on desktop for grid/quad visuals */
+.toolbar, .synth-inspector, #dashboard { width: 100%; max-width: 1600px; box-sizing: border-box; }
+.synth-controls { justify-content: center; } /* Centers the cards perfectly when wrapped */
 
 /* --- TOOLBAR & BRANDING --- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 10px 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; position: relative; z-index: 100; }
@@ -51,7 +52,7 @@ button.danger:hover { background: var(--red); color: var(--bg); }
 .mixer-dropdown { flex-direction: row; min-width: 320px; justify-content: space-between; flex-wrap: nowrap !important; overflow-x: auto; padding: 5px !important; width: auto; max-width: 90vw; }
 
 .strip { display: flex; flex-direction: column; align-items: center; gap: 8px; background: transparent; padding: 5px 4px !important; border: none; border-radius: 0; border-right: 1px solid var(--border); flex: 1; min-width: 0; }
-.strip.master { border-color: var(--cyan); }
+.strip.master { border-left: 1px solid var(--border); border-right: none !important; }
 .strip-label { font-size: 0.7em; font-weight: bold; }
 .strip-controls { display: flex; gap: 10px; height: 100px; align-items: center; }
 canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !important; background: #000; border: 1px solid var(--border); border-radius: 2px; }
