@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collective Futures</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="css/styles.css?v=4">
+    <link rel="stylesheet" href="css/styles.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -99,12 +99,11 @@
                     <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor">Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
                 </select>
                 
-                <!-- Quantize Expands to fill space -->
                 <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
                     <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">QUANTIZE</div>
                     <input type="range" class="pro-slider" id="ui-quantize" min="0" max="8" value="0" style="margin: 0; background: #333; width: 100%;">
-                    <div style="display: flex; justify-content: space-between; font-size: 8px; color: #666; margin-top: 2px;">
-                        <span style="color:var(--cyan);font-weight:bold;">FR</span><span>/64</span><span>/32</span><span>/16</span><span>/8</span><span>/4</span><span>/4T</span><span>/2</span><span>1B</span>
+                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; font-weight: bold; margin-top: 4px; padding: 0 2px;">
+                        <span style="color:var(--cyan);">FR</span><span>/64</span><span>/32</span><span>/16</span><span>/8</span><span>/4</span><span>/4T</span><span>/2</span><span>1B</span>
                     </div>
                 </div>
             </div>
@@ -147,12 +146,12 @@
                     </div>
                 </div>
                 
-                <div class="col-wrap" style="justify-content: center; padding-top: 4px;">
+                <div class="col-wrap">
                     <div class="control-area"><div class="knob-track" data-param="durMult" data-min="0.1" data-max="5.0" data-val="1.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
                     <div class="control-label">DUR</div>
                 </div>
                 
-                <div class="col-wrap" style="justify-content: center; padding-top: 4px;">
+                <div class="col-wrap">
                     <div class="control-area"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
                     <div class="control-label">SPREAD</div>
                 </div>
@@ -169,9 +168,12 @@
                         <select id="ui-wave" class="pill-select" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
                             <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="noise">Noise</option><option value="drums">Drum Kit</option>
                         </select>
-                        <select id="ui-steal" class="pill-select" onchange="updateActiveSynth('stealMode', this.value)">
-                            <option value="oldest">Oldest Steal</option><option value="lowest">Lowest Steal</option><option value="highest">Highest Steal</option><option value="none">No Stealing</option>
-                        </select>
+                        <div class="pill-select" style="display: flex; justify-content: space-between; align-items: center; padding: 0 8px;">
+                            <span style="color: var(--text-muted);">STEAL</span>
+                            <select id="ui-steal" style="background: transparent; color: var(--text-main); border: none; font-size: 9px; font-weight: bold; outline: none; appearance: none; text-align: right; cursor: pointer; padding: 0; width: auto;" onchange="updateActiveSynth('stealMode', this.value)">
+                                <option value="oldest">Oldest</option><option value="lowest">Lowest</option><option value="highest">Highest</option><option value="none">None</option>
+                            </select>
+                        </div>
                         <div class="pill-toggle" id="legato-wrapper">
                             <input type="checkbox" id="ui-legato" onchange="updateActiveSynth('legato', this.checked ? 1 : 0)">
                             <label for="ui-legato" style="line-height: 16px;">LEGATO</label>
@@ -187,7 +189,7 @@
                             <div class="knob-dial"><div class="knob-indicator"></div></div>
                         </div>
                     </div>
-                    <div class="control-label" style="display: flex; justify-content: center; gap: 3px; width: 150%;">
+                    <div class="control-label" style="display: flex; align-items: center; justify-content: center; gap: 3px; width: 150%; height: 10px; margin: 0; padding: 0;">
                         <span>POLY</span><span id="poly-readout" style="color: var(--cyan);">5</span>
                     </div>
                 </div>
@@ -216,7 +218,7 @@
                 </div>
             </div>
 
-            <div class="control-row" style="justify-content: space-evenly;">
+            <div class="control-row">
                 <div class="col-wrap" style="width: 55px;">
                     <div class="control-area">
                         <div class="stacked-config">
@@ -259,7 +261,7 @@
         <!-- MODULE 4: FILTER & EFFECTS -->
         <div class="synth-module fx-module">
             <div class="module-header">
-                <div class="fx-title">FILTER</div>
+                <div class="fx-title"><span style="color: var(--green);">FILTER</span> & EFFECTS</div>
                 <div class="target-selectors">
                     <label><input type="radio" name="activeFx" value="drv" checked onchange="switchModView('fx', this.value)"><div class="mod-led led-pitch" id="ind-fx-drv"></div><span>DRV</span></label>
                     <label><input type="radio" name="activeFx" value="dly" onchange="switchModView('fx', this.value)"><div class="mod-led led-filter" id="ind-fx-dly"></div><span>DLY</span></label>
@@ -335,12 +337,12 @@
 
 <div id="dashboard"></div>
 
-<script src="js/globals.js?v=5"></script>
-<script src="js/audioEngine.js?v=5"></script>
-<script src="js/uiController.js?v=5"></script>
-<script src="js/visualizer.js?v=5"></script>
-<script src="js/bleMidi.js?v=5"></script>
-<script src="js/main.js?v=5"></script>
+<script src="js/globals.js?v=6"></script>
+<script src="js/audioEngine.js?v=6"></script>
+<script src="js/uiController.js?v=6"></script>
+<script src="js/visualizer.js?v=6"></script>
+<script src="js/bleMidi.js?v=6"></script>
+<script src="js/main.js?v=6"></script>
 
 </body>
 </html>
