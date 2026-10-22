@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const nMin = document.getElementById('ui-note-min'), nMax = document.getElementById('ui-note-max');
     const nFill = document.getElementById('note-fill'), nText = document.getElementById('note-range-text');
-    const midiToNote = (m) => ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12] + (Math.floor(m/12)-1);
+    const midiToNote = (m) => ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12] + (Math.floor(m/12)-2);
     
     const updateNote = () => {
         if(!synthChannels[activeSynthIndex]) return;
@@ -114,15 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const vMin = document.getElementById('ui-vel-min'), vMax = document.getElementById('ui-vel-max');
     const vFill = document.getElementById('vel-fill');
-    const vMinTxt = document.getElementById('ui-vel-min-txt'), vMaxTxt = document.getElementById('ui-vel-max-txt');
+    const vText = document.getElementById('ui-vel-text');
     
     const updateVel = () => {
         if(!synthChannels[activeSynthIndex]) return;
         let min = parseInt(vMin.value), max = parseInt(vMax.value);
         if (min > max) { let t = min; min = max; max = t; }
         if(vFill) { vFill.style.left = (min / 127 * 100) + '%'; vFill.style.width = ((max - min) / 127 * 100) + '%'; }
-        if(vMinTxt) vMinTxt.innerText = min; 
-        if(vMaxTxt) vMaxTxt.innerText = max;
+        if(vText) vText.innerText = `${min} ↔ ${max}`;
         synthChannels[activeSynthIndex].params.velMin = min;
         synthChannels[activeSynthIndex].params.velMax = max;
     };
@@ -169,7 +168,7 @@ function buildMixerAndMidiUI() {
             <div class="strip-label" style="color: ${window.CH_COLORS ? window.CH_COLORS[i] : 'hsl('+(i*90)+', 100%, 60%)'}; margin-bottom: 5px;">CH ${i+1}</div>
             <div class="strip-controls">
                 <div class="slider-col"><input type="range" id="ch-vol-${i}" class="v-slider" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
-                <canvas class="vu ch-vu" id="vu-${i}" width="12" height="100" style="background:#000; border-radius:2px;"></canvas>
+                <canvas class="vu ch-vu" id="vu-${i}"></canvas>
             </div>
             <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 2px;">M</button>
         </div>`;
@@ -232,10 +231,8 @@ function initPiano() {
         let k = document.createElement('div'); 
         k.className = 'key-w active'; 
         k.id = `pkey-${noteIdx}`; 
-        
-        // Replaces onclick with explicit pointerdown
         k.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); // Prevents click-and-drag ghosting
+            e.preventDefault(); 
             togglePianoKey(noteIdx);
         });
         p.appendChild(k); 
@@ -247,7 +244,6 @@ function initPiano() {
             k.className = 'key-b active'; 
             k.id = `pkey-${noteIdx}`; 
             k.style.left = `${(i + 1) * 14.28}%`; 
-            
             k.addEventListener('pointerdown', (e) => {
                 e.preventDefault(); 
                 togglePianoKey(noteIdx);
@@ -308,7 +304,11 @@ function updateActiveSynth(param, value) {
     }
     
     if (!synthChannels[activeSynthIndex]) return;
-    synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+    if (param === 'stealMode' || param === 'scaleType') {
+        synthChannels[activeSynthIndex].params[param] = value;
+    } else {
+        synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+    }
     synthChannels[activeSynthIndex].applyParams();
 }
 
@@ -493,16 +493,38 @@ let activeEnvView = 'ampEnv';
 let activeFxView = 'drv';
 
 function switchModView(type, targetView) {
-    if (type === 'lfo') activeLfoView = targetView;
-    if (type === 'env') activeEnvView = targetView;
+    const root = document.documentElement;
+    if (type === 'lfo') {
+        activeLfoView = targetView;
+        const modColorMap = { 'pitchLfo': 'var(--red)', 'filterLfo': 'var(--green)', 'ampLfo': 'var(--cyan)' };
+        root.style.setProperty('--mod-color', modColorMap[targetView]);
+    }
+    if (type === 'env') {
+        activeEnvView = targetView;
+    }
     if (type === 'fx') {
         activeFxView = targetView;
+        const fxColorMap = { 'drv': 'var(--orange)', 'dly': 'var(--purple)', 'rev': 'var(--yellow)' };
+        root.style.setProperty('--fx-color', fxColorMap[targetView]);
+
         document.querySelectorAll('.fx-params').forEach(el => el.style.display = 'none');
-        let targetGroup = document.querySelector(`.fx-${targetView}-params`);
-        if (targetGroup) targetGroup.style.display = 'flex';
+        let targetGroup = document.querySelectorAll(`.fx-${targetView}-params`);
+        if (targetGroup) targetGroup.forEach(el => el.style.display = 'flex');
         
         let sendKnob = document.getElementById('fx-send-knob');
         if (sendKnob) sendKnob.dataset.param = targetView;
+
+        const fxLabels = {
+            'drv': { p1: 'GRIT', p2: 'TONE', s: 'LVL' },
+            'dly': { p1: 'TIME', p2: 'FDBK', s: '>REV' },
+            'rev': { p1: 'SIZE', p2: 'DAMP', s: 'HPF' }
+        };
+        let l1 = document.getElementById('fx-lbl-p1');
+        let l2 = document.getElementById('fx-lbl-p2');
+        let ls = document.getElementById('fx-lbl-s');
+        if(l1) { l1.style.opacity = 0; setTimeout(()=> { l1.textContent = fxLabels[targetView].p1; l1.style.opacity = 1; }, 150); }
+        if(l2) { l2.style.opacity = 0; setTimeout(()=> { l2.textContent = fxLabels[targetView].p2; l2.style.opacity = 1; }, 150); }
+        if(ls) { ls.style.opacity = 0; setTimeout(()=> { ls.textContent = fxLabels[targetView].s; ls.style.opacity = 1; }, 150); }
     }
     syncUI();
 }
@@ -546,14 +568,12 @@ function updateNestedSynth(group, param, value) {
     }
     
     synthChannels[activeSynthIndex].applyParams();
-    updateModLEDs(); 
 }
 
 function initKnobs() {
     document.querySelectorAll('.knob-track').forEach(knob => {
         let isDragging = false, startY = 0, startVal = 0;
         
-        // Force touch-action via JS to bypass mobile CSS caching
         knob.style.touchAction = 'none';
 
         const updateDial = (val) => {
@@ -583,42 +603,54 @@ function initKnobs() {
             updateDial(newVal); 
             
             const group = knob.dataset.group;
-            if (group) updateNestedSynth(group, knob.dataset.param, newVal);
-            else updateActiveSynth(knob.dataset.param, newVal);
+            const param = knob.dataset.param;
+            if (group) updateNestedSynth(group, param, newVal);
+            else updateActiveSynth(param, newVal);
+
+            // Polyphony specifics
+            if (param === 'voices') {
+                let intVal = Math.round(newVal);
+                let readout = document.getElementById('poly-readout');
+                if(readout) readout.innerText = intVal;
+                
+                let legatoWrapper = document.getElementById('legato-wrapper');
+                let legatoBtn = document.getElementById('ui-legato');
+                if (legatoWrapper && legatoBtn) {
+                    if (intVal > 1) {
+                        legatoWrapper.style.opacity = '0.3';
+                        legatoWrapper.style.pointerEvents = 'none';
+                        if (legatoBtn.checked) {
+                            legatoBtn.checked = false;
+                            updateActiveSynth('legato', 0);
+                        }
+                    } else {
+                        legatoWrapper.style.opacity = '1.0';
+                        legatoWrapper.style.pointerEvents = 'auto';
+                    }
+                }
+            }
         };
         
-        // --- 1. DESKTOP MOUSE EVENTS ---
-        knob.addEventListener('mousedown', (e) => { 
+        knob.addEventListener('pointerdown', (e) => { 
             isDragging = true; startY = e.clientY; 
             startVal = parseFloat(knob.dataset.val); 
+            knob.setPointerCapture(e.pointerId);
             e.preventDefault(); 
         });
-        window.addEventListener('mousemove', (e) => {
+        
+        knob.addEventListener('pointermove', (e) => {
             if (isDragging) handleMove(e.clientY);
         });
-        window.addEventListener('mouseup', () => isDragging = false);
-
-        // --- 2. NATIVE MOBILE TOUCH EVENTS ---
-        // Unlike mouse events, touch events implicitly lock to the originating element 
-        // even if your thumb drifts completely off the knob track.
-        knob.addEventListener('touchstart', (e) => { 
-            isDragging = true; 
-            startY = e.touches[0].clientY; 
-            startVal = parseFloat(knob.dataset.val); 
-            // Instantly blocks the browser from interpreting the initial touch as a scroll
-            e.preventDefault(); 
-        }, { passive: false });
         
-        knob.addEventListener('touchmove', (e) => {
-            if (isDragging) {
-                // Strictly blocks viewport scrolling while dragging
-                e.preventDefault(); 
-                handleMove(e.touches[0].clientY);
-            }
-        }, { passive: false });
-
-        knob.addEventListener('touchend', () => isDragging = false);
-        knob.addEventListener('touchcancel', () => isDragging = false);
+        const stopDrag = (e) => { 
+            if(isDragging) { 
+                isDragging = false; 
+                knob.releasePointerCapture(e.pointerId); 
+            } 
+        };
+        
+        knob.addEventListener('pointerup', stopDrag);
+        knob.addEventListener('pointercancel', stopDrag);
     });
 }
 
@@ -626,9 +658,12 @@ function syncUI() {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
     
-    ['ui-scaleRoot', 'ui-scaleType', 'ui-mode'].forEach(id => { let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; });
+    ['ui-scaleRoot', 'ui-scaleType', 'ui-steal'].forEach(id => { let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; });
     const waveEl = document.getElementById('ui-wave'); if(waveEl) waveEl.value = p.sources.osc1.type;
     
+    let legEl = document.getElementById('ui-legato');
+    if (legEl) legEl.checked = (p.legato === 1);
+
     let lfoShape = document.getElementById('ui-lfo-shape');
     if(lfoShape && p[activeLfoView]) lfoShape.value = p[activeLfoView].shape;
     
@@ -637,30 +672,10 @@ function syncUI() {
     let bpmDisplay = document.getElementById('ui-bpm-display');
     if (bpmDisplay) bpmDisplay.innerText = Math.round(window.masterBPM).toString().padStart(3, '0');
     
-    let bpmKnob = document.getElementById('master-tempo-knob');
-    if (bpmKnob) {
-        bpmKnob.dataset.val = window.masterBPM;
-        const min = parseFloat(bpmKnob.dataset.min), max = parseFloat(bpmKnob.dataset.max);
-        let pct = (window.masterBPM - min) / (max - min);
-        let dial = bpmKnob.querySelector('.knob-dial');
-        if (dial) dial.style.transform = `rotate(${-135 + (pct * 270)}deg)`;
-        
-        let tapBtn = document.getElementById('ui-tap-btn');
-        if (window.midiClockMode === 'in') {
-            bpmKnob.style.opacity = '0.3'; bpmKnob.style.pointerEvents = 'none';
-            if (tapBtn) { tapBtn.style.opacity = '0.3'; tapBtn.style.pointerEvents = 'none'; }
-            if (bpmDisplay) bpmDisplay.style.cursor = 'default';
-        } else {
-            bpmKnob.style.opacity = '1.0'; bpmKnob.style.pointerEvents = 'auto';
-            if (tapBtn) { tapBtn.style.opacity = '1.0'; tapBtn.style.pointerEvents = 'auto'; }
-            if (bpmDisplay) bpmDisplay.style.cursor = 'ns-resize';
-        }
-    }
-    
     if (p[activeLfoView]) {
         let rateMode = p[activeLfoView].rateMode || 'lo';
-        let rmEl = document.getElementById('ui-lfo-rateMode');
-        if (rmEl) rmEl.value = rateMode;
+        let rmEl = document.getElementById(rateMode === 'lo' ? 'rate-lo' : 'rate-hi');
+        if (rmEl) rmEl.checked = true;
         
         let rateKnob = document.querySelector('.knob-track[data-param="rate"][data-group="lfo"]');
         if (rateKnob) {
@@ -684,13 +699,13 @@ function syncUI() {
     }
 
     setV('ui-note-min', p.minNote); setV('ui-note-max', p.maxNote);
-    const midiToNote = (m) => ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12] + (Math.floor(m/12)-1);
+    const midiToNote = (m) => ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12] + (Math.floor(m/12)-2);
     setT('note-range-text', `${midiToNote(p.minNote)} (${p.minNote}) ↔ ${midiToNote(p.maxNote)} (${p.maxNote})`);
     let nFill = document.getElementById('note-fill');
     if (nFill) { nFill.style.left = (p.minNote / 127 * 100) + '%'; nFill.style.width = ((p.maxNote - p.minNote) / 127 * 100) + '%'; }
 
     setV('ui-vel-min', p.velMin); setV('ui-vel-max', p.velMax);
-    setT('ui-vel-min-txt', p.velMin); setT('ui-vel-max-txt', p.velMax);
+    setT('ui-vel-text', `${p.velMin} ↔ ${p.velMax}`);
     let vFill = document.getElementById('vel-fill');
     if (vFill) { vFill.style.left = (p.velMin / 127 * 100) + '%'; vFill.style.width = ((p.velMax - p.velMin) / 127 * 100) + '%'; }
 
@@ -699,12 +714,10 @@ function syncUI() {
         if (param === 'bpm') return; 
         
         let val;
-        // Global FX lookups
         if (group && group.startsWith('globalFx') && window.globalFX) {
             const fxType = group.split('.')[1];
             if (window.globalFX[fxType]) val = window.globalFX[fxType][param];
         } 
-        // Channel specific lookups
         else if (group === 'lfo' && p[activeLfoView]) val = p[activeLfoView][param];
         else if (group === 'env' && p[activeEnvView]) val = p[activeEnvView][param];
         else if (group === 'fx' && p.fx) val = p.fx[param];
@@ -719,27 +732,34 @@ function syncUI() {
         let pct = isLog ? (Math.log(val) - Math.log(min)) / (Math.log(max) - Math.log(min)) : (val - min) / (max - min);
         let dial = knob.querySelector('.knob-dial');
         if (dial) dial.style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+        
+        // Force the UI update logic for Poly slider to reflect correctly on tab change
+        if (param === 'voices') {
+            let intVal = Math.round(val);
+            let readout = document.getElementById('poly-readout');
+            if(readout) readout.innerText = intVal;
+            let legatoWrapper = document.getElementById('legato-wrapper');
+            let legatoBtn = document.getElementById('ui-legato');
+            if (legatoWrapper && legatoBtn) {
+                if (intVal > 1) {
+                    legatoWrapper.style.opacity = '0.3';
+                    legatoWrapper.style.pointerEvents = 'none';
+                } else {
+                    legatoWrapper.style.opacity = '1.0';
+                    legatoWrapper.style.pointerEvents = 'auto';
+                }
+            }
+        }
     });
     
-    // Sync the vertical DLY>REV slider
+    let drvLvl = document.getElementById('ui-fx-drv-lvl');
+    if (drvLvl && p.fx) drvLvl.value = p.fx.drvLvl !== undefined ? p.fx.drvLvl : 1.0;
+    
     let toRevEl = document.getElementById('ui-fx-torev');
     if (toRevEl && window.globalFX) toRevEl.value = window.globalFX.dly.toRev;
 
-    syncPianoUI();
-    updateModLEDs();
-}
+    let revHpfEl = document.getElementById('ui-fx-rev-hpf');
+    if (revHpfEl && window.globalFX) revHpfEl.value = window.globalFX.rev.hpf;
 
-function updateModLEDs() {
-    if (!synthChannels[activeSynthIndex]) return;
-    const p = synthChannels[activeSynthIndex].params;
-    const setLed = (id, val, maxVal = 1.0) => { 
-        const el = document.getElementById(id); 
-        if (el) el.style.opacity = 0.1 + (0.9 * (val / maxVal)); 
-    };
-    
-    // Only update the Envelope amounts dynamically. 
-    // FX LEDs are now handled purely by CSS selection states!
-    if (p.pitchEnv) setLed('ind-env-pitchEnv', p.pitchEnv.amt);
-    if (p.filterEnv) setLed('ind-env-filterEnv', p.filterEnv.amt);
-    if (p.ampEnv) setLed('ind-env-ampEnv', p.ampEnv.amt);
+    syncPianoUI();
 }
