@@ -141,11 +141,11 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .knob-indicator { width: 2px; height: 10px; margin: 2px auto 0 auto; border-radius: 1px; transition: background 0.4s ease, box-shadow 0.4s ease; }
 
 /* Explicit iOS-Safe Classes for Mobile WebKit */
-.scale-module .knob-indicator { background-color: var(--cyan) !important; box-shadow: 0 0 4px var(--cyan) !important; }
-.mod-module .knob-indicator { background-color: var(--mod-color) !important; box-shadow: 0 0 4px var(--mod-color) !important; }
-.voice-module .knob-indicator { background-color: #ffffff !important; box-shadow: 0 0 4px #ffffff !important; }
-.fx-filter-knob .knob-indicator { background-color: var(--green) !important; box-shadow: 0 0 4px var(--green) !important; }
-.fx-dynamic-knob .knob-indicator { background-color: var(--fx-color) !important; box-shadow: 0 0 4px var(--fx-color) !important; }
+.scale-module .knob-indicator { background: #00f0ff !important; box-shadow: 0 0 4px #00f0ff !important; }
+.voice-module .knob-indicator { background: #ffffff !important; box-shadow: 0 0 4px #ffffff !important; }
+.fx-filter-knob .knob-indicator { background: #39ff14 !important; box-shadow: 0 0 4px #39ff14 !important; }
+.mod-module .knob-indicator { background: var(--mod-color) !important; box-shadow: 0 0 4px var(--mod-color) !important; }
+.fx-dynamic-knob .knob-indicator { background: var(--fx-color) !important; box-shadow: 0 0 4px var(--fx-color) !important; }
 
 /* --- VERTICAL SLIDERS --- */
 .v-slider-container { position: relative; width: 14px; height: 50px; }
