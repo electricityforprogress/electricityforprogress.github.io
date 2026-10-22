@@ -478,6 +478,20 @@
             requestAnimationFrame(drawLoop);
             setTimeout(() => handleMidiHit(60, 100), 500); 
         });
+        
+        // Register Service Worker for PWA Offline Support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((registration) => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch((err) => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+        
     </script>
 </body>
 </html>
