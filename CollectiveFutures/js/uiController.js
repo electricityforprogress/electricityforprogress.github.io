@@ -221,10 +221,40 @@ function tapTempo() {
 }
 
 function initPiano() {
-    const p = document.getElementById('piano-keys'); p.innerHTML = '';
-    const whiteKeys = [0, 2, 4, 5, 7, 9, 11], blackKeys = [1, 3, null, 6, 8, 10]; 
-    whiteKeys.forEach(noteIdx => { let k = document.createElement('div'); k.className = 'key-w active'; k.id = `pkey-${noteIdx}`; k.onclick = () => togglePianoKey(noteIdx); p.appendChild(k); });
-    blackKeys.forEach((noteIdx, i) => { if (noteIdx !== null) { let k = document.createElement('div'); k.className = 'key-b active'; k.id = `pkey-${noteIdx}`; k.style.left = `${(i + 1) * 14.28}%`; k.onclick = () => togglePianoKey(noteIdx); p.appendChild(k); } });
+    const p = document.getElementById('piano-keys'); 
+    if (!p) return;
+    p.innerHTML = '';
+    
+    const whiteKeys = [0, 2, 4, 5, 7, 9, 11];
+    const blackKeys = [1, 3, null, 6, 8, 10]; 
+    
+    whiteKeys.forEach(noteIdx => { 
+        let k = document.createElement('div'); 
+        k.className = 'key-w active'; 
+        k.id = `pkey-${noteIdx}`; 
+        
+        // Replaces onclick with explicit pointerdown
+        k.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); // Prevents click-and-drag ghosting
+            togglePianoKey(noteIdx);
+        });
+        p.appendChild(k); 
+    });
+    
+    blackKeys.forEach((noteIdx, i) => { 
+        if (noteIdx !== null) { 
+            let k = document.createElement('div'); 
+            k.className = 'key-b active'; 
+            k.id = `pkey-${noteIdx}`; 
+            k.style.left = `${(i + 1) * 14.28}%`; 
+            
+            k.addEventListener('pointerdown', (e) => {
+                e.preventDefault(); 
+                togglePianoKey(noteIdx);
+            });
+            p.appendChild(k); 
+        } 
+    });
 }
 
 function togglePianoKey(noteIdx) {
