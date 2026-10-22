@@ -42,8 +42,11 @@ button.danger:hover { background: var(--red); color: var(--bg); }
 /* --- DROPDOWNS & MIXER --- */
 .dropdown-widget { position: relative; display: inline-block; }
 .dropdown-content { display: none; position: absolute; top: 100%; right: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.9); z-index: 100; flex-direction: column; gap: 10px; min-width: 200px; margin-top: 8px; }
-.dropdown-content::before { content: ""; position: absolute; top: -12px; left: 0; width: 100%; height: 12px; background: transparent; }
+
+/* Mixer Hover Bridge Fix */
+.dropdown-widget::after { content: ""; position: absolute; top: 100%; left: 0; width: 100%; height: 15px; background: transparent; z-index: 10; }
 .dropdown-widget:hover .dropdown-content { display: flex; }
+
 .midi-ch-grid { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: center; font-size: 0.8em; }
 .mixer-dropdown { flex-direction: row; min-width: 320px; justify-content: space-between; flex-wrap: nowrap !important; overflow-x: auto; padding: 5px !important; width: auto; max-width: 90vw; }
 
@@ -72,7 +75,6 @@ canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !importa
 .synth-controls { display: flex; flex-wrap: wrap; padding: 15px; gap: 15px; justify-content: space-between; align-items: stretch; border-bottom: 1px solid var(--border); }
 .synth-module { background-color: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; flex: 1; min-width: 260px; max-width: 375px; box-shadow: 0 8px 24px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05); box-sizing: border-box; }
 
-/* The Scale module snaps to 100% width on the top row */
 .scale-module { max-width: 100%; flex-basis: 100%; }
 
 .module-header { margin: 0 0 12px 0; font-size: 11px; border-bottom: 1px solid var(--border); padding-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: flex-end; }
@@ -111,7 +113,6 @@ input[name="fxTarget"][value="drv"]:checked ~ span { color: var(--orange); text-
 input[name="fxTarget"][value="dly"]:checked ~ span { color: var(--purple); text-shadow: 0 0 8px rgba(184, 77, 255, 0.6); }
 input[name="fxTarget"][value="rev"]:checked ~ span { color: var(--yellow); text-shadow: 0 0 8px rgba(255, 215, 0, 0.6); }
 
-
 /* --- CONTROL ALIGNMENT GRIDS --- */
 .control-row { display: flex; flex-wrap: nowrap; flex-direction: row; align-items: flex-start; justify-content: space-between; width: 100%; gap: 2px; }
 .col-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; width: 40px; height: 65px; flex-shrink: 0; }
@@ -140,7 +141,7 @@ input[name="fxTarget"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .fx-filter-knob .knob-indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
 .fx-dynamic-knob .knob-indicator { background: var(--fx-color); box-shadow: 0 0 4px var(--fx-color); }
 
-/* --- 50px VERTICAL SLIDERS --- */
+/* --- VERTICAL SLIDERS --- */
 .v-slider-container { position: relative; width: 14px; height: 50px; }
 .v-slider { -webkit-appearance: none; position: absolute; width: 50px; height: 4px; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 2px; outline: none; cursor: ns-resize; touch-action: none; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); margin: 0; padding: 0; }
 .v-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 10px; border-radius: 2px; border: 1px solid #000; box-shadow: 0 0 3px rgba(0,0,0,0.8); cursor: ns-resize; transition: background 0.4s ease; }
