@@ -175,10 +175,10 @@ function buildMixerAndMidiUI() {
     }
     
     html += `
-        <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px;">
+        <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px; border-right: none;">
             <div class="strip-label" style="color: var(--cyan); margin-bottom: 5px;">MIX</div>
             <div class="strip-controls" style="justify-content: center; width: 100%;">
-                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider" min="0" max="1" step="0.01" value="1.0" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
+                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider" style="--slider-color: var(--cyan);" min="0" max="1" step="0.01" value="1.0" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
             </div>
             <div style="height: 25px; margin-top: 5px;"></div>
         </div>`;
@@ -763,3 +763,10 @@ function syncUI() {
 
     syncPianoUI();
 }
+
+// Global click listener to automatically close dropdowns
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown-widget')) {
+        document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
+    }
+});
