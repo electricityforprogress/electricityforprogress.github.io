@@ -31,7 +31,7 @@ body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font
 .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 10px 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; position: relative; z-index: 100; }
 .brand-group { display: flex; align-items: center; gap: 10px; }
 .bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: linear-gradient(90deg, #007799, #00f0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.logo-shimmer { display: inline-block; width: 28px; height: 28px; background: linear-gradient(90deg, #007799 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, #007799 100%); background-size: 200% 100%; animation: text-shimmer 4s linear infinite; -webkit-mask: url('./eforp-logo.svg') no-repeat center center; -webkit-mask-size: contain; mask: url('./eforp-logo.svg') no-repeat center center; mask-size: contain; }
+.logo-shimmer { display: inline-block; width: 28px; height: 28px; background: linear-gradient(90deg, #007799 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, #007799 100%); background-size: 200% 100%; animation: text-shimmer 4s linear infinite; -webkit-mask: url('../shimmer-mask.svg') no-repeat center center; -webkit-mask-size: contain; mask: url('../shimmer-mask.svg') no-repeat center center; mask-size: contain; }
 @keyframes text-shimmer { 0% { background-position: 200% center; } 100% { background-position: 0% center; } }
 
 .right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
