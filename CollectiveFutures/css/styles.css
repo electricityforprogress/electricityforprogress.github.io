@@ -60,7 +60,7 @@ button.danger:hover { background: var(--red); color: var(--bg); }
 canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !important; background: #000; border: 1px solid var(--border); border-radius: 2px; }
 
 @media (max-width: 768px) {
-    .dropdown-content { right: auto; left: 0; min-width: 280px; }
+    .dropdown-content { right: 0; left: auto; min-width: 280px; }
     .mixer-dropdown { right: 0; left: auto; flex-wrap: wrap; justify-content: center; }
 }
 
