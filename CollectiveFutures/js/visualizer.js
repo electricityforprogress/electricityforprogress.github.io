@@ -210,6 +210,17 @@ window.triggerDensityVisualizer = function(chIdx, type) {
     }
 };
 
+function resizeCanvasToDisplaySize(canvas) {
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        return true;
+    }
+    return true;
+}
+
 function renderLoop() {
     requestAnimationFrame(renderLoop);
     try {
@@ -356,19 +367,42 @@ function renderLoop() {
                     currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
                 }
 
-                let visualS = new Float32Array(displayCount);
-                let targetMin = 1000000, targetMax = 0, sum = 0;
+                // ==========================================
+                // THE FIX: PIXEL-BINNING DECIMATION
+                // Only plot 2 visual points per horizontal pixel (Min/Max) 
+                // instead of plotting all 120,000 points.
+                // ==========================================
                 
-                for (let j = 0; j < displayCount; j++) {
-                    let rVal = ch.waveBuffer[startIndex + j].r || currentEma1;
-                    if (!isFinite(rVal)) rVal = currentEma1;
-                    currentEma1 = (rVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
-                    currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
-                    if (isNaN(currentEma2)) currentEma2 = 0;
-                    visualS[j] = currentEma2;
-                    sum += currentEma2;
-                    if (currentEma2 < targetMin) targetMin = currentEma2;
-                    if (currentEma2 > targetMax) targetMax = currentEma2;
+                let pointsPerPixel = Math.max(1, displayCount / sw);
+                let binnedData = [];
+                let targetMin = 1000000, targetMax = 0, sum = 0;
+
+                for (let px = 0; px < sw; px++) {
+                    let chunkStart = Math.floor(px * pointsPerPixel);
+                    let chunkEnd = Math.floor((px + 1) * pointsPerPixel);
+                    if (chunkEnd > displayCount) chunkEnd = displayCount;
+                    
+                    let binMin = 1000000, binMax = 0;
+                    
+                    for (let j = chunkStart; j < chunkEnd; j++) {
+                        let rVal = ch.waveBuffer[startIndex + j].r || currentEma1;
+                        if (!isFinite(rVal)) rVal = currentEma1;
+                        currentEma1 = (rVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
+                        currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
+                        if (isNaN(currentEma2)) currentEma2 = 0;
+                        
+                        sum += currentEma2;
+                        
+                        if (currentEma2 < binMin) binMin = currentEma2;
+                        if (currentEma2 > binMax) binMax = currentEma2;
+                        
+                        if (currentEma2 < targetMin) targetMin = currentEma2;
+                        if (currentEma2 > targetMax) targetMax = currentEma2;
+                    }
+                    
+                    if (chunkStart < chunkEnd) {
+                        binnedData.push({ x: px, yMin: binMin, yMax: binMax });
+                    }
                 }
 
                 avgVal = displayCount > 0 ? (sum / displayCount) : 0;
@@ -383,35 +417,42 @@ function renderLoop() {
                 let paddedRange = range * 1.2;
                 let getPathY = (val) => sh - ((val - paddedMin) / paddedRange * sh);
 
-                let step = Math.max(1, Math.floor(displayCount / (sw > 0 ? sw : 500)));
-                let pts = [];
-                for(let j=0; j<displayCount; j+=step) pts.push({ x: j * (sw / (displayCount - 1)), y: getPathY(visualS[j]) });
-                if ((displayCount - 1) % step !== 0) pts.push({ x: (displayCount - 1) * (sw / (displayCount - 1)), y: getPathY(visualS[displayCount - 1]) });
-
                 sCtx.strokeStyle = window.CH_COLORS[i]; sCtx.lineWidth = 2.5; sCtx.lineJoin = "round"; sCtx.lineCap = "round"; sCtx.beginPath();
-                if (pts.length > 0) {
-                    sCtx.moveTo(pts[0].x, pts[0].y);
-                    for (let k = 0; k < pts.length - 1; k++) { let xc = (pts[k].x + pts[k+1].x) / 2; let yc = (pts[k].y + pts[k+1].y) / 2; sCtx.quadraticCurveTo(pts[k].x, pts[k].y, xc, yc); }
-                    sCtx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+                
+                if (binnedData.length > 0) {
+                    sCtx.moveTo(binnedData[0].x, getPathY((binnedData[0].yMin + binnedData[0].yMax) / 2));
+                    
+                    for (let b = 1; b < binnedData.length; b++) {
+                        let yMid = getPathY((binnedData[b].yMin + binnedData[b].yMax) / 2);
+                        sCtx.lineTo(binnedData[b].x, yMid);
+                        
+                        // If there is significant noise in the bin, draw a vertical line to represent the spread
+                        if (binnedData[b].yMax - binnedData[b].yMin > (range * 0.02)) {
+                            sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].yMax));
+                            sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].yMin));
+                            sCtx.moveTo(binnedData[b].x, yMid); // Reset path for next horizontal line
+                        }
+                    }
                 }
                 sCtx.stroke();
 
+                // Draw Note Events
+                let step = Math.max(1, Math.floor(displayCount / (sw > 0 ? sw : 500)));
                 for(let j=0; j<displayCount; j+=step) {
                     let hasEvent = false; let eventNote = null;
                     for(let k=0; k<step && (j+k)<displayCount; k++) { let pt = ch.waveBuffer[startIndex + j + k]; if(pt.evt === 1 && pt.n) { hasEvent = true; eventNote = pt.n; break; } }
                     if(hasEvent && eventNote) {
-                        let x = j * (sw / (displayCount - 1)); let y = getPathY(visualS[j]);
+                        let x = j * (sw / (displayCount - 1)); 
                         sCtx.save();
                         sCtx.strokeStyle = `hsla(${(eventNote % 12) * 30}, 100%, 50%, 0.7)`;
                         sCtx.lineWidth = 1; sCtx.beginPath(); sCtx.moveTo(x, 0); sCtx.lineTo(x, sh); sCtx.stroke();
-                        sCtx.beginPath(); sCtx.arc(x, y, 3, 0, Math.PI * 2); sCtx.fillStyle = sCtx.strokeStyle; sCtx.fill();
                         sCtx.restore();
                     }
                 }
                 
                 if (!ch.lastHudTime || nowMs - ch.lastHudTime > 200) {
                     ch.lastHudTime = nowMs;
-                    let curVal = visualS && visualS.length > 0 ? visualS[visualS.length-1] : 0; 
+                    let curVal = ch.waveBuffer[ch.waveBuffer.length - 1].r || 0; 
                     let curTicks = ch.waveBuffer && ch.waveBuffer.length > 0 ? ch.waveBuffer[ch.waveBuffer.length-1].ticks : 0;
                     let kOhm = curVal > 0 ? (1000 / curVal) : 0; 
                     let slw = (ch.slew || 0) * 100;
