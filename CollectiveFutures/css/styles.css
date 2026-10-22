@@ -25,12 +25,13 @@ body { margin: 0; padding: 15px; background: var(--bg); color: var(--text); font
 
 /* Allow wide layout on desktop for grid/quad visuals */
 .toolbar, .synth-inspector, #dashboard { width: 100%; max-width: 1600px; box-sizing: border-box; }
-.synth-controls { justify-content: center; } /* Centers the cards perfectly when wrapped */
+.synth-controls { justify-content: center; }
 
 /* --- TOOLBAR & BRANDING --- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: var(--panel); border: 1px solid var(--border); padding: 10px 15px; margin-bottom: 15px; align-items: center; justify-content: space-between; border-radius: 4px; position: relative; z-index: 100; }
 .brand-group { display: flex; align-items: center; gap: 10px; }
-.bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: linear-gradient(90deg, #007799, #00f0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }.logo-shimmer { display: inline-block; width: 28px; height: 28px; background: linear-gradient(90deg, #007799 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, #007799 100%); background-size: 200% 100%; animation: text-shimmer 4s linear infinite; -webkit-mask: url('./eforp-logo.svg') no-repeat center center; -webkit-mask-size: contain; mask: url('./eforp-logo.svg') no-repeat center center; mask-size: contain; }
+.bio-brand { font-size: 1.4em; font-weight: bold; font-family: sans-serif; letter-spacing: -1px; background: linear-gradient(90deg, #007799, #00f0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.logo-shimmer { display: inline-block; width: 28px; height: 28px; background: linear-gradient(90deg, #007799 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, #007799 100%); background-size: 200% 100%; animation: text-shimmer 4s linear infinite; -webkit-mask: url('./eforp-logo.svg') no-repeat center center; -webkit-mask-size: contain; mask: url('./eforp-logo.svg') no-repeat center center; mask-size: contain; }
 @keyframes text-shimmer { 0% { background-position: 200% center; } 100% { background-position: 0% center; } }
 
 .right-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -46,6 +47,7 @@ button.danger:hover { background: var(--red); color: var(--bg); }
 .dropdown-widget { position: relative; display: inline-block; }
 .dropdown-content { display: none; position: absolute; top: 100%; right: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.9); z-index: 100; flex-direction: column; gap: 10px; min-width: 200px; margin-top: 8px; }
 
+/* Dropdowns are Click-to-Open via JS */
 .dropdown-widget.show .dropdown-content { display: flex; }
 
 .midi-ch-grid { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: center; font-size: 0.8em; }
@@ -68,7 +70,7 @@ canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !importa
 .synth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; }
 .synth-tab.active { background: var(--panel); color: var(--cyan); border-bottom: 2px solid var(--cyan); }
 .led { width: 12px; height: 12px; border-radius: 50%; background: #222; box-shadow: inset 0px 2px 4px rgba(0,0,0,0.8); }
-.led.active { background: var(--cyan); box-shadow: 0 0 10px var(--cyan), inset 0px 1px 2px rgba(255,255,255,0.8); }
+.led.active { background-color: var(--cyan); box-shadow: 0 0 10px var(--cyan), inset 0px 1px 2px rgba(255,255,255,0.8); }
 
 .ui-hidden { display: none !important; }
 
@@ -80,18 +82,18 @@ canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !importa
 
 .module-header { margin: 0 0 12px 0; font-size: 11px; border-bottom: 1px solid var(--border); padding-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: flex-end; }
 .mod-title { color: var(--mod-color); transition: color 0.4s ease; font-weight: bold; }
-.fx-title { color: var(--green); font-weight: bold; }
+.fx-title { color: var(--text); font-weight: bold; }
 .voice-title { color: #fff; font-weight: bold; text-shadow: 0 0 8px rgba(255,255,255,0.4); }
 .scale-title { color: var(--text-muted); font-weight: bold; }
 
 /* --- TARGET SELECTORS & LEDS --- */
-.target-selectors { display: flex; gap: 12px; align-items: center; }
+.target-selectors { display: flex; align-items: center; }
 .target-selectors label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 9px; font-weight: bold; margin: 0; transition: color 0.4s ease; }
 .target-selectors input[type="radio"] { display: none; }
 
 .mod-led { width: 8px; height: 8px; border-radius: 50%; background: #111; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8); transition: all 0.4s ease; }
 
-/* Fixed CSS Selectors to target 'activeLfo' and 'activeFx' logic */
+/* Dimmed baseline colors for text */
 input[name="activeLfo"][value="pitchLfo"] ~ span { color: rgba(255, 0, 85, 0.4); }
 input[name="activeLfo"][value="filterLfo"] ~ span { color: rgba(57, 255, 20, 0.4); }
 input[name="activeLfo"][value="ampLfo"] ~ span { color: rgba(0, 240, 255, 0.4); }
@@ -100,20 +102,19 @@ input[name="activeFx"][value="dly"] ~ span { color: rgba(184, 77, 255, 0.4); }
 input[name="activeFx"][value="rev"] ~ span { color: rgba(255, 215, 0, 0.4); }
 
 /* Bright active states for LEDs and Text */
-input[name="activeLfo"][value="pitchLfo"]:checked ~ .mod-led { background: var(--red); box-shadow: 0 0 8px var(--red); }
-input[name="activeLfo"][value="filterLfo"]:checked ~ .mod-led { background: var(--green); box-shadow: 0 0 8px var(--green); }
-input[name="activeLfo"][value="ampLfo"]:checked ~ .mod-led { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+input[name="activeLfo"][value="pitchLfo"]:checked ~ .mod-led { background-color: var(--red); box-shadow: 0 0 8px var(--red); }
+input[name="activeLfo"][value="filterLfo"]:checked ~ .mod-led { background-color: var(--green); box-shadow: 0 0 8px var(--green); }
+input[name="activeLfo"][value="ampLfo"]:checked ~ .mod-led { background-color: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
 input[name="activeLfo"][value="pitchLfo"]:checked ~ span { color: var(--red); text-shadow: 0 0 8px rgba(255, 0, 85, 0.6); }
 input[name="activeLfo"][value="filterLfo"]:checked ~ span { color: var(--green); text-shadow: 0 0 8px rgba(57, 255, 20, 0.6); }
 input[name="activeLfo"][value="ampLfo"]:checked ~ span { color: var(--cyan); text-shadow: 0 0 8px rgba(0, 240, 255, 0.6); }
 
-input[name="activeFx"][value="drv"]:checked ~ .mod-led { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
-input[name="activeFx"][value="dly"]:checked ~ .mod-led { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
-input[name="activeFx"][value="rev"]:checked ~ .mod-led { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+input[name="activeFx"][value="drv"]:checked ~ .mod-led { background-color: var(--orange); box-shadow: 0 0 8px var(--orange); }
+input[name="activeFx"][value="dly"]:checked ~ .mod-led { background-color: var(--purple); box-shadow: 0 0 8px var(--purple); }
+input[name="activeFx"][value="rev"]:checked ~ .mod-led { background-color: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
 input[name="activeFx"][value="drv"]:checked ~ span { color: var(--orange); text-shadow: 0 0 8px rgba(255, 140, 0, 0.6); }
 input[name="activeFx"][value="dly"]:checked ~ span { color: var(--purple); text-shadow: 0 0 8px rgba(184, 77, 255, 0.6); }
 input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-shadow: 0 0 8px rgba(255, 215, 0, 0.6); }
-
 
 /* --- CONTROL ALIGNMENT GRIDS --- */
 .control-row { display: flex; flex-wrap: nowrap; flex-direction: row; align-items: flex-start; justify-content: space-between; width: 100%; gap: 2px; }
@@ -129,10 +130,9 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .pill-toggle { display: flex; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; width: 100%; height: 16px; }
 .pill-toggle input { display: none; }
 .pill-toggle label { flex: 1; text-align: center; font-size: 8px; line-height: 14px; font-weight: bold; cursor: pointer; color: var(--text-muted); margin: 0; transition: background 0.3s, color 0.3s; }
-.pill-toggle input:checked + label { background: var(--cyan); color: #000; }
-.mod-module .pill-toggle input:checked + label { background: var(--mod-color); }
+.pill-toggle input:checked + label { background-color: var(--cyan); color: #000; }
+.mod-module .pill-toggle input:checked + label { background-color: var(--mod-color); }
 
-/* Stacked config expanded gap */
 .stacked-config { display: flex; flex-direction: column; gap: 12px; width: 55px; }
 
 /* --- 32px KNOBS --- */
@@ -140,30 +140,29 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .knob-dial { width: 100%; height: 100%; position: absolute; transform: rotate(-135deg); pointer-events: none; }
 .knob-indicator { width: 2px; height: 10px; margin: 2px auto 0 auto; border-radius: 1px; transition: background 0.4s ease, box-shadow 0.4s ease; }
 
-/* !important forces mobile browsers to respect the custom color over native inputs */
-.scale-module .knob-indicator { background: var(--cyan) !important; box-shadow: 0 0 4px var(--cyan) !important; }
-.mod-module .knob-indicator { background: var(--mod-color) !important; box-shadow: 0 0 4px var(--mod-color) !important; }
-.voice-module .knob-indicator { background: #ffffff !important; box-shadow: 0 0 4px #ffffff !important; }
-
-/* Explicit iOS-Safe Classes for Mixer Sliders (WebKit ignores CSS variables in pseudo-elements) */
-.slider-ch-0::-webkit-slider-thumb { background: #ff3333 !important; box-shadow: 0 0 5px #ff3333 !important; }
-.slider-ch-1::-webkit-slider-thumb { background: #39ff14 !important; box-shadow: 0 0 5px #39ff14 !important; }
-.slider-ch-2::-webkit-slider-thumb { background: #33ccff !important; box-shadow: 0 0 5px #33ccff !important; }
-.slider-ch-3::-webkit-slider-thumb { background: #b84dff !important; box-shadow: 0 0 5px #b84dff !important; }
-.slider-master::-webkit-slider-thumb { background: var(--cyan) !important; box-shadow: 0 0 5px var(--cyan) !important; }.fx-filter-knob .knob-indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
-.fx-dynamic-knob .knob-indicator { background: var(--fx-color); box-shadow: 0 0 4px var(--fx-color); }
+/* Explicit iOS-Safe Classes for Mobile WebKit */
+.scale-module .knob-indicator { background-color: var(--cyan) !important; box-shadow: 0 0 4px var(--cyan) !important; }
+.mod-module .knob-indicator { background-color: var(--mod-color) !important; box-shadow: 0 0 4px var(--mod-color) !important; }
+.voice-module .knob-indicator { background-color: #ffffff !important; box-shadow: 0 0 4px #ffffff !important; }
+.fx-filter-knob .knob-indicator { background-color: var(--green) !important; box-shadow: 0 0 4px var(--green) !important; }
+.fx-dynamic-knob .knob-indicator { background-color: var(--fx-color) !important; box-shadow: 0 0 4px var(--fx-color) !important; }
 
 /* --- VERTICAL SLIDERS --- */
 .v-slider-container { position: relative; width: 14px; height: 50px; }
 .v-slider { -webkit-appearance: none; position: absolute; width: 50px; height: 4px; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 2px; outline: none; cursor: ns-resize; touch-action: none; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); margin: 0; padding: 0; }
 .v-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 10px; border-radius: 2px; border: 1px solid #000; box-shadow: 0 0 3px rgba(0,0,0,0.8); cursor: ns-resize; transition: background 0.4s ease; }
-.mod-module .v-slider::-webkit-slider-thumb { background: var(--mod-color); }
-.fx-module .v-slider::-webkit-slider-thumb { background: var(--fx-color); }
-.voice-module .v-slider::-webkit-slider-thumb { background: #fff; }
+.mod-module .v-slider::-webkit-slider-thumb { background-color: var(--mod-color); }
+.fx-module .v-slider::-webkit-slider-thumb { background-color: var(--fx-color); }
+.voice-module .v-slider::-webkit-slider-thumb { background-color: #fff; }
 
-/* Mixer Slider Override */
+/* Mixer Slider Overrides & iOS Safe Colors */
 .strip-controls .v-slider-container { height: 100px; width: 14px; }
 .strip-controls .v-slider { width: 100px; }
+.slider-ch-0::-webkit-slider-thumb { background-color: #ff3333 !important; box-shadow: 0 0 5px #ff3333 !important; }
+.slider-ch-1::-webkit-slider-thumb { background-color: #39ff14 !important; box-shadow: 0 0 5px #39ff14 !important; }
+.slider-ch-2::-webkit-slider-thumb { background-color: #33ccff !important; box-shadow: 0 0 5px #33ccff !important; }
+.slider-ch-3::-webkit-slider-thumb { background-color: #b84dff !important; box-shadow: 0 0 5px #b84dff !important; }
+.slider-master::-webkit-slider-thumb { background-color: var(--cyan) !important; box-shadow: 0 0 5px var(--cyan) !important; }
 
 /* --- ADSR EXPANDABLE GROUP --- */
 .adsr-group { display: flex; flex-grow: 1; justify-content: space-around; padding-left: 10px; width: 100%; }
@@ -171,19 +170,19 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
 
 /* --- DUAL & PRO SLIDERS --- */
 .pro-slider { -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: transparent; outline: none; margin: 0; }
-.pro-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 18px; border-radius: 2px; background: var(--cyan); border: 1px solid #000; cursor: pointer; }
+.pro-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 18px; border-radius: 2px; background-color: var(--cyan); border: 1px solid #000; cursor: pointer; }
 
 .dual-slider-track { position: relative; width: 100%; height: 6px; background: #222; border-radius: 3px; margin-top: 4px; border: 1px solid var(--border); }
-.dual-slider-fill { position: absolute; top: 0; height: 100%; background: var(--cyan); border-radius: 2px; z-index: 1; }
+.dual-slider-fill { position: absolute; top: 0; height: 100%; background-color: var(--cyan); border-radius: 2px; z-index: 1; }
 .dual-slider-input { position: absolute; top: -5px; left: 0; width: 100%; height: 16px; -webkit-appearance: none; background: transparent; pointer-events: none; z-index: 2; margin: 0; outline: none; }
-.dual-slider-input::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 16px; background: var(--cyan); border: 1px solid #000; border-radius: 2px; box-shadow: 0 0 4px rgba(0,240,255,0.5); cursor: pointer; pointer-events: auto; }
+.dual-slider-input::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 16px; background-color: var(--cyan); border: 1px solid #000; border-radius: 2px; box-shadow: 0 0 4px rgba(0,240,255,0.5); cursor: pointer; pointer-events: auto; }
 
 /* --- PIANO WRAPPER --- */
 .piano-wrapper { position: relative; width: 100%; height: 100%; display: flex; z-index: 50; }
 .key-w { flex: 1; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 0 0 3px 3px; cursor: pointer; z-index: 1; }
-.key-w.active { background: var(--cyan); border-color: #0099aa; }
+.key-w.active { background-color: var(--cyan); border-color: #0099aa; }
 .key-b { position: absolute; width: 9%; height: 60%; background: #000; border: 1px solid var(--border); border-radius: 0 0 2px 2px; cursor: pointer; z-index: 2; margin-left: -4.5%; }
-.key-b.active { background: var(--cyan); filter: brightness(0.7); box-shadow: 0 0 10px var(--cyan); }
+.key-b.active { background-color: var(--cyan); filter: brightness(0.7); box-shadow: 0 0 10px var(--cyan); }
 
 /* Prevents touch zoom/scroll on controls */
 .knob-track, .v-slider, .pro-slider, .dual-slider-input, #ui-bpm-display { touch-action: none; user-select: none; -webkit-user-select: none; }
