@@ -79,7 +79,7 @@ canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !importa
 
 .module-header { margin: 0 0 12px 0; font-size: 11px; border-bottom: 1px solid var(--border); padding-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: flex-end; }
 .mod-title { color: var(--mod-color); transition: color 0.4s ease; font-weight: bold; }
-.fx-title { color: var(--text); font-weight: bold; }
+.fx-title { color: var(--green); font-weight: bold; }
 .voice-title { color: #fff; font-weight: bold; text-shadow: 0 0 8px rgba(255,255,255,0.4); }
 .scale-title { color: var(--text-muted); font-weight: bold; }
 
@@ -90,28 +90,29 @@ canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !importa
 
 .mod-led { width: 8px; height: 8px; border-radius: 50%; background: #111; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8); transition: all 0.4s ease; }
 
-/* Dimmed baseline colors for text */
-input[name="modTarget"][value="pitch"] ~ span { color: rgba(255, 0, 85, 0.4); }
-input[name="modTarget"][value="filter"] ~ span { color: rgba(57, 255, 20, 0.4); }
-input[name="modTarget"][value="amp"] ~ span { color: rgba(0, 240, 255, 0.4); }
-input[name="fxTarget"][value="drv"] ~ span { color: rgba(255, 140, 0, 0.4); }
-input[name="fxTarget"][value="dly"] ~ span { color: rgba(184, 77, 255, 0.4); }
-input[name="fxTarget"][value="rev"] ~ span { color: rgba(255, 215, 0, 0.4); }
+/* Fixed CSS Selectors to target 'activeLfo' and 'activeFx' logic */
+input[name="activeLfo"][value="pitchLfo"] ~ span { color: rgba(255, 0, 85, 0.4); }
+input[name="activeLfo"][value="filterLfo"] ~ span { color: rgba(57, 255, 20, 0.4); }
+input[name="activeLfo"][value="ampLfo"] ~ span { color: rgba(0, 240, 255, 0.4); }
+input[name="activeFx"][value="drv"] ~ span { color: rgba(255, 140, 0, 0.4); }
+input[name="activeFx"][value="dly"] ~ span { color: rgba(184, 77, 255, 0.4); }
+input[name="activeFx"][value="rev"] ~ span { color: rgba(255, 215, 0, 0.4); }
 
 /* Bright active states for LEDs and Text */
-input[name="modTarget"][value="pitch"]:checked ~ .mod-led { background: var(--red); box-shadow: 0 0 8px var(--red); }
-input[name="modTarget"][value="filter"]:checked ~ .mod-led { background: var(--green); box-shadow: 0 0 8px var(--green); }
-input[name="modTarget"][value="amp"]:checked ~ .mod-led { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
-input[name="modTarget"][value="pitch"]:checked ~ span { color: var(--red); text-shadow: 0 0 8px rgba(255, 0, 85, 0.6); }
-input[name="modTarget"][value="filter"]:checked ~ span { color: var(--green); text-shadow: 0 0 8px rgba(57, 255, 20, 0.6); }
-input[name="modTarget"][value="amp"]:checked ~ span { color: var(--cyan); text-shadow: 0 0 8px rgba(0, 240, 255, 0.6); }
+input[name="activeLfo"][value="pitchLfo"]:checked ~ .mod-led { background: var(--red); box-shadow: 0 0 8px var(--red); }
+input[name="activeLfo"][value="filterLfo"]:checked ~ .mod-led { background: var(--green); box-shadow: 0 0 8px var(--green); }
+input[name="activeLfo"][value="ampLfo"]:checked ~ .mod-led { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+input[name="activeLfo"][value="pitchLfo"]:checked ~ span { color: var(--red); text-shadow: 0 0 8px rgba(255, 0, 85, 0.6); }
+input[name="activeLfo"][value="filterLfo"]:checked ~ span { color: var(--green); text-shadow: 0 0 8px rgba(57, 255, 20, 0.6); }
+input[name="activeLfo"][value="ampLfo"]:checked ~ span { color: var(--cyan); text-shadow: 0 0 8px rgba(0, 240, 255, 0.6); }
 
-input[name="fxTarget"][value="drv"]:checked ~ .mod-led { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
-input[name="fxTarget"][value="dly"]:checked ~ .mod-led { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
-input[name="fxTarget"][value="rev"]:checked ~ .mod-led { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
-input[name="fxTarget"][value="drv"]:checked ~ span { color: var(--orange); text-shadow: 0 0 8px rgba(255, 140, 0, 0.6); }
-input[name="fxTarget"][value="dly"]:checked ~ span { color: var(--purple); text-shadow: 0 0 8px rgba(184, 77, 255, 0.6); }
-input[name="fxTarget"][value="rev"]:checked ~ span { color: var(--yellow); text-shadow: 0 0 8px rgba(255, 215, 0, 0.6); }
+input[name="activeFx"][value="drv"]:checked ~ .mod-led { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+input[name="activeFx"][value="dly"]:checked ~ .mod-led { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
+input[name="activeFx"][value="rev"]:checked ~ .mod-led { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+input[name="activeFx"][value="drv"]:checked ~ span { color: var(--orange); text-shadow: 0 0 8px rgba(255, 140, 0, 0.6); }
+input[name="activeFx"][value="dly"]:checked ~ span { color: var(--purple); text-shadow: 0 0 8px rgba(184, 77, 255, 0.6); }
+input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-shadow: 0 0 8px rgba(255, 215, 0, 0.6); }
+
 
 /* --- CONTROL ALIGNMENT GRIDS --- */
 .control-row { display: flex; flex-wrap: nowrap; flex-direction: row; align-items: flex-start; justify-content: space-between; width: 100%; gap: 2px; }
@@ -129,6 +130,9 @@ input[name="fxTarget"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .pill-toggle label { flex: 1; text-align: center; font-size: 8px; line-height: 14px; font-weight: bold; cursor: pointer; color: var(--text-muted); margin: 0; transition: background 0.3s, color 0.3s; }
 .pill-toggle input:checked + label { background: var(--cyan); color: #000; }
 .mod-module .pill-toggle input:checked + label { background: var(--mod-color); }
+
+/* Stacked config expanded gap */
+.stacked-config { display: flex; flex-direction: column; gap: 12px; width: 55px; }
 
 /* --- 32px KNOBS --- */
 .knob-track { width: 32px; height: 32px; border-radius: 50%; background: var(--knob-bg); border: 2px solid var(--border); position: relative; cursor: ns-resize; box-shadow: inset 0 2px 4px rgba(0,0,0,0.6); touch-action: none; }
@@ -148,6 +152,10 @@ input[name="fxTarget"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .mod-module .v-slider::-webkit-slider-thumb { background: var(--mod-color); }
 .fx-module .v-slider::-webkit-slider-thumb { background: var(--fx-color); }
 .voice-module .v-slider::-webkit-slider-thumb { background: #fff; }
+
+/* Mixer Slider Override */
+.strip-controls .v-slider-container { height: 100px; width: 14px; }
+.strip-controls .v-slider { width: 100px; }
 
 /* --- ADSR EXPANDABLE GROUP --- */
 .adsr-group { display: flex; flex-grow: 1; justify-content: space-around; padding-left: 10px; width: 100%; }
