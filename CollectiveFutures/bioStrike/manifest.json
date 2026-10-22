@@ -1,4 +1,5 @@
 {
+  "id": "/biostrike/",
   "name": "BioStrike Configuration",
   "short_name": "BioStrike",
   "description": "Offline configuration portal for BioStrike MIDI devices",
