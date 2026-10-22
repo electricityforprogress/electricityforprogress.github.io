@@ -124,6 +124,9 @@ input[name="fxTarget"][value="rev"]:checked ~ span { color: var(--yellow); }
 .knob-dial { width: 100%; height: 100%; position: absolute; transform: rotate(-135deg); pointer-events: none; }
 .knob-indicator { width: 2px; height: 10px; margin: 2px auto 0 auto; border-radius: 1px; transition: background 0.4s ease, box-shadow 0.4s ease; }
 
+/* The fix for the invisible Scale Module knobs */
+.scale-module .knob-indicator { background: var(--cyan); box-shadow: 0 0 4px var(--cyan); }
+
 .mod-module .knob-indicator { background: var(--mod-color); box-shadow: 0 0 4px var(--mod-color); }
 .voice-module .knob-indicator { background: #fff; box-shadow: 0 0 4px #fff; }
 .fx-filter-knob .knob-indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
