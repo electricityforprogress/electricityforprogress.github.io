@@ -167,7 +167,7 @@ function buildMixerAndMidiUI() {
         <div class="strip">
             <div class="strip-label" style="color: ${window.CH_COLORS ? window.CH_COLORS[i] : 'hsl('+(i*90)+', 100%, 60%)'}; margin-bottom: 5px;">CH ${i+1}</div>
             <div class="strip-controls">
-                <div class="slider-col"><input type="range" id="ch-vol-${i}" class="v-slider" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
+                <div class="v-slider-container"><input type="range" id="ch-vol-${i}" class="v-slider" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
                 <canvas class="vu ch-vu" id="vu-${i}"></canvas>
             </div>
             <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 2px;">M</button>
@@ -178,7 +178,7 @@ function buildMixerAndMidiUI() {
         <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px;">
             <div class="strip-label" style="color: var(--cyan); margin-bottom: 5px;">MIX</div>
             <div class="strip-controls" style="justify-content: center; width: 100%;">
-                <div class="slider-col"><input type="range" id="master-vol-slider" class="v-slider" min="0" max="1" step="0.01" value="1.0" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
+                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider" min="0" max="1" step="0.01" value="1.0" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
             </div>
             <div style="height: 25px; margin-top: 5px;"></div>
         </div>`;
