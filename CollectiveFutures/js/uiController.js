@@ -166,7 +166,7 @@ function buildMixerAndMidiUI() {
         html += `
         <div class="strip">
             <div class="strip-label" style="color: ${window.CH_COLORS ? window.CH_COLORS[i] : 'hsl('+(i*90)+', 100%, 60%)'}; margin-bottom: 5px;">CH ${i+1}</div>
-        <div class="strip-controls">
+            <div class="strip-controls">
                 <div class="v-slider-container"><input type="range" id="ch-vol-${i}" class="v-slider slider-ch-${i}" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
                 <canvas class="vu ch-vu" id="vu-${i}"></canvas>
             </div>
@@ -175,7 +175,7 @@ function buildMixerAndMidiUI() {
     }
     
     html += `
-        <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px; border-right: none;">
+        <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px; border-right: none !important;">
             <div class="strip-label" style="color: var(--cyan); margin-bottom: 5px;">MIX</div>
             <div class="strip-controls" style="justify-content: center; width: 100%;">
                 <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider slider-master" min="0" max="1" step="0.01" value="1.0" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
@@ -763,10 +763,3 @@ function syncUI() {
 
     syncPianoUI();
 }
-
-// Global click listener to automatically close dropdowns
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.dropdown-widget')) {
-        document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
-    }
-});
