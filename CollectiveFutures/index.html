@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collective Futures</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="css/styles.css?v=7">
+    <link rel="stylesheet" href="css/styles.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -19,12 +19,19 @@
     <div class="control-group right-controls">
         <button id="btn-ble" onclick="connectBLE()" style="width: 135px; display: flex; justify-content: space-between; align-items: center; text-align: left;">CONNECT <span id="ble-status" class="status-offline">●</span></button>
 
-<div class="dropdown-widget">
+        <!-- MIDI DROPDOWN -->
+        <div class="dropdown-widget">
             <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();">MIDI</button>
-            <div class="dropdown-content midi-panel" style="max-width: 90vw; box-sizing: border-box;" onclick="event.stopPropagation();">                <label>Clock:</label>
-                <select id="midi-clock-dir" style="width: 100%; box-sizing: border-box;" onchange="window.midiClockMode = this.value; syncUI();"><option value="out">MIDI Clock OUT (Master)</option><option value="in">MIDI Clock IN (Sync)</option></select>
+            <div class="dropdown-content midi-panel" style="max-width: 90vw; box-sizing: border-box;" onclick="event.stopPropagation();">
+                <label>Clock:</label>
+                <select id="midi-clock-dir" style="width: 100%; box-sizing: border-box;" onchange="window.midiClockMode = this.value; syncUI();">
+                    <option value="out">MIDI Clock OUT (Master)</option>
+                    <option value="in">MIDI Clock IN (Sync)</option>
+                </select>
                 <label>Master Out:</label>
-                <select id="midi-out-select" style="width: 100%; box-sizing: border-box;"><option value="none">No Output</option></select>
+                <select id="midi-out-select" style="width: 100%; box-sizing: border-box;">
+                    <option value="none">No Output</option>
+                </select>
                 <hr>
                 <div class="midi-ch-grid">
                     <span>CH 1</span><select id="ui-midi-ch-0" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(0, this.value)"></select>
@@ -33,11 +40,13 @@
                     <span>CH 4</span><select id="ui-midi-ch-3" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(3, this.value)"></select>
                 </div>
             </div>
-</div>
+        </div>
 
-<div class="dropdown-widget">
+        <!-- PRESETS DROPDOWN -->
+        <div class="dropdown-widget">
             <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();">PRESETS ▼</button>
-            <div class="dropdown-content preset-panel" style="min-width: 240px; padding: 12px; gap: 6px; right: 0; left: auto;" onclick="event.stopPropagation();">                <select id="preset-select" onchange="loadPreset(this.value)" style="width: 100%; margin-bottom: 4px;"><option value="">-- Select --</option></select>
+            <div class="dropdown-content preset-panel" style="min-width: 240px; padding: 12px; gap: 6px; right: 0; left: auto;" onclick="event.stopPropagation();">
+                <select id="preset-select" onchange="loadPreset(this.value)" style="width: 100%; margin-bottom: 4px;"><option value="">-- Select --</option></select>
                 <div style="display: flex; gap: 4px;">
                     <button onclick="savePreset(false)" style="flex: 1;">SAVE</button>
                     <button onclick="savePreset(true)" style="flex: 0 0 auto; width: 55px;">NEW</button>
@@ -52,8 +61,9 @@
                     <button class="danger" onclick="clearAllPresets()" style="flex: 0 0 auto; width: 55px;">ALL</button>
                 </div>
             </div>
-</div>
+        </div>
 
+        <!-- BPM & MIXER BAR -->
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; background: #0a0d12; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px;">
             <div style="display: flex; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--border);">
                 <div class="led" id="top-bpm-led" style="margin:0; width:10px; height:10px; background:#222; box-shadow:none;"></div>
@@ -62,11 +72,17 @@
             </div>
             
             <button id="toggle-synth-btn" onclick="toggleSynthUI()" style="cursor: pointer; font-weight: bold; opacity: 0.5;">SYNTH</button>
+            
+            <!-- MIXER DROPDOWN -->
             <div class="dropdown-widget" style="display: flex; align-items: center; gap: 8px;">
-                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; height: 100%; cursor: pointer;" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();"><canvas id="master-vu-hz" width="80" height="16" style="background:#000; border-radius:3px; margin: 0 !important;"></canvas></div>
+                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; padding: 4px 6px; cursor: pointer; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 3px; transition: border-color 0.2s;" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'" title="Open Mixer">
+                    <canvas id="master-vu-hz" width="80" height="16" style="background:#000; border-radius:2px; margin: 0 !important; display: block;"></canvas>
+                </div>
                 <button id="btn-master-mute" class="danger" onclick="toggleMasterMute(); event.stopPropagation();" style="padding: 3px 8px; font-size: 12px; border-radius:3px;">MUTE</button>
                 <div class="dropdown-content mixer-dropdown" id="mixer-dropdown-content" onclick="event.stopPropagation();"></div>
-            </div>        </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -251,11 +267,11 @@
             </div>
         </div>
 
-        <!-- MODULE 4: FILTER -->
+    <!-- MODULE 4: FILTER -->
         <div class="synth-module fx-module">
             <div class="module-header">
                 <div class="fx-title"><span style="color: var(--green);">FILTER</span></div>
-                <div class="target-selectors">
+                <div class="target-selectors" style="gap: 24px;">
                     <label><input type="radio" name="activeFx" value="drv" checked onchange="switchModView('fx', this.value)"><div class="mod-led led-pitch" id="ind-fx-drv"></div><span>DRV</span></label>
                     <label><input type="radio" name="activeFx" value="dly" onchange="switchModView('fx', this.value)"><div class="mod-led led-filter" id="ind-fx-dly"></div><span>DLY</span></label>
                     <label><input type="radio" name="activeFx" value="rev" onchange="switchModView('fx', this.value)"><div class="mod-led led-amp" id="ind-fx-rev"></div><span>REV</span></label>
@@ -330,12 +346,12 @@
 
 <div id="dashboard"></div>
 
-<script src="js/globals.js?v=7"></script>
-<script src="js/audioEngine.js?v=7"></script>
-<script src="js/uiController.js?v=7"></script>
-<script src="js/visualizer.js?v=7"></script>
-<script src="js/bleMidi.js?v=7"></script>
-<script src="js/main.js?v=7"></script>
+<script src="js/globals.js?v=9"></script>
+<script src="js/audioEngine.js?v=9"></script>
+<script src="js/uiController.js?v=9"></script>
+<script src="js/visualizer.js?v=9"></script>
+<script src="js/bleMidi.js?v=9"></script>
+<script src="js/main.js?v=9"></script>
 
 <script>
     // Closes the dropdown menus if you click anywhere else on the screen
