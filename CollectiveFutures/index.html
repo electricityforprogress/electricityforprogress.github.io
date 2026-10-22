@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collective Futures</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="css/styles.css?v=3">
+    <link rel="stylesheet" href="css/styles.css?v=4">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -91,18 +91,18 @@
                 <div class="scale-title">SCALE & DENSITY</div>
             </div>
             
-            <div style="display: flex; gap: 8px; margin-bottom: 15px; align-items: center;">
-                <select id="ui-scaleRoot" class="pill-select" style="width: 60px; color: var(--cyan); font-size: 10px;" onchange="updateActiveSynth('scaleRoot', this.value); applyScalePreset();">
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center; width: 100%;">
+                <select id="ui-scaleRoot" class="pill-select" style="flex: 0 0 45px; color: var(--cyan); font-size: 10px; padding: 2px 4px;" onchange="updateActiveSynth('scaleRoot', this.value); applyScalePreset();">
                     <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
                 </select>
-                <select id="ui-scaleType" class="pill-select" style="flex-grow: 1; color: var(--cyan); font-size: 10px;" onchange="updateActiveSynth('scaleType', this.value); applyScalePreset();">
+                <select id="ui-scaleType" class="pill-select" style="flex: 0 0 95px; color: var(--cyan); font-size: 10px; padding: 2px 4px;" onchange="updateActiveSynth('scaleType', this.value); applyScalePreset();">
                     <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor">Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom">Custom</option>
                 </select>
                 
-                <!-- Quantize moved here to fit tightly -->
-                <div style="display: flex; flex-direction: column; width: 120px; margin-left: 10px;">
+                <!-- Quantize Expands to fill space -->
+                <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
                     <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">QUANTIZE</div>
-                    <input type="range" class="pro-slider" id="ui-quantize" min="0" max="8" value="0" style="margin: 0; background: #333;">
+                    <input type="range" class="pro-slider" id="ui-quantize" min="0" max="8" value="0" style="margin: 0; background: #333; width: 100%;">
                     <div style="display: flex; justify-content: space-between; font-size: 8px; color: #666; margin-top: 2px;">
                         <span style="color:var(--cyan);font-weight:bold;">FR</span><span>/64</span><span>/32</span><span>/16</span><span>/8</span><span>/4</span><span>/4T</span><span>/2</span><span>1B</span>
                     </div>
@@ -110,7 +110,7 @@
             </div>
 
             <div style="display: flex; gap: 15px; margin-bottom: 15px;">
-                <div style="flex: 1; display: flex; flex-direction: column;">
+                <div style="flex: 0 0 110px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">
                         <span>VELOCITY</span><span id="ui-vel-text" style="color: #ccc;">60 ↔ 110</span>
                     </div>
@@ -335,12 +335,12 @@
 
 <div id="dashboard"></div>
 
-<script src="js/globals.js?v=4"></script>
-<script src="js/audioEngine.js?v=4"></script>
-<script src="js/uiController.js?v=4"></script>
-<script src="js/visualizer.js?v=4"></script>
-<script src="js/bleMidi.js?v=4"></script>
-<script src="js/main.js?v=4"></script>
+<script src="js/globals.js?v=5"></script>
+<script src="js/audioEngine.js?v=5"></script>
+<script src="js/uiController.js?v=5"></script>
+<script src="js/visualizer.js?v=5"></script>
+<script src="js/bleMidi.js?v=5"></script>
+<script src="js/main.js?v=5"></script>
 
 </body>
 </html>
