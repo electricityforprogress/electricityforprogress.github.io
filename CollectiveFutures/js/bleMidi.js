@@ -189,7 +189,7 @@ window.processBiodata = function(payload) {
                 // --- DENSITY CC OUTPUT (CC 81) ---
                 let recentEvents = (ch.densityEvents || []).filter(e => e.type === 'pass' && (nowMs - e.t < 4000)).length;
                 let densityVal = Math.max(0, Math.min(127, Math.round((recentEvents / 15) * 127)));
-                window.sendMidiCC(chIdx, 81, densityVal);
+               // window.sendMidiCC(chIdx, 81, densityVal);
                 
                 if (delta > (stdevi * thresh)) {
                     let densityGate = pConfig.density !== undefined ? pConfig.density : 100;
