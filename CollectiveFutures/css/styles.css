@@ -235,3 +235,29 @@ input[value="rev"]:checked ~ .label-text { color: var(--mod-amp); }
 .env-module .slider-group { gap: 6px !important; width: 100px !important; }
 .fx-module .fx-params { gap: 6px !important; width: 100% !important; justify-content: space-evenly !important; }
 .fx-module .env-layout { min-height: 90px !important; gap: 10px !important; }
+
+/* Modernize Piano Colors and Fix Desktop Hitbox */
+.piano-wrapper {
+    position: relative;
+    z-index: 50; /* Forces piano above invisible grid column boundaries */
+}
+
+.key-w { 
+    background: var(--knob-bg); 
+    border: 1px solid var(--border); 
+}
+.key-w.active { 
+    background: var(--cyan); 
+    border-color: #0099aa; 
+}
+
+.key-b { 
+    background: #000; 
+    border: 1px solid var(--border); 
+}
+.key-b.active { 
+    background: var(--cyan); 
+    filter: brightness(0.7); 
+    box-shadow: 0 0 10px var(--cyan); 
+}
+
