@@ -145,9 +145,12 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
 .mod-module .knob-indicator { background: var(--mod-color) !important; box-shadow: 0 0 4px var(--mod-color) !important; }
 .voice-module .knob-indicator { background: #ffffff !important; box-shadow: 0 0 4px #ffffff !important; }
 
-/* Injects the channel color into the Mixer Volume sliders */
-.strip-controls .v-slider::-webkit-slider-thumb { background: var(--slider-color, #fff) !important; box-shadow: 0 0 5px var(--slider-color, #fff) !important; }
-.fx-filter-knob .knob-indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
+/* Explicit iOS-Safe Classes for Mixer Sliders (WebKit ignores CSS variables in pseudo-elements) */
+.slider-ch-0::-webkit-slider-thumb { background: #ff3333 !important; box-shadow: 0 0 5px #ff3333 !important; }
+.slider-ch-1::-webkit-slider-thumb { background: #39ff14 !important; box-shadow: 0 0 5px #39ff14 !important; }
+.slider-ch-2::-webkit-slider-thumb { background: #33ccff !important; box-shadow: 0 0 5px #33ccff !important; }
+.slider-ch-3::-webkit-slider-thumb { background: #b84dff !important; box-shadow: 0 0 5px #b84dff !important; }
+.slider-master::-webkit-slider-thumb { background: var(--cyan) !important; box-shadow: 0 0 5px var(--cyan) !important; }.fx-filter-knob .knob-indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
 .fx-dynamic-knob .knob-indicator { background: var(--fx-color); box-shadow: 0 0 4px var(--fx-color); }
 
 /* --- VERTICAL SLIDERS --- */
