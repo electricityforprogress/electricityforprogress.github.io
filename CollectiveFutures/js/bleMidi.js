@@ -170,7 +170,7 @@ window.processBiodata = function(payload) {
                 averg = averg / sampleWindow;
                 let variance = (stdevi / sampleWindow) - (averg * averg);
                 stdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
-                if (stdevi < 0.1) stdevi = 1.0; 
+                if (stdevi < 0.01) stdevi = 1.0; 
                 
                 let delta = maxim - minim;
                 let tickDelta = tMaxim - tMinim; 
