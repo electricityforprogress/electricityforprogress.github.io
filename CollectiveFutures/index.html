@@ -68,7 +68,7 @@
             </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; background: #0a0d12; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; background: #0a0d12; padding: 5px 10px; border: 1px solid var(--border); border-radius: 20px;">
             <div style="display: flex; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--border);">
                 <div class="led" id="top-bpm-led" style="margin:0; width:10px; height:10px; background:#222; box-shadow:none;"></div>
                 <button onclick="tapTempo()" style="padding: 2px 6px; font-size: 11px;">TAP</button>
@@ -78,7 +78,7 @@
             <button id="toggle-synth-btn" onclick="toggleSynthUI()" style="cursor: pointer; font-weight: bold; opacity: 0.5;">SYNTH</button>
             
             <div class="dropdown-widget" style="display: flex; align-items: center; gap: 8px;">
-                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; padding: 4px 6px; cursor: pointer; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 3px; transition: border-color 0.2s;" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'" title="Open Mixer">
+                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; padding: 4px 6px; cursor: pointer; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 12px; transition: border-color 0.2s;" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'" title="Open Mixer">
                     <canvas id="master-vu-hz" width="80" height="16" style="background:#000; border-radius:2px; margin: 0 !important; display: block;"></canvas>
                 </div>
                 <button id="btn-master-mute" class="danger" onclick="toggleMasterMute(); event.stopPropagation();" style="padding: 3px 8px; font-size: 12px; border-radius:3px;">MUTE</button>
