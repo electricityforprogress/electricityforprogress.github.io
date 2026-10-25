@@ -105,8 +105,7 @@
                 <div class="scale-title">SCALE</div>
                 <div style="display: flex; align-items: center; gap: 8px; width: 130px;">
                     <span style="font-size: 9px; color: var(--text-muted); font-weight: bold;">TEST</span>
-                    <input type="range" id="ui-test-injector" class="pro-slider" min="0" max="100" value="0" style="margin: 0; background: #333; flex-grow: 1;">
-                </div>
+                    <input type="range" id="ui-test-injector" class="pro-slider" min="0" max="100" value="0" style="margin: 0; background: #333; flex-grow: 1;" oninput="updateActiveSynth('testIntensity', this.value)">                </div>
             </div>
             
             <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center; width: 100%;">
