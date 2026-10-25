@@ -195,9 +195,22 @@ window.processBiodata = function(payload) {
                     let densityGate = pConfig.density !== undefined ? pConfig.density : 100;
                     if (Math.random() * 100 <= densityGate) {
                         if (nowMs - ch.lastTrigger > 50) { 
-                            let durMult = pConfig.durMult !== undefined ? pConfig.durMult : 1.0;
-                            let dur = (150 + window.mapScale(tickDelta % 127, 0, 127, 100, 5500)) * durMult;
-                            let vel = window.mapScale(tickDelta % 127, 0, 127, pConfig.velMin || 60, pConfig.velMax || 110);
+let                         durMult = pConfig.durMult !== undefined ? pConfig.durMult : 1.0;
+                            
+                            // Map the DUR knob to dynamic minimum and maximum boundaries
+                            let minDur, maxDur;
+                            if (durMult <= 1.0) {
+                                // Standard range down to staccato
+                                minDur = window.mapScale(durMult, 0.1, 1.0, 50, 150);
+                                maxDur = window.mapScale(durMult, 0.1, 1.0, 500, 5650);
+                            } else {
+                                // Drone territory: drastically raise the floor and ceiling
+                                minDur = window.mapScale(durMult, 1.0, 5.0, 150, 15000); // 15-second minimum drone
+                                maxDur = window.mapScale(durMult, 1.0, 5.0, 5650, 30000); // 30-second maximum drone
+                            }
+                            
+                            // The plant still fully controls the note length, but restricted to our new window
+                            let dur = window.mapScale(tickDelta % 127, 0, 127, minDur, maxDur);                            let vel = window.mapScale(tickDelta % 127, 0, 127, pConfig.velMin || 60, pConfig.velMax || 110);
                             
                             let actualTicks = ch.emaTicks || 10000;
                             let rawPitchNorm = (actualTicks % 127) / 127.0; 
