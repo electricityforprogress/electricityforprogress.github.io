@@ -89,11 +89,80 @@
 </div>
 
 <div class="synth-inspector ui-hidden" id="synth-inspector">
-    <div class="synth-tabs">
-        <div class="synth-tab active" onclick="selectTab(0)"><div class="led" id="led-0"></div>CH 1</div>
-        <div class="synth-tab" onclick="selectTab(1)"><div class="led" id="led-1"></div>CH 2</div>
-        <div class="synth-tab" onclick="selectTab(2)"><div class="led" id="led-2"></div>CH 3</div>
-        <div class="synth-tab" onclick="selectTab(3)"><div class="led" id="led-3"></div>CH 4</div>
+<div class="synth-tabs">
+        
+        <!-- TAB 1 -->
+        <div class="synth-tab active" onclick="selectTab(0)">
+            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-0"></div>CH 1</div>
+            <div class="dropdown-widget">
+                <button class="pill-select ch-preset-btn" id="ch-preset-btn-0" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="width: auto; padding: 2px 10px;">INIT ▼</button>
+                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
+                    <select id="ch-preset-select-0" class="pill-select" onchange="loadChannelPreset(0, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select" onclick="saveChannelPreset(0, false)" style="flex: 1;">SAVE</button>
+                        <button class="pill-select" onclick="saveChannelPreset(0, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select danger" onclick="deleteChannelPreset(0)" style="flex: 1;">DELETE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2 -->
+        <div class="synth-tab" onclick="selectTab(1)">
+            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-1"></div>CH 2</div>
+            <div class="dropdown-widget">
+                <button class="pill-select ch-preset-btn" id="ch-preset-btn-1" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="width: auto; padding: 2px 10px;">INIT ▼</button>
+                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
+                    <select id="ch-preset-select-1" class="pill-select" onchange="loadChannelPreset(1, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select" onclick="saveChannelPreset(1, false)" style="flex: 1;">SAVE</button>
+                        <button class="pill-select" onclick="saveChannelPreset(1, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select danger" onclick="deleteChannelPreset(1)" style="flex: 1;">DELETE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3 -->
+        <div class="synth-tab" onclick="selectTab(2)">
+            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-2"></div>CH 3</div>
+            <div class="dropdown-widget">
+                <button class="pill-select ch-preset-btn" id="ch-preset-btn-2" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="width: auto; padding: 2px 10px;">INIT ▼</button>
+                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
+                    <select id="ch-preset-select-2" class="pill-select" onchange="loadChannelPreset(2, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select" onclick="saveChannelPreset(2, false)" style="flex: 1;">SAVE</button>
+                        <button class="pill-select" onclick="saveChannelPreset(2, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select danger" onclick="deleteChannelPreset(2)" style="flex: 1;">DELETE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4 -->
+        <div class="synth-tab" onclick="selectTab(3)">
+            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-3"></div>CH 4</div>
+            <div class="dropdown-widget">
+                <button class="pill-select ch-preset-btn" id="ch-preset-btn-3" onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="width: auto; padding: 2px 10px;">INIT ▼</button>
+                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
+                    <select id="ch-preset-select-3" class="pill-select" onchange="loadChannelPreset(3, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select" onclick="saveChannelPreset(3, false)" style="flex: 1;">SAVE</button>
+                        <button class="pill-select" onclick="saveChannelPreset(3, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="pill-select danger" onclick="deleteChannelPreset(3)" style="flex: 1;">DELETE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
     </div>
 
     <!-- SYNTHESIZER MODULES -->
