@@ -59,11 +59,13 @@ button.danger { border-color: var(--red); color: var(--red); }
 button.danger:hover { background: var(--red); color: var(--bg); }
 
 #ui-bpm-display {
-    font-family: 'DSEG7-Classic', monospace;
+    font-family: 'DSEG7 Classic', monospace; /* Removed the hyphen! */
+    font-weight: normal; /* Prevents bold-inheritance from breaking the font */
     font-style: italic;
     letter-spacing: 2px;
-    text-shadow: 0 0 8px var(--cyan); /* Gives it that real glowing LED vibe */
-    margin-right: 5px; /* Gives it a little breathing room from the tap LED */
+    color: var(--cyan); /* Ensures the numbers themselves are bright */
+    text-shadow: 0 0 8px var(--cyan);
+    margin-right: 5px;
 }
 
 /* --- DROPDOWNS & MIXER --- */
