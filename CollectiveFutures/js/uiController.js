@@ -528,7 +528,6 @@ function loadPreset(name) {
             synthChannels[i].applyParams();
             
             synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
-            synthChannels[i].isDirty = false;
             
             if (synthChannels[i].channelOut) {
                 synthChannels[i].channelOut.gain.value = synthChannels[i].params.muted ? 0 : synthChannels[i].params.mixVol;
@@ -571,6 +570,38 @@ function loadPreset(name) {
             if(s) { s.value = chData[i].config.smooth; }
             if(zVal) zVal.innerText = Math.round(chData[i].config.zoom);
             if(sVal) sVal.innerText = chData[i].config.smooth.toFixed(2);
+        }
+
+        // --- THE DIFF CHECKER ---
+        if (synthChannels[i]) {
+            synthChannels[i].isDirty = false;
+            let pName = synthChannels[i].patchName;
+            
+            if (pName !== "INIT") {
+                if (globalChannelPresets[pName]) {
+                    let canonical = globalChannelPresets[pName];
+                    
+                    // Clone and clean parameters so we don't compare the saved names
+                    let cParams = JSON.parse(JSON.stringify(canonical.params));
+                    let currParams = JSON.parse(JSON.stringify(synthChannels[i].params));
+                    delete cParams.savedPatchName;
+                    delete currParams.savedPatchName;
+                    
+                    let isParamDirty = JSON.stringify(cParams) !== JSON.stringify(currParams);
+                    let isConfigDirty = false;
+                    
+                    if (canonical.config && chData[i]) {
+                        isConfigDirty = JSON.stringify(canonical.config) !== JSON.stringify(chData[i].config);
+                    }
+                    
+                    if (isParamDirty || isConfigDirty) {
+                        synthChannels[i].isDirty = true;
+                    }
+                } else {
+                    // The original voice preset was deleted from the system, so this is an orphan
+                    synthChannels[i].isDirty = true;
+                }
+            }
         }
     }
     
