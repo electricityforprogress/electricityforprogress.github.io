@@ -67,7 +67,10 @@ canvas.vu { width: 12px !important; height: 100px !important; margin: 0 !importa
 /* --- TABS & HUD GRID --- */
 .synth-inspector { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 15px; display: block; }
 .synth-tabs { display: flex; border-bottom: 1px solid var(--border); background: #000; }
-.synth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; }
+.synth-tab { flex: 1; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: bold; color: #666; transition: 0.2s; overflow: visible; }
+
+/* Apply pill styling to buttons inside the drop-downs for consistency */
+.dropdown-content button { border-radius: 12px; font-size: 10px; padding: 4px 8px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); }
 .synth-tab.active { background: var(--panel); color: var(--cyan); border-bottom: 2px solid var(--cyan); }
 .led { width: 12px; height: 12px; border-radius: 50%; background: #222; box-shadow: inset 0px 2px 4px rgba(0,0,0,0.8); }
 .led.active { background-color: var(--cyan); box-shadow: 0 0 10px var(--cyan), inset 0px 1px 2px rgba(255,255,255,0.8); }
