@@ -73,7 +73,7 @@ function initVisualizer() {
                     <span style="font-size: 12px; color: #888; font-weight: bold;">T</span>
                     <div style="position: relative; flex-grow: 1; height: 24px;">
                         <canvas id="ch-mini-vu-thresh-${i}" style="position: absolute; top: 0; left: 0; width: 100%; height: 24px; background: #111; border-radius: 4px; pointer-events: none; border: 1px solid #222; box-sizing: border-box;"></canvas>
-                        <input type="range" id="ch-mini-thresh-${i}" class="pro-slider" min="0.5" max="5.0" step="0.01" value="2.0" style="position: absolute; top: 9px; left: 0; margin: 0; width: 100%; z-index: 2;">
+                        <input type="range" id="ch-mini-thresh-${i}" class="pro-slider" min="0.05" max="5.0" step="0.01" value="2.0" style="position: absolute; top: 9px; left: 0; margin: 0; width: 100%; z-index: 2;">
                     </div>
                     <span id="ch-val-thresh-${i}" style="font-size: 12px; color: #ccc; width: 35px; text-align: right; font-weight: bold;">2.00x</span>
                 </div>
@@ -524,7 +524,7 @@ function renderLoop() {
                 let ctx = miniTC.getContext('2d');
                 ctx.clearRect(0,0,miniTC.width,miniTC.height);
                 
-                let minMult = 0.5, maxMult = 5.0;
+                let minMult = 0.05, maxMult = 5.0;
                 let threshPct = (synthChannels[i].params.threshold - minMult) / (maxMult - minMult);
                 let currentMult = (ch.lastStdevi > 0) ? (ch.lastDelta / ch.lastStdevi) : 0;
                 let deltaPct = Math.max(0, Math.min(1, (currentMult - minMult) / (maxMult - minMult)));
