@@ -36,14 +36,19 @@ const paramFormats = {
     'mixVol': v => Math.round(v * 100) + '%',
     // Raw/Multipliers
     'res': v => v.toFixed(1),
-    'durMult': v => v.toFixed(2) + 'x',
+    'durMult': v => {
+        let maxMs = v <= 1.0 
+            ? 500 + ((v - 0.1) / 0.9) * 5150 
+            : 5650 + ((v - 1.0) / 4.0) * 24350;
+        return `MAX: ${(maxMs / 1000).toFixed(1)}s`;
+    },
     'size': v => v.toFixed(1) + 'x',
     'voices': v => Math.round(v),
     'quantize': v => { const q = ['FR', '/64', '/32', '/16', '/8', '/4', '/4T', '/2', '1B']; return `QUANT: ${q[Math.round(v)]}`; },
     'noteMin': v => { let m = Math.round(v); return `MIN: ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12]}${Math.floor(m/12)-2}`; },
     'noteMax': v => { let m = Math.round(v); return `MAX: ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12]}${Math.floor(m/12)-2}`; },
-    'velMin': v => `MIN VEL: ${Math.round(v)}`,
-    'velMax': v => `MAX VEL: ${Math.round(v)}`,
+    'velMin': v => `MIN: ${Math.round(v)}`,
+    'velMax': v => `MAX: ${Math.round(v)}`,
     'default': v => v.toFixed(2)
 };
 
