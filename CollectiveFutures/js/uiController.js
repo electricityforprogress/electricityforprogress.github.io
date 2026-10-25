@@ -520,6 +520,7 @@ function loadPreset(name) {
             synthChannels[i].params = JSON.parse(JSON.stringify(channelData[i]));
             synthChannels[i].applyParams();
             
+            // Restore Channel Patch Names
             synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
             synthChannels[i].isDirty = false;
             
