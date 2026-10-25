@@ -34,28 +34,29 @@ window.SCALES = {
 };
 
 window.defaultParams = {
-    mixVol: 0.8, muted: false, 
-    voices: 5, stealMode: 'oldest', legato: 0, glide: 0.1,
-    sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.5 }, noise: { level: 0.0 } },
-    filter: { cutoff: 2000, res: 6 },
+    mixVol: 0.6, muted: false, 
+    voices: 5, stealMode: 'oldest', legato: 0, glide: 0.0,
+    sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } },
+    filter: { cutoff: 8000, res: 2 },
     
     lfo:       { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     pitchLfo:  { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     filterLfo: { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     ampLfo:    { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     
-    env: { atk: 0.1, dec: 0.2, sus: 0.5, rel: 1.0, amt: 0.5 },
+    env: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5 },
     pitchEnv: { atk: 0.0, dec: 0.0, sus: 0.0, rel: 0.0, amt: 0.0 },
-    filterEnv: { atk: 0.05, dec: 0.2, sus: 0.4, rel: 0.6, amt: 0.5 },
-    ampEnv: { atk: 0.05, dec: 0.2, sus: 0.4, rel: 0.6, amt: 1.0 },
+    filterEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5 },
+    ampEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 1.0 },
     
     fx: { drv: 0, drvGrit: 10, drvTone: 2000, drvLvl: 1.0, dly: 0, rev: 0 },
     
-    threshold: 2.0, density: 100, quantize: 0, sampleSize: 40,
+    threshold: 2.0, noiseFloor: 0.1, density: 100, quantize: 0, sampleSize: 40,
     minNote: 36, maxNote: 84, velMin: 60, velMax: 110,
     spread: 75, durMult: 1.0, 
     scaleRoot: 0, scaleType: 'chromatic',
-    activeScaleBits: new Array(12).fill(true) 
+    activeScaleBits: new Array(12).fill(true),
+    testIntensity: 0
 };
 
 window.mapScale = function(value, inMin, inMax, outMin, outMax) { return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin; };
