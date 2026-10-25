@@ -489,6 +489,9 @@ function savePreset(forceNew = false) {
             return p;
         }),
         master: { vol: window.masterVolumeLevel, muted: window.isMasterMuted, bpm: window.masterBPM },
+        viz: chData.map(ch => JSON.parse(JSON.stringify(ch.config))),
+        globalFX: window.globalFX ? JSON.parse(JSON.stringify(window.globalFX)) : null
+    }; // <--- Here is the closing brace that was missing!
     
     globalPresets[name] = presetData;
     localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
