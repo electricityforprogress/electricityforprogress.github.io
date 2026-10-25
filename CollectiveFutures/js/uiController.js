@@ -309,8 +309,7 @@ function buildMixerAndMidiUI() {
                 <div class="v-slider-container"><input type="range" id="ch-vol-${i}" class="v-slider slider-ch-${i}" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
                 <canvas class="vu ch-vu" id="vu-${i}"></canvas>
             </div>
-            <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 2px;">M</button>
-        </div>`;
+            <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 12px;">M</button>        </div>`;
     }
     
     html += `
@@ -484,11 +483,12 @@ function savePreset(forceNew = false) {
     }
     
     const presetData = {
-        channels: synthChannels.map(ch => JSON.parse(JSON.stringify(ch.params))),
+        channels: synthChannels.map(ch => {
+            let p = JSON.parse(JSON.stringify(ch.params));
+            p.savedPatchName = ch.patchName || "INIT";
+            return p;
+        }),
         master: { vol: window.masterVolumeLevel, muted: window.isMasterMuted, bpm: window.masterBPM },
-        viz: chData.map(ch => JSON.parse(JSON.stringify(ch.config))),
-        globalFX: window.globalFX ? JSON.parse(JSON.stringify(window.globalFX)) : null
-    };
     
     globalPresets[name] = presetData;
     localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
@@ -519,6 +519,9 @@ function loadPreset(name) {
         if (channelData[i] && synthChannels[i]) {
             synthChannels[i].params = JSON.parse(JSON.stringify(channelData[i]));
             synthChannels[i].applyParams();
+            
+            synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
+            synthChannels[i].isDirty = false;
             
             if (synthChannels[i].channelOut) {
                 synthChannels[i].channelOut.gain.value = synthChannels[i].params.muted ? 0 : synthChannels[i].params.mixVol;
@@ -587,6 +590,8 @@ function loadPreset(name) {
         window.globalFX = JSON.parse(JSON.stringify(presetData.globalFX));
         if (window.masterFX) window.masterFX.updateParams(window.globalFX);
     }
+    
+    if (typeof updateChannelPresetDropdowns === 'function') updateChannelPresetDropdowns();
     
     syncUI();
 }
