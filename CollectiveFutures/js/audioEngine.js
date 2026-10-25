@@ -348,9 +348,18 @@ class SynthVoice {
                 this.sources.sub.detuneNode.setValueAtTime(0, now);
             }
         } else {
-            this.vca.gain.cancelScheduledValues(stopTime);
+            // Anchor current amp value, re-sustain, and push release to the extended stopTime
+            let curAmp = this.vca.gain.value;
+            this.vca.gain.cancelScheduledValues(now);
+            this.vca.gain.setValueAtTime(curAmp, now);
+            this.vca.gain.setTargetAtTime(Math.max((velocity/127) * params.ampEnv.amt * params.ampEnv.sus, 0.00001), now, params.ampEnv.dec / 3);
             this.vca.gain.setTargetAtTime(0, stopTime, params.ampEnv.rel / 3);
-            this.vcf.frequency.cancelScheduledValues(stopTime);
+
+            // Anchor current filter value and push release
+            let curFilter = this.vcf.frequency.value;
+            this.vcf.frequency.cancelScheduledValues(now);
+            this.vcf.frequency.setValueAtTime(curFilter, now);
+            this.vcf.frequency.setTargetAtTime(params.filter.cutoff + ((5000 * params.filterEnv.amt) * params.filterEnv.sus), now, params.filterEnv.dec / 3);
             this.vcf.frequency.setTargetAtTime(params.filter.cutoff, stopTime, params.filterEnv.rel / 3);
         }
     }
@@ -490,7 +499,12 @@ class PolyChannel {
         let highestIdx = 0;
 
         if (maxVoices === 1) {
-            targetIdx = 0; // Pure Monophonic
+            // Respect 'Off' in Mono Mode
+            if (stealMode === 'none' && now < this.voices[0].activeUntil) {
+                targetIdx = -1; 
+            } else {
+                targetIdx = 0; 
+            }
         } else {
             // Find free voice or track metadata for stealing
             for (let i = 0; i < maxVoices; i++) {
@@ -520,9 +534,18 @@ class PolyChannel {
         this.voiceIndex = targetIdx;
         this.lastTriggerTime = now; 
         this.lastDuration = Math.min(durationMs / 1000, 30.0); 
-        const stopTime = now + this.lastDuration;
+        let stopTime = now + this.lastDuration;
         
         let v = this.voices[this.voiceIndex];
+
+        // Never shorten an existing drone if Legato is active
+        if (maxVoices === 1 && this.params.legato === 1 && now < v.activeUntil) {
+            let oldStopTime = v.activeUntil - this.params.ampEnv.rel;
+            if (oldStopTime > stopTime) {
+                stopTime = oldStopTime; 
+            }
+        }
+
         v.activeUntil = stopTime + this.params.ampEnv.rel;
         v.lastTriggerTime = now;
         v.currentPitch = pitch;
