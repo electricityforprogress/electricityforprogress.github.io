@@ -519,7 +519,7 @@ class PolyChannel {
         
         this.voiceIndex = targetIdx;
         this.lastTriggerTime = now; 
-        this.lastDuration = Math.min(durationMs / 1000, 8.0); 
+        this.lastDuration = Math.min(durationMs / 1000, 30.0); 
         const stopTime = now + this.lastDuration;
         
         let v = this.voices[this.voiceIndex];
