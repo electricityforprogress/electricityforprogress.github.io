@@ -39,6 +39,11 @@ const paramFormats = {
     'durMult': v => v.toFixed(2) + 'x',
     'size': v => v.toFixed(1) + 'x',
     'voices': v => Math.round(v),
+    'quantize': v => { const q = ['FR', '/64', '/32', '/16', '/8', '/4', '/4T', '/2', '1B']; return `QUANT: ${q[Math.round(v)]}`; },
+    'noteMin': v => { let m = Math.round(v); return `MIN: ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12]}${Math.floor(m/12)-2}`; },
+    'noteMax': v => { let m = Math.round(v); return `MAX: ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12]}${Math.floor(m/12)-2}`; },
+    'velMin': v => `MIN VEL: ${Math.round(v)}`,
+    'velMax': v => `MAX VEL: ${Math.round(v)}`,
     'default': v => v.toFixed(2)
 };
 
@@ -68,6 +73,54 @@ function hideTooltip() {
     tooltipTimer = setTimeout(() => { paramTooltip.style.opacity = 0; }, 800);
 }
 
+// --- VERTICAL & DYNAMIC SLIDER TOOLTIPS ---
+document.addEventListener('input', (e) => {
+    if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
+        let slider = e.target;
+        let val = parseFloat(slider.value);
+        
+        let param = 'default';
+        let group = '';
+        
+        if (slider.id.startsWith('ui-env-')) {
+            param = slider.id.replace('ui-env-', ''); group = 'env';
+        } else if (slider.id === 'ui-fx-drv-lvl') {
+            param = 'drvLvl'; group = 'fx';
+        } else if (slider.id === 'ui-fx-torev') {
+            param = 'toRev'; group = 'fx';
+        } else if (slider.id === 'ui-fx-rev-hpf') {
+            param = 'hpf'; group = 'fx';
+        } else if (slider.id.includes('vol')) {
+            param = 'mixVol';
+        } else if (slider.id === 'ui-note-min') param = 'noteMin';
+        else if (slider.id === 'ui-note-max') param = 'noteMax';
+        else if (slider.id === 'ui-vel-min') param = 'velMin';
+        else if (slider.id === 'ui-vel-max') param = 'velMax';
+        
+        let rect = slider.getBoundingClientRect();
+        let x, y;
+        
+        if (slider.classList.contains('v-slider')) {
+            x = rect.left + (rect.width / 2);
+            y = rect.top - 15; 
+        } else {
+            // Calculate horizontal thumb position for dual sliders
+            let min = parseFloat(slider.min) || 0;
+            let max = parseFloat(slider.max) || 127;
+            let pct = (val - min) / (max - min);
+            x = rect.left + (rect.width * pct);
+            y = rect.top - 15;
+        }
+        
+        showTooltip(x, y, val, param, group, slider);
+    }
+});
+
+document.addEventListener('pointerup', (e) => {
+    if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
+        hideTooltip();
+    }
+});
 document.addEventListener('DOMContentLoaded', () => {
     
     const makeSlidersDraggable = () => {
@@ -124,6 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let param = slider.id.replace('ui-env-', '').replace('ui-fx-', '');
                     if (slider.id.includes('vol')) param = 'mixVol';
                     if (slider.id.includes('density')) param = 'density';
+                    if (slider.id === 'ui-quantize') param = 'quantize';
                     
                     // Derive group based on ID for color routing
                     let group = '';
