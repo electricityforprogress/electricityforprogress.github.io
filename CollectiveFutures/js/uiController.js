@@ -955,7 +955,7 @@ function syncUI() {
     syncPianoUI();
 }
 
-// --- CHANNEL PRESET ENGINE ---
+/// --- CHANNEL PRESET ENGINE ---
 let globalChannelPresets = {};
 
 function loadChannelPresetsFromStorage() {
@@ -984,12 +984,20 @@ function updateChannelPresetDropdowns() {
             let patchName = (synthChannels[i] && synthChannels[i].patchName) ? synthChannels[i].patchName : "INIT";
             let dirtyStar = (synthChannels[i] && synthChannels[i].isDirty && patchName !== "INIT") ? "*" : "";
             btn.innerHTML = `${patchName}${dirtyStar} ▼`;
+            
+            // Stop click bleed-through when opening the menu
+            btn.onpointerdown = (e) => { 
+                selectTab(i); 
+                e.stopPropagation(); 
+            };
         }
     }
 }
 
 function saveChannelPreset(ch, forceNew = false) {
     if(typeof ensureSynths === 'function') ensureSynths();
+    selectTab(ch); // Anchor UI
+    
     const select = document.getElementById(`ch-preset-select-${ch}`);
     let name = select ? select.value : "";
     
@@ -1015,8 +1023,11 @@ function saveChannelPreset(ch, forceNew = false) {
     updateChannelPresetDropdowns();
     if (select) select.value = name;
     
-    let btn = document.getElementById(`ch-preset-btn-${ch}`);
-    if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+    // Delay hiding the menu to prevent ghost-clicks on adjacent tabs
+    setTimeout(() => {
+        let btn = document.getElementById(`ch-preset-btn-${ch}`);
+        if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+    }, 150);
 }
 
 function loadChannelPreset(ch, name) {
@@ -1083,13 +1094,17 @@ function loadChannelPreset(ch, name) {
     let select = document.getElementById(`ch-preset-select-${ch}`);
     if(select) select.value = name;
     
-    if (ch === activeSynthIndex) syncUI();
+    selectTab(ch); // Anchor UI to the loaded tab
 
-    let btn = document.getElementById(`ch-preset-btn-${ch}`);
-    if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+    // Delay closing to prevent ghost-clicks on adjacent tabs
+    setTimeout(() => {
+        let btn = document.getElementById(`ch-preset-btn-${ch}`);
+        if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+    }, 150);
 }
 
 function deleteChannelPreset(ch) {
+    selectTab(ch); // Anchor UI
     const select = document.getElementById(`ch-preset-select-${ch}`);
     let name = select ? select.value : "";
     if (!name || name === "") return alert("No channel preset selected to delete.");
@@ -1103,8 +1118,11 @@ function deleteChannelPreset(ch) {
         }
         updateChannelPresetDropdowns();
         if(select) select.value = "";
-        let btn = document.getElementById(`ch-preset-btn-${ch}`);
-        if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+        
+        setTimeout(() => {
+            let btn = document.getElementById(`ch-preset-btn-${ch}`);
+            if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+        }, 150);
     }
 }
 
