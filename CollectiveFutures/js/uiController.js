@@ -2,6 +2,72 @@
  * js/uiController.js
  */
 
+// --- GLOBAL PARAMETER TOOLTIP ---
+const paramTooltip = document.createElement('div');
+paramTooltip.id = 'param-tooltip';
+paramTooltip.style.cssText = 'position: fixed; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; background: rgba(10, 13, 18, 0.95); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 14px; z-index: 9999; transform: translate(-50%, -150%); font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.8);';
+document.body.appendChild(paramTooltip);
+
+let tooltipTimer;
+
+const paramFormats = {
+    // Frequencies & Times
+    'cutoff': v => Math.round(v) + ' Hz',
+    'drvTone': v => Math.round(v) + ' Hz',
+    'damp': v => Math.round(v) + ' Hz',
+    'hpf': v => Math.round(v) + ' Hz',
+    'rate': v => v < 10 ? v.toFixed(2) + ' Hz' : Math.round(v) + ' Hz',
+    'atk': v => v.toFixed(2) + 's',
+    'dec': v => v.toFixed(2) + 's',
+    'rel': v => v.toFixed(2) + 's',
+    'glide': v => v.toFixed(2) + 's',
+    'time': v => v.toFixed(2) + 's',
+    // Percentages
+    'depth': v => Math.round(v * 100) + '%',
+    'sus': v => Math.round(v * 100) + '%',
+    'spread': v => Math.round(v) + '%',
+    'density': v => Math.round(v) + '%',
+    'drv': v => Math.round(v * 100) + '%',
+    'drvGrit': v => Math.round(v) + '%',
+    'drvLvl': v => Math.round(v * 100) + '%',
+    'feedback': v => Math.round(v * 100) + '%',
+    'toRev': v => Math.round(v * 100) + '%',
+    'level': v => Math.round(v * 100) + '%',
+    'mixVol': v => Math.round(v * 100) + '%',
+    // Raw/Multipliers
+    'res': v => v.toFixed(1),
+    'durMult': v => v.toFixed(2) + 'x',
+    'size': v => v.toFixed(1) + 'x',
+    'voices': v => Math.round(v),
+    'default': v => v.toFixed(2)
+};
+
+function getParamColor(param, group, el) {
+    if (el.classList.contains('slider-master')) return 'var(--cyan)';
+    if (el.id.startsWith('ch-vol-')) {
+        const ch = parseInt(el.id.replace('ch-vol-', ''));
+        return window.CH_COLORS[ch];
+    }
+    if (group === 'filter') return 'var(--green)';
+    if (group === 'lfo' || group === 'env') return 'var(--mod-color)';
+    if (group === 'fx' || (group && group.startsWith('globalFx'))) return 'var(--fx-color)';
+    return 'var(--cyan)';
+}
+
+function showTooltip(x, y, val, param, group, el) {
+    clearTimeout(tooltipTimer);
+    const formatter = paramFormats[param] || paramFormats.default;
+    paramTooltip.innerText = formatter(val);
+    paramTooltip.style.color = getParamColor(param, group, el);
+    paramTooltip.style.left = x + 'px';
+    paramTooltip.style.top = y + 'px';
+    paramTooltip.style.opacity = 1;
+}
+
+function hideTooltip() {
+    tooltipTimer = setTimeout(() => { paramTooltip.style.opacity = 0; }, 800);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     
     const makeSlidersDraggable = () => {
@@ -54,10 +120,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (Math.abs(parseFloat(slider.value) - steppedVal) >= step/2) {
                     slider.value = steppedVal;
                     slider.dispatchEvent(new Event('input')); 
+                    // --- NEW TOOLTIP CALL ---
+                    let param = slider.id.replace('ui-env-', '').replace('ui-fx-', '');
+                    if (slider.id.includes('vol')) param = 'mixVol';
+                    if (slider.id.includes('density')) param = 'density';
+                    
+                    // Derive group based on ID for color routing
+                    let group = '';
+                    if (slider.id.includes('env')) group = 'env';
+                    if (slider.id.includes('fx')) group = 'fx';
+                    
+                    showTooltip(e.clientX, e.clientY - 20, steppedVal, param, group, slider);
                 }
             });
 
-            window.addEventListener('mouseup', () => { isDragging = false; });
+            window.addEventListener('mouseup', () => { 
+                isDragging = false;
+                hideTooltip();
+            });
         });
     };
 
@@ -604,6 +684,13 @@ function initKnobs() {
             
             const group = knob.dataset.group;
             const param = knob.dataset.param;
+
+            //Tool Tip
+            let rect = knob.getBoundingClientRect();
+            let centerX = rect.left + (rect.width / 2);
+            let topY = rect.top;
+            showTooltip(centerX, topY, newVal, param, group, knob);
+            
             if (group) updateNestedSynth(group, param, newVal);
             else updateActiveSynth(param, newVal);
 
@@ -645,7 +732,8 @@ function initKnobs() {
         const stopDrag = (e) => { 
             if(isDragging) { 
                 isDragging = false; 
-                knob.releasePointerCapture(e.pointerId); 
+                knob.releasePointerCapture(e.pointerId);
+                hideTooltip(); // --- NEW TOOLTIP HIDE ---
             } 
         };
         
