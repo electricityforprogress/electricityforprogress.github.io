@@ -691,6 +691,8 @@ function syncUI() {
     setV('ui-slider-density', p.density); setT('ui-density-display', p.density + '%');
     
     setV('ui-quantize', p.quantize);
+    let testInj = document.getElementById('ui-test-injector');
+    if (testInj) testInj.value = p.testIntensity || 0;
     let qSlider = document.getElementById('ui-quantize');
     if (qSlider) {
         const spans = qSlider.nextElementSibling.querySelectorAll('span');
