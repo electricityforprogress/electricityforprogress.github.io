@@ -510,16 +510,16 @@ function renderLoop() {
             }
             
             if (ch.notes) {
-                // Keep notes alive until their full duration has passed (plus 1 second to scroll off screen)
-                ch.notes = ch.notes.filter(n => nowMs - n.t < Math.max(8000, n.dur + 1000));
+                // Keep notes alive until they scroll off a 30-second screen
+                ch.notes = ch.notes.filter(n => nowMs - n.t < Math.max(30000, n.dur + 1000));
                 ch.notes.forEach(note => {
                     rCtx.fillStyle = `hsla(${(note.n % 12) * 30}, 100%, 50%, ${Math.max(0.3, note.v / 127)})`; 
                     
-                    // Remove the 2000ms cap so the width represents the true duration
                     let visDur = note.dur; 
                     
-                    let w = (visDur / 8000) * rw;
-                    rCtx.fillRect(rw - ((nowMs - note.t) / 8000 * rw) - w, Math.max(0, rh - ((note.n / 127) * rh) - 4), w, 8); 
+                    // Divide by 30000 instead of 8000
+                    let w = (visDur / 30000) * rw;
+                    rCtx.fillRect(rw - ((nowMs - note.t) / 30000 * rw) - w, Math.max(0, rh - ((note.n / 127) * rh) - 4), w, 8); 
                 });
             }
 
