@@ -30,32 +30,27 @@ window.toggleSynthUI = function() {
 };
 
 function initTestInjector() {
-    const testSlider = document.getElementById('ui-test-injector');
-    if (!testSlider) return;
-
     setInterval(() => {
-        const intensity = parseInt(testSlider.value);
-        if (intensity === 0) return;
+        if (typeof synthChannels === 'undefined' || synthChannels.length === 0) return;
+        
+        // Evaluate each channel independently
+        for (let i = 0; i < 4; i++) {
+            const intensity = synthChannels[i].params.testIntensity || 0;
+            if (intensity === 0) continue;
 
-        // Map slider (1-100) to a random chance per 50ms tick. 
-        // At 100, we max out around a 30% chance per tick for rapid-fire testing.
-        const chance = (intensity / 100) * 0.3; 
-
-        if (Math.random() < chance) {
-            const randomCh = Math.floor(Math.random() * 4);
-            const fakeTicks = [];
-            
-            // Generate a 40-sample payload with massive variance (10k-25k ticks) 
-            // to instantly force a trigger regardless of current threshold settings
-            for (let i = 0; i < 40; i++) {
-                fakeTicks.push(10000 + (Math.random() * 15000));
+            const chance = (intensity / 100) * 0.3; 
+            if (Math.random() < chance) {
+                const fakeTicks = [];
+                for (let j = 0; j < 40; j++) {
+                    fakeTicks.push(10000 + (Math.random() * 15000));
+                }
+                
+                window.processBiodata({
+                    type: 'raw',
+                    ch: i,
+                    p: fakeTicks
+                });
             }
-            
-            window.processBiodata({
-                type: 'raw',
-                ch: randomCh,
-                p: fakeTicks
-            });
         }
     }, 50);
 }
