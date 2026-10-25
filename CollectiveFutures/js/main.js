@@ -29,6 +29,37 @@ window.toggleSynthUI = function() {
     setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 50);
 };
 
+function initTestInjector() {
+    const testSlider = document.getElementById('ui-test-injector');
+    if (!testSlider) return;
+
+    setInterval(() => {
+        const intensity = parseInt(testSlider.value);
+        if (intensity === 0) return;
+
+        // Map slider (1-100) to a random chance per 50ms tick. 
+        // At 100, we max out around a 30% chance per tick for rapid-fire testing.
+        const chance = (intensity / 100) * 0.3; 
+
+        if (Math.random() < chance) {
+            const randomCh = Math.floor(Math.random() * 4);
+            const fakeTicks = [];
+            
+            // Generate a 40-sample payload with massive variance (10k-25k ticks) 
+            // to instantly force a trigger regardless of current threshold settings
+            for (let i = 0; i < 40; i++) {
+                fakeTicks.push(10000 + (Math.random() * 15000));
+            }
+            
+            window.processBiodata({
+                type: 'raw',
+                ch: randomCh,
+                p: fakeTicks
+            });
+        }
+    }, 50);
+}
+
 window.onload = () => { 
     initVisualizer();
     initCustomWaves(); 
@@ -37,7 +68,7 @@ window.onload = () => {
     syncPianoUI(); 
     buildMixerAndMidiUI();
     loadPresetsFromStorage();
-    
+    initTestInjector();
     requestAnimationFrame(renderLoop);
     
     // THE AUDIO UNLOCKER: Wakes up the DSP engine on your first click
