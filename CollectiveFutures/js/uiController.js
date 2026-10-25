@@ -449,6 +449,7 @@ function updateActiveSynth(param, value) {
         synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
     }
     synthChannels[activeSynthIndex].applyParams();
+    window.markChannelDirty(activeSynthIndex);
 }
 
 function loadPresetsFromStorage() {
@@ -707,6 +708,7 @@ function updateNestedSynth(group, param, value) {
     }
     
     synthChannels[activeSynthIndex].applyParams();
+    window.markChannelDirty(activeSynthIndex);
 }
 
 function initKnobs() {
@@ -912,3 +914,170 @@ function syncUI() {
 
     syncPianoUI();
 }
+
+// --- CHANNEL PRESET ENGINE ---
+let globalChannelPresets = {};
+
+function loadPresetsFromStorage() {
+    try {
+        const stored = localStorage.getItem('biodataPresets');
+        if (stored) globalPresets = JSON.parse(stored);
+        else globalPresets = {};
+    } catch(e) { console.error("Error loading presets", e); }
+    updatePresetDropdown();
+    
+    // Boot up the Channel Preset engine
+    loadChannelPresetsFromStorage(); 
+}
+
+function updateChannelPresetDropdowns() {
+    for(let i=0; i<4; i++) {
+        const select = document.getElementById(`ch-preset-select-${i}`);
+        if(!select) continue;
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">-- Select --</option>';
+        Object.keys(globalChannelPresets).forEach(name => {
+            let opt = document.createElement('option');
+            opt.value = name; opt.text = name; 
+            select.appendChild(opt);
+        });
+        select.value = globalChannelPresets[currentVal] ? currentVal : "";
+        
+        // Update Pill Text with "Dirty" asterisk tracking
+        const btn = document.getElementById(`ch-preset-btn-${i}`);
+        if (btn) {
+            let patchName = (synthChannels[i] && synthChannels[i].patchName) ? synthChannels[i].patchName : "INIT";
+            let dirtyStar = (synthChannels[i] && synthChannels[i].isDirty && patchName !== "INIT") ? "*" : "";
+            btn.innerHTML = `${patchName}${dirtyStar} ▼`;
+        }
+    }
+}
+
+function saveChannelPreset(ch, forceNew = false) {
+    if(typeof ensureSynths === 'function') ensureSynths();
+    const select = document.getElementById(`ch-preset-select-${ch}`);
+    let name = select ? select.value : "";
+    
+    if (synthChannels[ch].patchName && !forceNew) {
+        name = synthChannels[ch].patchName;
+    }
+
+    if (forceNew || !name || name === "") {
+        name = prompt(`Enter a name for Channel ${ch + 1} voice patch:`);
+        if (!name || name.trim() === "") return;
+    }
+    
+    const presetData = {
+        params: JSON.parse(JSON.stringify(synthChannels[ch].params)),
+        config: chData[ch] && chData[ch].config ? JSON.parse(JSON.stringify(chData[ch].config)) : null
+    };
+    
+    globalChannelPresets[name] = presetData;
+    localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
+    
+    synthChannels[ch].patchName = name;
+    synthChannels[ch].isDirty = false;
+    updateChannelPresetDropdowns();
+    if (select) select.value = name;
+    
+    let btn = document.getElementById(`ch-preset-btn-${ch}`);
+    if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+}
+
+function loadChannelPreset(ch, name) {
+    if (!name || !globalChannelPresets[name]) return;
+    if(typeof ensureSynths === 'function') ensureSynths();
+    
+    const presetData = globalChannelPresets[name];
+    
+    if (presetData.params && synthChannels[ch]) {
+        synthChannels[ch].params = JSON.parse(JSON.stringify(presetData.params));
+        synthChannels[ch].applyParams();
+        
+        if (synthChannels[ch].channelOut) {
+            synthChannels[ch].channelOut.gain.value = synthChannels[ch].params.muted ? 0 : synthChannels[ch].params.mixVol;
+        }
+        
+        let volSlider = document.getElementById(`ch-vol-${ch}`);
+        if (volSlider) volSlider.value = synthChannels[ch].params.mixVol;
+        let muteBtn = document.getElementById(`mute-btn-${ch}`);
+        if (muteBtn) {
+            muteBtn.style.backgroundColor = synthChannels[ch].params.muted ? 'var(--red)' : 'transparent';
+            muteBtn.style.color = synthChannels[ch].params.muted ? '#000' : 'var(--text)';
+        }
+        
+        let midiSel = document.getElementById(`ui-midi-ch-${ch}`);
+        if (midiSel) midiSel.value = synthChannels[ch].params.midiOutCh;
+        
+        let miniT = document.getElementById(`ch-mini-thresh-${ch}`);
+        let miniV = document.getElementById(`ch-val-thresh-${ch}`);
+        if (miniT) miniT.value = synthChannels[ch].params.threshold;
+        if (miniV) miniV.innerText = parseFloat(synthChannels[ch].params.threshold).toFixed(2) + 'x';
+        
+        let miniW = document.getElementById(`ch-window-${ch}`);
+        let miniWV = document.getElementById(`ch-val-window-${ch}`);
+        if (miniW) miniW.value = synthChannels[ch].params.sampleSize;
+        if (miniWV) miniWV.innerText = synthChannels[ch].params.sampleSize;
+
+        let floorS = document.getElementById(`ch-floor-${ch}`);
+        let floorV = document.getElementById(`ch-val-floor-${ch}`);
+        if (floorS && synthChannels[ch].params.noiseFloor !== undefined) floorS.value = synthChannels[ch].params.noiseFloor;
+        if (floorV && synthChannels[ch].params.noiseFloor !== undefined) floorV.innerText = synthChannels[ch].params.noiseFloor.toFixed(1);
+    }
+    
+    if (presetData.config && chData[ch]) {
+        chData[ch].config = JSON.parse(JSON.stringify(presetData.config));
+        let z = document.getElementById(`ch-zoom-${ch}`);
+        let s = document.getElementById(`ch-smooth-${ch}`);
+        let zVal = document.getElementById(`ch-val-zoom-${ch}`);
+        let sVal = document.getElementById(`ch-val-smooth-${ch}`);
+        
+        if(z) { 
+            let minL = Math.log(50), maxL = Math.log(120000);
+            z.value = ((Math.log(chData[ch].config.zoom) - minL) / (maxL - minL)) * 1000;
+        }
+        if(s) s.value = chData[ch].config.smooth;
+        if(zVal) zVal.innerText = Math.round(chData[ch].config.zoom);
+        if(sVal) sVal.innerText = chData[ch].config.smooth.toFixed(2);
+    }
+    
+    synthChannels[ch].patchName = name;
+    synthChannels[ch].isDirty = false;
+    updateChannelPresetDropdowns();
+    
+    let select = document.getElementById(`ch-preset-select-${ch}`);
+    if(select) select.value = name;
+    
+    if (ch === activeSynthIndex) syncUI();
+
+    let btn = document.getElementById(`ch-preset-btn-${ch}`);
+    if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+}
+
+function deleteChannelPreset(ch) {
+    const select = document.getElementById(`ch-preset-select-${ch}`);
+    let name = select ? select.value : "";
+    if (!name || name === "") return alert("No channel preset selected to delete.");
+    
+    if(confirm(`Are you sure you want to delete the channel preset "${name}"?`)) {
+        delete globalChannelPresets[name];
+        localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
+        if (synthChannels[ch].patchName === name) {
+            synthChannels[ch].patchName = "INIT";
+            synthChannels[ch].isDirty = false;
+        }
+        updateChannelPresetDropdowns();
+        if(select) select.value = "";
+        let btn = document.getElementById(`ch-preset-btn-${ch}`);
+        if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+    }
+}
+
+window.markChannelDirty = function(ch) {
+    if (!synthChannels[ch] || synthChannels[ch].patchName === "INIT" || !synthChannels[ch].patchName) return;
+    if (!synthChannels[ch].isDirty) {
+        synthChannels[ch].isDirty = true;
+        let btn = document.getElementById(`ch-preset-btn-${ch}`);
+        if (btn) btn.innerHTML = `${synthChannels[ch].patchName}* ▼`;
+    }
+};
