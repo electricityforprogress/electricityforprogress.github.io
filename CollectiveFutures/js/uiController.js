@@ -11,7 +11,6 @@ document.body.appendChild(paramTooltip);
 let tooltipTimer;
 
 const paramFormats = {
-    // Frequencies & Times
     'cutoff': v => Math.round(v) + ' Hz',
     'drvTone': v => Math.round(v) + ' Hz',
     'damp': v => Math.round(v) + ' Hz',
@@ -22,7 +21,6 @@ const paramFormats = {
     'rel': v => v.toFixed(2) + 's',
     'glide': v => v.toFixed(2) + 's',
     'time': v => v.toFixed(2) + 's',
-    // Percentages
     'depth': v => Math.round(v * 100) + '%',
     'sus': v => Math.round(v * 100) + '%',
     'spread': v => Math.round(v) + '%',
@@ -34,7 +32,6 @@ const paramFormats = {
     'toRev': v => Math.round(v * 100) + '%',
     'level': v => Math.round(v * 100) + '%',
     'mixVol': v => Math.round(v * 100) + '%',
-    // Raw/Multipliers
     'res': v => v.toFixed(1),
     'durMult': v => {
         let maxMs = v <= 1.0 
@@ -109,7 +106,6 @@ document.addEventListener('input', (e) => {
             x = rect.left + (rect.width / 2);
             y = rect.top - 15; 
         } else {
-            // Calculate horizontal thumb position for dual sliders
             let min = parseFloat(slider.min) || 0;
             let max = parseFloat(slider.max) || 127;
             let pct = (val - min) / (max - min);
@@ -126,6 +122,7 @@ document.addEventListener('pointerup', (e) => {
         hideTooltip();
     }
 });
+
 document.addEventListener('DOMContentLoaded', () => {
     
     const makeSlidersDraggable = () => {
@@ -178,13 +175,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (Math.abs(parseFloat(slider.value) - steppedVal) >= step/2) {
                     slider.value = steppedVal;
                     slider.dispatchEvent(new Event('input')); 
-                    // --- NEW TOOLTIP CALL ---
+                    
                     let param = slider.id.replace('ui-env-', '').replace('ui-fx-', '');
                     if (slider.id.includes('vol')) param = 'mixVol';
                     if (slider.id.includes('density')) param = 'density';
                     if (slider.id === 'ui-quantize') param = 'quantize';
                     
-                    // Derive group based on ID for color routing
                     let group = '';
                     if (slider.id.includes('env')) group = 'env';
                     if (slider.id.includes('fx')) group = 'fx';
@@ -451,6 +447,9 @@ function updateActiveSynth(param, value) {
     window.markChannelDirty(activeSynthIndex);
 }
 
+// --- GLOBAL PRESET ENGINE ---
+let globalPresets = {};
+
 function loadPresetsFromStorage() {
     try {
         const stored = localStorage.getItem('biodataPresets');
@@ -458,6 +457,11 @@ function loadPresetsFromStorage() {
         else globalPresets = {};
     } catch(e) { console.error("Error loading presets", e); }
     updatePresetDropdown();
+    
+    // Boot up the Channel Preset engine safely
+    if (typeof loadChannelPresetsFromStorage === 'function') {
+        loadChannelPresetsFromStorage(); 
+    }
 }
 
 function updatePresetDropdown() {
@@ -491,7 +495,7 @@ function savePreset(forceNew = false) {
         master: { vol: window.masterVolumeLevel, muted: window.isMasterMuted, bpm: window.masterBPM },
         viz: chData.map(ch => JSON.parse(JSON.stringify(ch.config))),
         globalFX: window.globalFX ? JSON.parse(JSON.stringify(window.globalFX)) : null
-    }; // <--- Here is the closing brace that was missing!
+    }; 
     
     globalPresets[name] = presetData;
     localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
@@ -523,7 +527,6 @@ function loadPreset(name) {
             synthChannels[i].params = JSON.parse(JSON.stringify(channelData[i]));
             synthChannels[i].applyParams();
             
-            // Restore Channel Patch Names
             synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
             synthChannels[i].isDirty = false;
             
@@ -755,7 +758,6 @@ function initKnobs() {
             const group = knob.dataset.group;
             const param = knob.dataset.param;
 
-            //Tool Tip
             let rect = knob.getBoundingClientRect();
             let centerX = rect.left + (rect.width / 2);
             let topY = rect.top;
@@ -764,7 +766,6 @@ function initKnobs() {
             if (group) updateNestedSynth(group, param, newVal);
             else updateActiveSynth(param, newVal);
 
-            // Polyphony specifics
             if (param === 'voices') {
                 let intVal = Math.round(newVal);
                 let readout = document.getElementById('poly-readout');
@@ -803,7 +804,7 @@ function initKnobs() {
             if(isDragging) { 
                 isDragging = false; 
                 knob.releasePointerCapture(e.pointerId);
-                hideTooltip(); // --- NEW TOOLTIP HIDE ---
+                hideTooltip(); 
             } 
         };
         
@@ -893,7 +894,6 @@ function syncUI() {
         let dial = knob.querySelector('.knob-dial');
         if (dial) dial.style.transform = `rotate(${-135 + (pct * 270)}deg)`;
         
-        // Force the UI update logic for Poly slider to reflect correctly on tab change
         if (param === 'voices') {
             let intVal = Math.round(val);
             let readout = document.getElementById('poly-readout');
@@ -927,16 +927,12 @@ function syncUI() {
 // --- CHANNEL PRESET ENGINE ---
 let globalChannelPresets = {};
 
-function loadPresetsFromStorage() {
+function loadChannelPresetsFromStorage() {
     try {
-        const stored = localStorage.getItem('biodataPresets');
-        if (stored) globalPresets = JSON.parse(stored);
-        else globalPresets = {};
-    } catch(e) { console.error("Error loading presets", e); }
-    updatePresetDropdown();
-    
-    // Boot up the Channel Preset engine
-    loadChannelPresetsFromStorage(); 
+        const stored = localStorage.getItem('biodataChannelPresets');
+        if (stored) globalChannelPresets = JSON.parse(stored);
+    } catch(e) { console.error("Error loading channel presets", e); }
+    updateChannelPresetDropdowns();
 }
 
 function updateChannelPresetDropdowns() {
@@ -952,7 +948,6 @@ function updateChannelPresetDropdowns() {
         });
         select.value = globalChannelPresets[currentVal] ? currentVal : "";
         
-        // Update Pill Text with "Dirty" asterisk tracking
         const btn = document.getElementById(`ch-preset-btn-${i}`);
         if (btn) {
             let patchName = (synthChannels[i] && synthChannels[i].patchName) ? synthChannels[i].patchName : "INIT";
