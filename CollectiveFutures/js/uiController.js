@@ -11,7 +11,7 @@ window.debouncedHardwareSync = function(chIdx) {
         if (typeof window.syncParamsToHardware === 'function') {
             window.syncParamsToHardware(chIdx);
         }
-    }, 100); // Wait 100ms after a slider stops moving before sending to hardware
+    }, 100); 
 };
 
 // --- GLOBAL PARAMETER TOOLTIP ---
@@ -237,7 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (synthChannels[activeSynthIndex]) {
                 synthChannels[activeSynthIndex].params[paramKey] = val;
                 if (labelId && formatFn) document.getElementById(labelId).innerText = formatFn(val);
-                // THE FIX: Sync standard sliders with Debounce
                 window.debouncedHardwareSync(activeSynthIndex);
             }
         });
@@ -257,7 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if(nText) nText.innerText = `${midiToNote(min)} (${min}) ↔ ${midiToNote(max)} (${max})`;
         synthChannels[activeSynthIndex].params.minNote = min;
         synthChannels[activeSynthIndex].params.maxNote = max;
-        // THE FIX: Sync custom Note range sliders with Debounce
         window.debouncedHardwareSync(activeSynthIndex);
     };
     if(nMin) nMin.addEventListener('input', updateNote);
@@ -275,7 +273,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if(vText) vText.innerText = `${min} ↔ ${max}`;
         synthChannels[activeSynthIndex].params.velMin = min;
         synthChannels[activeSynthIndex].params.velMax = max;
-        // THE FIX: Sync custom Velocity range sliders with Debounce
         window.debouncedHardwareSync(activeSynthIndex);
     };
     if(vMin) vMin.addEventListener('input', updateVel);
@@ -502,8 +499,6 @@ function updateActiveSynth(param, value) {
     
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
-
-    // THE FIX: Debounced Dynamic Hardware Sync
     window.debouncedHardwareSync(activeSynthIndex);
 }
 
@@ -526,6 +521,12 @@ function loadPresetsFromStorage() {
 function updatePresetDropdown() {
     const select = document.getElementById('preset-select');
     if(!select) return;
+    
+    // Ensure the event listener is forcibly attached in JS
+    select.onchange = (e) => {
+        loadPreset(e.target.value);
+    };
+
     const currentVal = select.value;
     select.innerHTML = '<option value="">-- Select --</option>';
     Object.keys(globalPresets).forEach(name => {
@@ -628,7 +629,7 @@ function loadPreset(name) {
             }
             if(s) { s.value = chData[i].config.smooth; }
             if(zVal) zVal.innerText = Math.round(chData[i].config.zoom);
-            if(sVal) sVal.innerText = chData[chData[i].config.smooth.toFixed(2)];
+            if(sVal) sVal.innerText = chData[i].config.smooth.toFixed(2); 
         }
 
         if (synthChannels[i]) {
@@ -689,9 +690,9 @@ function loadPreset(name) {
     
     syncUI();
 
-    // THE FIX: Sync entire global preset to hardware securely
+    // FORCE DIRECT SYNC: Blast all 4 channels to the hardware instantly upon load
     for (let i=0; i<4; i++) {
-        window.debouncedHardwareSync(i);
+        if (typeof window.syncParamsToHardware === 'function') window.syncParamsToHardware(i);
     }
 }
 
@@ -1032,6 +1033,13 @@ function updateChannelPresetDropdowns() {
     for(let i=0; i<4; i++) {
         const select = document.getElementById(`ch-preset-select-${i}`);
         if(!select) continue;
+        
+        // THE FIX: Explicitly bind the onchange event here in JavaScript 
+        // to guarantee the preset loads even if the HTML tag is missing it!
+        select.onchange = (e) => {
+            loadChannelPreset(i, e.target.value);
+        };
+
         const currentVal = select.value;
         select.innerHTML = '<option value="">-- Select --</option>';
         Object.keys(globalChannelPresets).forEach(name => {
@@ -1161,8 +1169,10 @@ function loadChannelPreset(ch, name) {
         if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
     }, 150);
     
-    // THE FIX: Sync loaded preset to hardware securely
-    window.debouncedHardwareSync(ch);
+    // FORCE DIRECT SYNC: Blast the 16 parameters to the hardware instantly upon load
+    if (typeof window.syncParamsToHardware === 'function') {
+        window.syncParamsToHardware(ch);
+    }
 }
 
 function deleteChannelPreset(ch) {
