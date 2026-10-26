@@ -30,6 +30,15 @@ window.sendHardwareCC = function(ch, cc, val) {
     }
 };
 
+window.sendHardwareScale = function(ch, mask) {
+    if (window.bleTxCharacteristic) {
+        try {
+            let encoder = new TextEncoder();
+            window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(`S:${ch},${mask}\n`));
+        } catch (e) { console.error("BLE TX Error:", e); }
+    }
+};
+
 window.sendMidiNote = function(channel, pitch, velocity, duration, playTimeAudioCtx) {
     let played = false;
     if (synthChannels[channel]) played = synthChannels[channel].play(pitch, velocity, duration, playTimeAudioCtx);
@@ -106,7 +115,6 @@ window.processBiodata = function(payload) {
     if (!ch) return;
 
     // --- HARDWARE MASTER DISPATCHER ---
-    // Instead of generating its own notes, the Web App plays exactly what the hardware quantized and dispatched
     if (payload.type === 'note') {
         let playTime = window.audioCtx.currentTime + 0.015;
         window.sendMidiNote(chIdx, payload.n, payload.v, payload.d, playTime);
@@ -117,12 +125,13 @@ window.processBiodata = function(payload) {
         return;
     }
 
-    // --- TELEMETRY RENDERER (NO MATH REQUIRED) ---
-    // The hardware delivers a perfect 10-point cross-section of its math.
+    // --- TELEMETRY RENDERER & VISUALIZER MATH ---
     if (payload.type === 'raw' && Array.isArray(payload.p)) {
         if (!ch.waveBuffer) ch.waveBuffer = [];
+        if (!ch.vizBuffer) ch.vizBuffer = []; // Rolling buffer for UI math
         if (!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
 
+        let pConfig = synthChannels[chIdx] ? synthChannels[chIdx].params : window.defaultParams;
         const CALIBRATION_FACTOR = 10000000; 
         let nowMs = Date.now();
 
@@ -133,10 +142,28 @@ window.processBiodata = function(payload) {
             if (rVal < ch.acc.min) ch.acc.min = rVal;
             if (rVal > ch.acc.max) ch.acc.max = rVal;
             
-            // Push directly to visualizer
             ch.waveBuffer.push({ r: rVal, ticks: rawTicks, evt: 0 });
+            ch.vizBuffer.push(rVal);
+            
             while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
+            if (ch.vizBuffer.length > (pConfig.sampleSize || 40)) ch.vizBuffer.shift();
         });
+        
+        // Restore Local Standard Deviation specifically for the Threshold UI
+        let maxim = 0, minim = 1000000, averg = 0, stdevi = 0;
+        ch.vizBuffer.forEach(v => {
+            if (v > maxim) maxim = v;
+            if (v < minim) minim = v;
+            averg += v;
+            stdevi += v * v;
+        });
+        if (ch.vizBuffer.length > 0) averg /= ch.vizBuffer.length;
+        let variance = (stdevi / ch.vizBuffer.length) - (averg * averg);
+        
+        ch.lastStdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
+        if (ch.lastStdevi < 0.1) ch.lastStdevi = 1.0;
+        ch.lastDelta = maxim - minim;
+        ch.lastBlockTime = nowMs;
         
         if (nowMs - ch.acc.lastSec >= 1000) {
             if (!ch.history) ch.history = [];
