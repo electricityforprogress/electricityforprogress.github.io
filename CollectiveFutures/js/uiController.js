@@ -477,24 +477,40 @@ function updateActiveSynth(param, value) {
     if (window.bleTxCharacteristic) window.syncParamsToHardware(activeSynthIndex);
 }
 
-// Modify togglePianoKey inside uiController to force sync on click:
+// --- PIANO & SCALE UI ---
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
+    
     synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
     document.getElementById('ui-scaleType').value = 'custom'; 
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
-    if (window.bleTxCharacteristic) window.sendHardwareCC(activeSynthIndex, 104 + noteIdx, synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] ? 127 : 0);
-}
     
-    if (!synthChannels[activeSynthIndex]) return;
-    if (param === 'stealMode' || param === 'scaleType') {
-        synthChannels[activeSynthIndex].params[param] = value;
-    } else {
-        synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+    // Sync to hardware if connected
+    if (window.bleTxCharacteristic) {
+        window.sendHardwareCC(activeSynthIndex, 104 + noteIdx, synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] ? 127 : 0);
     }
-    synthChannels[activeSynthIndex].applyParams();
-    window.markChannelDirty(activeSynthIndex);
+}
+
+function applyScalePreset() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    if (p.scaleType === 'custom') return; 
+    
+    p.activeScaleBits.fill(false); 
+    window.SCALES[p.scaleType].forEach(deg => { 
+        p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
+    });
+    syncPianoUI();
+}
+
+function syncPianoUI() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
+    for(let i = 0; i < 12; i++) { 
+        let k = document.getElementById(`pkey-${i}`); 
+        if(k) k.classList.toggle('active', bits[i]); 
+    }
 }
 
 // --- GLOBAL PRESET ENGINE ---
