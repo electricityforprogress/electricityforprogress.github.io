@@ -118,8 +118,11 @@ function initVisualizer() {
                     <div class="hud-settings-wrapper">
                         <div class="hud-gear-icon">⚙️</div>
                         <div class="hud-settings-menu">
-                            <button id="ch-freeze-${i}" style="width: 100%; margin-bottom: 8px; background: transparent; color: #888; border: 1px solid #444; padding: 4px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: bold;">❄️ FREEZE</button>                            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: #888;">
-                                <label style="display: flex; align-items: center; justify-content: space-between;">
+                               <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+                                    <button id="ch-freeze-${i}" style="flex: 1; background: transparent; color: #888; border: 1px solid #444; padding: 4px; border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: bold;">❄️ FREEZE</button>
+                                    <button id="ch-clear-${i}" style="flex: 1; background: transparent; color: #888; border: 1px solid #444; padding: 4px; border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: bold;">🗑️ CLEAR</button>
+                                </div>
+                                 <label style="display: flex; align-items: center; justify-content: space-between;">
                                     <span style="font-weight: bold; width: 12px;">Z</span>
                                     <input type="range" id="ch-zoom-${i}" class="pro-slider" min="0" max="1000" value="230" style="flex-grow: 1; margin: 0 8px; background: #333;">
                                     <span id="ch-val-zoom-${i}" style="color: #ccc; width: 30px; text-align: right;">500</span>
@@ -151,6 +154,20 @@ function initVisualizer() {
         let tSlider = document.getElementById(`ch-mini-thresh-${i}`);
         let wSlider = document.getElementById(`ch-window-${i}`);
         let fBtn = document.getElementById(`ch-freeze-${i}`);
+        let cBtn = document.getElementById(`ch-clear-${i}`);
+        if (cBtn) {
+            cBtn.addEventListener('click', (e) => {
+                if (chData[i]) {
+                    chData[i].waveBuffer = [];
+                    chData[i].renderQueue = [];
+                    chData[i].notes = [];
+                    chData[i].history = [];
+                    chData[i].densityEvents = [];
+                    chData[i].bounds = { min: 0, max: 10 };
+                    chData[i].acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
+                }
+            });
+        }
         
         let zVal = document.getElementById(`ch-val-zoom-${i}`);
         let sVal = document.getElementById(`ch-val-smooth-${i}`);
