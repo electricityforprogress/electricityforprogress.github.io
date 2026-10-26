@@ -2,6 +2,18 @@
  * js/uiController.js
  */
 
+// --- HARDWARE DEBOUNCER (The Traffic Cop) ---
+window.syncTimers = {};
+window.debouncedHardwareSync = function(chIdx) {
+    if (!window.bleTxCharacteristic) return;
+    clearTimeout(window.syncTimers[chIdx]);
+    window.syncTimers[chIdx] = setTimeout(() => {
+        if (typeof window.syncParamsToHardware === 'function') {
+            window.syncParamsToHardware(chIdx);
+        }
+    }, 100); // Wait 100ms after a slider stops moving before sending to hardware
+};
+
 // --- GLOBAL PARAMETER TOOLTIP ---
 const paramTooltip = document.createElement('div');
 paramTooltip.id = 'param-tooltip';
@@ -225,6 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (synthChannels[activeSynthIndex]) {
                 synthChannels[activeSynthIndex].params[paramKey] = val;
                 if (labelId && formatFn) document.getElementById(labelId).innerText = formatFn(val);
+                // THE FIX: Sync standard sliders with Debounce
+                window.debouncedHardwareSync(activeSynthIndex);
             }
         });
     };
@@ -243,6 +257,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if(nText) nText.innerText = `${midiToNote(min)} (${min}) ↔ ${midiToNote(max)} (${max})`;
         synthChannels[activeSynthIndex].params.minNote = min;
         synthChannels[activeSynthIndex].params.maxNote = max;
+        // THE FIX: Sync custom Note range sliders with Debounce
+        window.debouncedHardwareSync(activeSynthIndex);
     };
     if(nMin) nMin.addEventListener('input', updateNote);
     if(nMax) nMax.addEventListener('input', updateNote);
@@ -259,6 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if(vText) vText.innerText = `${min} ↔ ${max}`;
         synthChannels[activeSynthIndex].params.velMin = min;
         synthChannels[activeSynthIndex].params.velMax = max;
+        // THE FIX: Sync custom Velocity range sliders with Debounce
+        window.debouncedHardwareSync(activeSynthIndex);
     };
     if(vMin) vMin.addEventListener('input', updateVel);
     if(vMax) vMax.addEventListener('input', updateVel);
@@ -272,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const spans = e.target.nextElementSibling.querySelectorAll('span');
             spans.forEach(s => { s.style.color = '#666'; s.style.fontWeight = 'normal'; });
             if(spans[val]) { spans[val].style.color = 'var(--cyan)'; spans[val].style.fontWeight = 'bold'; }
+            window.debouncedHardwareSync(activeSynthIndex);
         });
     }
 
@@ -319,7 +338,12 @@ function buildMixerAndMidiUI() {
     mixerContent.innerHTML = html;
 }
 
-function updateMidiChannel(synthCh, midiCh) { if (synthChannels[synthCh]) synthChannels[synthCh].params.midiOutCh = parseInt(midiCh); }
+function updateMidiChannel(synthCh, midiCh) { 
+    if (synthChannels[synthCh]) {
+        synthChannels[synthCh].params.midiOutCh = parseInt(midiCh); 
+        window.debouncedHardwareSync(synthCh);
+    }
+}
 
 function toggleMasterMute() {
     window.isMasterMuted = !window.isMasterMuted;
@@ -342,7 +366,13 @@ function tapTempo() {
         for(let i=1; i<window.tapTimes.length; i++) intervals.push(window.tapTimes[i] - window.tapTimes[i-1]);
         let avg = intervals.reduce((a,b)=>a+b)/intervals.length;
         let newBpm = 60000 / avg;
-        if(newBpm >= 60 && newBpm <= 240) { window.masterBPM = newBpm; syncUI(); }
+        if(newBpm >= 60 && newBpm <= 240) { 
+            window.masterBPM = newBpm; 
+            syncUI(); 
+            if (window.bleTxCharacteristic && typeof window.sendHardwareCC === 'function') {
+                for (let i=0; i<4; i++) window.sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
+            }
+        }
     }
     
     let bpmLed = document.getElementById('top-bpm-led');
@@ -413,7 +443,6 @@ window.syncParamsToHardware = function(chIdx) {
     if (!synthChannels[chIdx]) return;
     const p = synthChannels[chIdx].params;
     
-    // Scale Parameters to 0-127 MIDI values for UART Sync
     if (typeof window.sendHardwareCC === 'function') {
         window.sendHardwareCC(chIdx, 81, Math.min(127, Math.max(0, ((p.threshold - 0.05) / 4.95) * 127)));
         window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, ((p.sampleSize - 10) / 90) * 127)));
@@ -434,7 +463,6 @@ window.syncParamsToHardware = function(chIdx) {
         window.sendHardwareCC(chIdx, 95, p.legato === 1 ? 127 : 0);
     }
     
-    // Push Scale via Bitmask (S:ch,mask)
     let mask = 0;
     for (let i = 0; i < 12; i++) {
         if (p.activeScaleBits[i]) mask |= (1 << i);
@@ -442,7 +470,6 @@ window.syncParamsToHardware = function(chIdx) {
     if (typeof window.sendHardwareScale === 'function') window.sendHardwareScale(chIdx, mask);
 };
 
-// Replace this function in js/uiController.js
 function updateActiveSynth(param, value) {
     if (param === 'bpm') {
         if (window.midiClockMode === 'in') return;
@@ -462,8 +489,6 @@ function updateActiveSynth(param, value) {
         synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
     }
     
-    // --- THE RACE CONDITION FIX ---
-    // Re-calculate the Piano Bits BEFORE syncing to hardware!
     if (param === 'scaleType' || param === 'scaleRoot') {
         const p = synthChannels[activeSynthIndex].params;
         if (p.scaleType !== 'custom') {
@@ -478,12 +503,9 @@ function updateActiveSynth(param, value) {
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
 
-    // Dynamic Hardware Sync
-    if (window.bleTxCharacteristic && typeof window.syncParamsToHardware === 'function') {
-        window.syncParamsToHardware(activeSynthIndex);
-    }
+    // THE FIX: Debounced Dynamic Hardware Sync
+    window.debouncedHardwareSync(activeSynthIndex);
 }
-
 
 // --- GLOBAL PRESET ENGINE ---
 let globalPresets = {};
@@ -496,7 +518,6 @@ function loadPresetsFromStorage() {
     } catch(e) { console.error("Error loading presets", e); }
     updatePresetDropdown();
     
-    // Boot up the Channel Preset engine safely
     if (typeof loadChannelPresetsFromStorage === 'function') {
         loadChannelPresetsFromStorage(); 
     }
@@ -607,7 +628,7 @@ function loadPreset(name) {
             }
             if(s) { s.value = chData[i].config.smooth; }
             if(zVal) zVal.innerText = Math.round(chData[i].config.zoom);
-            if(sVal) sVal.innerText = chData[i].config.smooth.toFixed(2);
+            if(sVal) sVal.innerText = chData[chData[i].config.smooth.toFixed(2)];
         }
 
         if (synthChannels[i]) {
@@ -667,6 +688,11 @@ function loadPreset(name) {
     if (typeof updateChannelPresetDropdowns === 'function') updateChannelPresetDropdowns();
     
     syncUI();
+
+    // THE FIX: Sync entire global preset to hardware securely
+    for (let i=0; i<4; i++) {
+        window.debouncedHardwareSync(i);
+    }
 }
 
 function exportPresets() {
@@ -756,6 +782,7 @@ window.updateLfoRateMode = function(val) {
     if (val === 'hi' && rate < 20) p[activeLfoView].rate = 20;
     synthChannels[activeSynthIndex].applyParams();
     syncUI();
+    window.debouncedHardwareSync(activeSynthIndex);
 };
 
 function updateNestedSynth(group, param, value) {
@@ -1020,7 +1047,6 @@ function updateChannelPresetDropdowns() {
             let dirtyStar = (synthChannels[i] && synthChannels[i].isDirty && patchName !== "INIT") ? "*" : "";
             btn.innerHTML = `${patchName}${dirtyStar} ▼`;
             
-            // Stop click bleed-through when opening the menu
             btn.onpointerdown = (e) => { 
                 selectTab(i); 
                 e.stopPropagation(); 
@@ -1031,7 +1057,7 @@ function updateChannelPresetDropdowns() {
 
 function saveChannelPreset(ch, forceNew = false) {
     if(typeof ensureSynths === 'function') ensureSynths();
-    selectTab(ch); // Anchor UI
+    selectTab(ch);
     
     const select = document.getElementById(`ch-preset-select-${ch}`);
     let name = select ? select.value : "";
@@ -1058,7 +1084,6 @@ function saveChannelPreset(ch, forceNew = false) {
     updateChannelPresetDropdowns();
     if (select) select.value = name;
     
-    // Delay hiding the menu to prevent ghost-clicks on adjacent tabs
     setTimeout(() => {
         let btn = document.getElementById(`ch-preset-btn-${ch}`);
         if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
@@ -1129,17 +1154,19 @@ function loadChannelPreset(ch, name) {
     let select = document.getElementById(`ch-preset-select-${ch}`);
     if(select) select.value = name;
     
-    selectTab(ch); // Anchor UI to the loaded tab
-
-    // Delay closing to prevent ghost-clicks on adjacent tabs
+    selectTab(ch); 
+    
     setTimeout(() => {
         let btn = document.getElementById(`ch-preset-btn-${ch}`);
         if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
     }, 150);
+    
+    // THE FIX: Sync loaded preset to hardware securely
+    window.debouncedHardwareSync(ch);
 }
 
 function deleteChannelPreset(ch) {
-    selectTab(ch); // Anchor UI
+    selectTab(ch); 
     const select = document.getElementById(`ch-preset-select-${ch}`);
     let name = select ? select.value : "";
     if (!name || name === "") return alert("No channel preset selected to delete.");
@@ -1179,7 +1206,6 @@ function togglePianoKey(noteIdx) {
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
     
-    // Sync to hardware if connected
     if (window.bleTxCharacteristic && typeof window.sendHardwareScale === 'function') {
         let mask = 0;
         for (let i = 0; i < 12; i++) {
