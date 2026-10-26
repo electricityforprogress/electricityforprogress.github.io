@@ -6,22 +6,29 @@ navigator.requestMIDIAccess({ sysex: false }).then(access => {
     const select = document.getElementById('midi-out-select');
     const pop = () => { 
         let currentVal = select.value; 
-        
         select.innerHTML = '<option value="none">No Output</option>'; 
         Array.from(access.outputs.values()).forEach(p => { 
             let opt = document.createElement('option'); 
-            opt.value = p.id; 
-            opt.text = p.name; 
+            opt.value = p.id; opt.text = p.name; 
             if (p.id === currentVal) opt.selected = true; 
             select.appendChild(opt); 
         }); 
-        
         window.midiOutput = access.outputs.get(select.value) || null;
     }
-    pop(); 
-    access.onstatechange = pop; 
+    pop(); access.onstatechange = pop; 
     select.addEventListener('change', (e) => window.midiOutput = access.outputs.get(e.target.value) || null);
 }).catch(()=>{});
+
+// NEW: Helper to send CCs to the hardware over UART
+window.sendHardwareCC = function(ch, cc, val) {
+    if (window.bleTxCharacteristic) {
+        try {
+            let cmd = `C:${ch},${cc},${Math.round(val)}\n`;
+            let encoder = new TextEncoder();
+            window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(cmd));
+        } catch (e) { console.error("BLE TX Error:", e); }
+    }
+};
 
 window.sendMidiNote = function(channel, pitch, velocity, duration, playTimeAudioCtx) {
     let played = false;
@@ -39,19 +46,10 @@ window.sendMidiNote = function(channel, pitch, velocity, duration, playTimeAudio
     return played; 
 };
 
-window.sendMidiCC = function(channel, ccNumber, val) {
-    if (typeof midiOutput !== 'undefined' && midiOutput) {
-        let midiCh = synthChannels[channel] ? (synthChannels[channel].params.midiOutCh || channel) : channel;
-        let sysTime = window.performance.now();
-        midiOutput.send([0xB0 + midiCh, ccNumber, val], sysTime);
-    }
-};
-
 window.connectBLE = async function() {
     const btn = document.getElementById('btn-ble');
     if (window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected) {
-        window.activeBleDevice.gatt.disconnect();
-        return; 
+        window.activeBleDevice.gatt.disconnect(); return; 
     }
     try {
         if(btn) btn.innerHTML = 'INIT... <span id="ble-status" class="status-offline">●</span>';
@@ -74,7 +72,7 @@ window.connectBLE = async function() {
         
         device.addEventListener('gattserverdisconnected', () => { 
             if(btn) btn.innerHTML = 'CONNECT <span id="ble-status" class="status-offline" style="color: var(--red);">●</span>';
-            window.activeBleDevice = null;
+            window.activeBleDevice = null; window.bleTxCharacteristic = null;
         });
         
         await rxChar.startNotifications();
@@ -90,189 +88,61 @@ window.connectBLE = async function() {
             }
         });
         if(btn) btn.innerHTML = 'DISCONNECT <span id="ble-status" class="status-online" style="color: var(--green);">●</span>';
+        
+        // Push the entire current preset state to the hardware upon connecting!
+        setTimeout(() => { if (typeof syncParamsToHardware === 'function') syncParamsToHardware(activeSynthIndex); }, 500);
+
     } catch (error) { 
         console.error("BLE Connect Error:", error);
         if(btn) btn.innerHTML = 'FAILED <span id="ble-status" class="status-offline" style="color: var(--red);">●</span>';
-        setTimeout(() => {
-            if(btn && (!window.activeBleDevice || !window.activeBleDevice.gatt.connected)) {
-                btn.innerHTML = 'CONNECT <span id="ble-status" class="status-offline">●</span>';
-            }
-        }, 3000);
+        setTimeout(() => { if(btn && (!window.activeBleDevice || !window.activeBleDevice.gatt.connected)) { btn.innerHTML = 'CONNECT <span id="ble-status" class="status-offline">●</span>'; } }, 3000);
     }
 };
 
 window.processBiodata = function(payload) {
-    if (payload.type === 'raw' && typeof payload.ch === 'number' && Array.isArray(payload.p)) {
-        let chIdx = payload.ch;
-        let ch = chData[chIdx];
-        let pConfig = synthChannels[chIdx] ? synthChannels[chIdx].params : window.defaultParams;
-        if (!pConfig) return;
+    if (!payload || typeof payload.ch !== 'number') return;
+    let chIdx = payload.ch;
+    let ch = chData[chIdx];
+    if (!ch) return;
+
+    // --- HARDWARE MASTER DISPATCHER ---
+    // Instead of generating its own notes, the Web App plays exactly what the hardware quantized and dispatched
+    if (payload.type === 'note') {
+        let playTime = window.audioCtx.currentTime + 0.015;
+        window.sendMidiNote(chIdx, payload.n, payload.v, payload.d, playTime);
         
-        if (!ch.analysisBuffer) ch.analysisBuffer = [];
-        if (!ch.tickBuffer) ch.tickBuffer = []; 
-        if (!ch.lastTrigger) ch.lastTrigger = 0;
-        if (ch.ema === undefined) ch.ema = null;
-        if (ch.emaTicks === undefined) ch.emaTicks = null;
-        if (!ch.history) ch.history = [];
+        if (!ch.notes) ch.notes = [];
+        ch.notes.push({ n: payload.n, t: Date.now(), dur: payload.d, v: payload.v });
+        if (typeof window.triggerDensityVisualizer === 'function') window.triggerDensityVisualizer(chIdx, 'pass');
+        return;
+    }
+
+    // --- TELEMETRY RENDERER (NO MATH REQUIRED) ---
+    // The hardware delivers a perfect 10-point cross-section of its math.
+    if (payload.type === 'raw' && Array.isArray(payload.p)) {
+        if (!ch.waveBuffer) ch.waveBuffer = [];
         if (!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
 
         const CALIBRATION_FACTOR = 10000000; 
-        const AUDIO_EMA_ALPHA = 0.05; 
+        let nowMs = Date.now();
 
         payload.p.forEach(rawTicks => {
-            let rawAdmittance = CALIBRATION_FACTOR / rawTicks;
-            ch.ema = (ch.ema === null) ? rawAdmittance : (rawAdmittance * AUDIO_EMA_ALPHA) + (ch.ema * (1 - AUDIO_EMA_ALPHA));
-            ch.emaTicks = (ch.emaTicks === null) ? rawTicks : (rawTicks * 0.05) + (ch.emaTicks * 0.95);
-
-            if (ch.lastEma !== undefined) {
-                let instantaneousSlew = ch.ema - ch.lastEma;
-                ch.slew = (ch.slew === undefined) ? instantaneousSlew : (instantaneousSlew * 0.05) + (ch.slew * 0.95);
-            }
-            ch.lastEma = ch.ema;
-
-            ch.acc.sum += ch.ema; 
+            let rVal = CALIBRATION_FACTOR / rawTicks;
+            ch.acc.sum += rVal; 
             ch.acc.count++;
-            if (ch.ema < ch.acc.min) ch.acc.min = ch.ema;
-            if (ch.ema > ch.acc.max) ch.acc.max = ch.ema;
-
-            let nowMs = Date.now();
-            if (nowMs - ch.acc.lastSec >= 1000) {
-                if (ch.acc.count > 0) ch.history.push({ avg: ch.acc.sum / ch.acc.count, min: ch.acc.min, max: ch.acc.max });
-                else ch.history.push({ avg: ch.ema || 0, min: ch.ema || 0, max: ch.ema || 0 });
-                
-                if (ch.history.length > 300) ch.history.shift(); 
-                ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
-            }
-
-            ch.analysisBuffer.push(ch.ema);
-            ch.tickBuffer.push(ch.emaTicks);
+            if (rVal < ch.acc.min) ch.acc.min = rVal;
+            if (rVal > ch.acc.max) ch.acc.max = rVal;
             
-            let finalPitch = null;
-            let isEvent = 0;
-            let sampleWindow = pConfig.sampleSize || 40;
-
-            if (ch.analysisBuffer.length >= sampleWindow) {
-                let maxim = 0, minim = 1000000, averg = 0, stdevi = 0;
-                let tMaxim = 0, tMinim = 10000000; 
-                
-                for (let j = 0; j < ch.analysisBuffer.length; j++) {
-                    let val = ch.analysisBuffer[j];
-                    if (val > maxim) maxim = val;
-                    if (val < minim) minim = val;
-                    averg += val;
-                    stdevi += val * val; 
-                    
-                    let tVal = ch.tickBuffer[j];
-                    if (tVal > tMaxim) tMaxim = tVal;
-                    if (tVal < tMinim) tMinim = tVal;
-                }
-                
-                averg = averg / sampleWindow;
-                let variance = (stdevi / sampleWindow) - (averg * averg);
-                stdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
-                if (stdevi < 0.1) stdevi = 1.0; 
-                
-                let delta = maxim - minim;
-                let tickDelta = tMaxim - tMinim; 
-                let thresh = pConfig.threshold || 2.0;
-                
-                ch.lastDelta = delta;
-                ch.lastStdevi = stdevi;
-                ch.lastBlockTime = nowMs;
-                
-                // --- NEW VECTOR "WIGGLE" TARGET GENERATOR ---
-                // Maps the Magnitude of Change (Delta) and Direction (Slew) to a 0-127 target destination
-                let magnitude = (stdevi > 0) ? (delta / stdevi) : 0;
-                let direction = (ch.slew > 0) ? 1 : -1;
-                ch.wiggleTarget = Math.max(0, Math.min(127, 64 + (direction * magnitude * 20)));
-
-                // --- DENSITY CC OUTPUT (CC 81) ---
-                let recentEvents = (ch.densityEvents || []).filter(e => e.type === 'pass' && (nowMs - e.t < 4000)).length;
-                let densityVal = Math.max(0, Math.min(127, Math.round((recentEvents / 15) * 127)));
-               // window.sendMidiCC(chIdx, 81, densityVal);
-                
-                if (delta > (stdevi * thresh)) {
-                    let densityGate = pConfig.density !== undefined ? pConfig.density : 100;
-                    if (Math.random() * 100 <= densityGate) {
-                        if (nowMs - ch.lastTrigger > 50) { 
-let                         durMult = pConfig.durMult !== undefined ? pConfig.durMult : 1.0;
-                            
-                            // Map the DUR knob to dynamic minimum and maximum boundaries
-                            let minDur, maxDur;
-                            if (durMult <= 1.0) {
-                                // Standard range down to staccato
-                                minDur = window.mapScale(durMult, 0.1, 1.0, 50, 150);
-                                maxDur = window.mapScale(durMult, 0.1, 1.0, 500, 5650);
-                            } else {
-                                // Drone territory: drastically raise the floor and ceiling
-                                minDur = window.mapScale(durMult, 1.0, 5.0, 150, 15000); // 15-second minimum drone
-                                maxDur = window.mapScale(durMult, 1.0, 5.0, 5650, 30000); // 30-second maximum drone
-                            }
-                            
-                            // The plant still fully controls the note length, but restricted to our new window
-                            let dur = window.mapScale(tickDelta % 127, 0, 127, minDur, maxDur);                            let vel = window.mapScale(tickDelta % 127, 0, 127, pConfig.velMin || 60, pConfig.velMax || 110);
-                            
-                            let actualTicks = ch.emaTicks || 10000;
-                            let rawPitchNorm = (actualTicks % 127) / 127.0; 
-                            
-                            let spread = pConfig.spread !== undefined ? pConfig.spread : 75;
-                            let shapedPitch = window.applySpreadCurve(rawPitchNorm, spread);
-                            let rawNote = Math.round(window.mapScale(shapedPitch, 0, 1.0, pConfig.minNote || 36, pConfig.maxNote || 84));
-                            finalPitch = window.scaleNote(
-                                rawNote, 
-                                pConfig.scaleType || 'chromatic', 
-                                pConfig.scaleRoot || 0,
-                                pConfig.activeScaleBits,     // Adds the custom piano UI states
-                                pConfig.minNote || 36,       // Enforces the bottom of the range
-                                pConfig.maxNote || 84        // Enforces the top of the range
-                            );
-                            isEvent = 1;
-                            
-                            if (window.masterStartTime === undefined) window.masterStartTime = window.audioCtx.currentTime;
-                            let nowAudio = window.audioCtx.currentTime;
-                            let playTimeAudioCtx = nowAudio + 0.015; 
-                            let qVal = pConfig.quantize || 0;
-                            
-                            if (qVal > 0) {
-                                let beatSecs = 60.0 / (window.masterBPM || 120);
-                                let divSecs = 0;
-                                if (qVal===1) divSecs = beatSecs/16;
-                                else if (qVal===2) divSecs = beatSecs/8;
-                                else if (qVal===3) divSecs = beatSecs/4;
-                                else if (qVal===4) divSecs = beatSecs/2;
-                                else if (qVal===5) divSecs = beatSecs;
-                                else if (qVal===6) divSecs = beatSecs * (2/3); 
-                                else if (qVal===7) divSecs = beatSecs * 2;
-                                else if (qVal===8) divSecs = beatSecs * 4;
-                                
-                                let elapsed = nowAudio - window.masterStartTime;
-                                let nextDiv = Math.ceil(elapsed / divSecs) * divSecs;
-                                playTimeAudioCtx = window.masterStartTime + nextDiv;
-                            }
-                            
-                            let played = window.sendMidiNote(chIdx, finalPitch, vel, dur, playTimeAudioCtx);
-                            
-                            if (played) {
-                                let delayMs = (playTimeAudioCtx - nowAudio) * 1000;
-                                setTimeout(() => {
-                                    ch.notes.push({ n: finalPitch, t: Date.now(), dur: dur, v: vel });
-                                }, Math.max(0, delayMs));
-                                
-                                ch.lastTrigger = nowMs;
-                                if (typeof window.triggerDensityVisualizer === 'function') window.triggerDensityVisualizer(chIdx, 'pass');
-                            } else {
-                                if (typeof window.triggerDensityVisualizer === 'function') window.triggerDensityVisualizer(chIdx, 'drop');
-                            }
-                        }
-                    } else {
-                        if (typeof window.triggerDensityVisualizer === 'function') window.triggerDensityVisualizer(chIdx, 'drop');
-                    }
-                }
-                ch.analysisBuffer = [];
-                ch.tickBuffer = [];
-            }
-            if (!ch.renderQueue) ch.renderQueue = [];
-            ch.renderQueue.push({ r: rawAdmittance, evt: isEvent, n: finalPitch, ticks: rawTicks });
+            // Push directly to visualizer
+            ch.waveBuffer.push({ r: rVal, ticks: rawTicks, evt: 0 });
+            while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
         });
+        
+        if (nowMs - ch.acc.lastSec >= 1000) {
+            if (!ch.history) ch.history = [];
+            if (ch.acc.count > 0) ch.history.push({ avg: ch.acc.sum / ch.acc.count, min: ch.acc.min, max: ch.acc.max });
+            if (ch.history.length > 300) ch.history.shift(); 
+            ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
+        }
     }
 };
