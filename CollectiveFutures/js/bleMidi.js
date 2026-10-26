@@ -113,7 +113,7 @@ window.processBiodata = function(payload) {
     let chIdx = payload.ch;
     let ch = chData[chIdx];
     if (!ch) return;
-
+    
     // --- HARDWARE MASTER DISPATCHER ---
     if (payload.type === 'note') {
         let playTime = window.audioCtx.currentTime + 0.015;
@@ -121,6 +121,14 @@ window.processBiodata = function(payload) {
         
         if (!ch.notes) ch.notes = [];
         ch.notes.push({ n: payload.n, t: Date.now(), dur: payload.d, v: payload.v });
+        
+        // RESTORE VISUALIZER LINES: Tag the latest point in the buffer as a Note Event!
+        if (ch.waveBuffer && ch.waveBuffer.length > 0) {
+            let lastIdx = ch.waveBuffer.length - 1;
+            ch.waveBuffer[lastIdx].evt = 1;
+            ch.waveBuffer[lastIdx].n = payload.n;
+        }
+        
         if (typeof window.triggerDensityVisualizer === 'function') window.triggerDensityVisualizer(chIdx, 'pass');
         return;
     }
