@@ -442,6 +442,7 @@ window.syncParamsToHardware = function(chIdx) {
     if (typeof window.sendHardwareScale === 'function') window.sendHardwareScale(chIdx, mask);
 };
 
+// Replace this function in js/uiController.js
 function updateActiveSynth(param, value) {
     if (param === 'bpm') {
         if (window.midiClockMode === 'in') return;
@@ -455,17 +456,32 @@ function updateActiveSynth(param, value) {
     
     if (!synthChannels[activeSynthIndex]) return;
     
-    if (param === 'stealMode' || param === 'scaleType') {
+    if (param === 'stealMode' || param === 'scaleType' || param === 'scaleRoot') {
         synthChannels[activeSynthIndex].params[param] = value;
     } else {
         synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+    }
+    
+    // --- THE RACE CONDITION FIX ---
+    // Re-calculate the Piano Bits BEFORE syncing to hardware!
+    if (param === 'scaleType' || param === 'scaleRoot') {
+        const p = synthChannels[activeSynthIndex].params;
+        if (p.scaleType !== 'custom') {
+            p.activeScaleBits.fill(false); 
+            window.SCALES[p.scaleType].forEach(deg => { 
+                p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
+            });
+            if (typeof syncPianoUI === 'function') syncPianoUI();
+        }
     }
     
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
 
     // Dynamic Hardware Sync
-    if (window.bleTxCharacteristic) window.syncParamsToHardware(activeSynthIndex);
+    if (window.bleTxCharacteristic && typeof window.syncParamsToHardware === 'function') {
+        window.syncParamsToHardware(activeSynthIndex);
+    }
 }
 
 
