@@ -19,24 +19,42 @@ navigator.requestMIDIAccess({ sysex: false }).then(access => {
     select.addEventListener('change', (e) => window.midiOutput = access.outputs.get(e.target.value) || null);
 }).catch(()=>{});
 
-// --- UART SYNC COMMANDS (These were missing!) ---
+// --- UART SYNC COMMANDS WITH BUFFER QUEUE ---
+window.bleTxQueue = [];
+window.bleIsSending = false;
+
+// The "Traffic Cop" to prevent Bluetooth buffer overflows
+window.processBleQueue = async function() {
+    if (window.bleIsSending || window.bleTxQueue.length === 0 || !window.bleTxCharacteristic) return;
+    window.bleIsSending = true;
+    
+    let cmd = window.bleTxQueue.shift();
+    try {
+        let encoder = new TextEncoder();
+        // Use standard writeValue to wait for the ESP32 to ACK the packet
+        await window.bleTxCharacteristic.writeValue(encoder.encode(cmd));
+    } catch (e) { 
+        console.error("BLE TX Error:", e); 
+    }
+    
+    window.bleIsSending = false;
+    // Process the next item in the queue immediately
+    if (window.bleTxQueue.length > 0) {
+        setTimeout(window.processBleQueue, 5);
+    }
+};
+
 window.sendHardwareCC = function(ch, cc, val) {
     if (window.bleTxCharacteristic) {
-        try {
-            let cmd = `C:${ch},${cc},${Math.round(val)}\n`;
-            let encoder = new TextEncoder();
-            window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(cmd));
-        } catch (e) { console.error("BLE TX CC Error:", e); }
+        window.bleTxQueue.push(`C:${ch},${cc},${Math.round(val)}\n`);
+        window.processBleQueue();
     }
 };
 
 window.sendHardwareScale = function(ch, mask) {
     if (window.bleTxCharacteristic) {
-        try {
-            let cmd = `S:${ch},${mask}\n`;
-            let encoder = new TextEncoder();
-            window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(cmd));
-        } catch (e) { console.error("BLE TX Scale Error:", e); }
+        window.bleTxQueue.push(`S:${ch},${mask}\n`);
+        window.processBleQueue();
     }
 };
 
@@ -110,7 +128,7 @@ window.connectBLE = async function() {
         });
         if(btn) btn.innerHTML = 'DISCONNECT <span id="ble-status" class="status-online" style="color: var(--green);">●</span>';
         
-        // Push full state on connect
+        // Push full state on connect (Now fully queued and safe!)
         setTimeout(() => { if (typeof syncParamsToHardware === 'function') syncParamsToHardware(activeSynthIndex); }, 500);
 
     } catch (error) { 
@@ -133,7 +151,6 @@ window.processBiodata = function(payload) {
         if (!ch.notes) ch.notes = [];
         ch.notes.push({ n: payload.n, t: Date.now(), dur: payload.d, v: payload.v });
         
-        // Tag visualizer line
         if (ch.waveBuffer && ch.waveBuffer.length > 0) {
             let lastIdx = ch.waveBuffer.length - 1;
             ch.waveBuffer[lastIdx].evt = 1;
@@ -167,7 +184,6 @@ window.processBiodata = function(payload) {
             if (ch.vizBuffer.length > (pConfig.sampleSize || 40)) ch.vizBuffer.shift();
         });
         
-        // Rolling variance math strictly for the visualizer meter
         let maxim = 0, minim = 1000000, averg = 0, stdevi = 0;
         ch.vizBuffer.forEach(v => {
             if (v > maxim) maxim = v;
