@@ -428,7 +428,6 @@ window.syncParamsToHardware = function(chIdx) {
     if (!synthChannels[chIdx]) return;
     const p = synthChannels[chIdx].params;
     
-    // Scale Parameters to 0-127 MIDI values for UART Sync
     sendHardwareCC(chIdx, 81, Math.min(127, Math.max(0, ((p.threshold - 0.05) / 4.95) * 127)));
     sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, ((p.sampleSize - 10) / 90) * 127)));
     sendHardwareCC(chIdx, 83, p.density);
@@ -447,10 +446,12 @@ window.syncParamsToHardware = function(chIdx) {
     sendHardwareCC(chIdx, 94, stealVal);
     sendHardwareCC(chIdx, 95, p.legato === 1 ? 127 : 0);
     
-    // Push Scale Toggles (CC 104-115)
+    // NEW: Push entire scale via a single unified mask command
+    let mask = 0;
     for (let i = 0; i < 12; i++) {
-        sendHardwareCC(chIdx, 104 + i, p.activeScaleBits[i] ? 127 : 0);
+        if (p.activeScaleBits[i]) mask |= (1 << i);
     }
+    window.sendHardwareScale(chIdx, mask);
 };
 
 function updateActiveSynth(param, value) {
@@ -486,9 +487,12 @@ function togglePianoKey(noteIdx) {
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
     
-    // Sync to hardware if connected
     if (window.bleTxCharacteristic) {
-        window.sendHardwareCC(activeSynthIndex, 104 + noteIdx, synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] ? 127 : 0);
+        let mask = 0;
+        for (let i = 0; i < 12; i++) {
+            if (synthChannels[activeSynthIndex].params.activeScaleBits[i]) mask |= (1 << i);
+        }
+        window.sendHardwareScale(activeSynthIndex, mask);
     }
 }
 
