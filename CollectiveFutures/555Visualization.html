@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>555 Timer Interactive Visualization</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #2b2b2b;
+            color: #eee;
+            margin: 0;
+            overflow: hidden;
+        }
+        
+        .control-panel {
+            background-color: #1e1e1e;
+            padding: 16px 24px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 24px;
+            width: 1000px;
+            box-sizing: border-box;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .control-panel label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #aaa;
+            min-width: 140px;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+            accent-color: #3498db;
+        }
+
+        .value-display {
+            font-family: monospace;
+            font-size: 16px;
+            background: #111;
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            min-width: 80px;
+            text-align: right;
+            color: #2ecc71;
+        }
+
+        canvas {
+            background-color: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <label for="zoomSlider">Time Scale (Zoom):</label>
+            <input type="range" id="zoomSlider" min="0" max="1000" value="538">
+            <span id="zoomValue" class="value-display">-- ms</span>
+        </div>
+        <div class="control-group">
+            <label for="speedSlider">Visual Flow Rate:</label>
+            <input type="range" id="speedSlider" min="0" max="200" value="25">
+            <span id="speedValue" class="value-display">0.25x</span>
+        </div>
+    </div>
+
+    <canvas id="pwmCanvas" width="1000" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById('pwmCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        const zoomSlider = document.getElementById('zoomSlider');
+        const zoomValueDisplay = document.getElementById('zoomValue');
+        
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValueDisplay = document.getElementById('speedValue');
+
+        // Circuit Parameters
+        const R1 = 3900;      // 3.9k Ohm pullup
+        const C = 4.7e-9;     // 4700pF capacitor
+        
+        // Animation variables
+        let timeOffset = 0;         
+        let leftEdgePhase = 0;      
+        let totalTimeMs = 120;
+        let flowRate = 0.25; // screens per second
+        let lastFrameTime = performance.now();
+
+        // 1D Noise implementation for true randomness
+        const p = new Uint8Array(512);
+        for(let i=0; i<512; i++) p[i] = Math.floor(Math.random() * 256);
+
+        function smoothNoise(x) {
+            let xi = Math.floor(x) & 255;
+            let xf = x - Math.floor(x);
+            let u = xf * xf * (3.0 - 2.0 * xf); // Smooth interpolation
+            let a = p[xi];
+            let b = p[(xi + 1) & 255];
+            let res = (a * (1.0 - u) + b * u) / 255.0; 
+            return res * 2.0 - 1.0; // Map to -1 to 1
+        }
+
+        // Exponential mapping constants for the slider
+        const minTimeMs = 0.5;
+        const maxTimeMs = 100000;
+        const minLog = Math.log(minTimeMs);
+        const maxLog = Math.log(maxTimeMs);
+        const logScale = (maxLog - minLog) / 1000;
+
+        // Maps slider value (0-1000) to exponential time scale (0.5 to 100000)
+        function updateZoom() {
+            const sliderVal = parseInt(zoomSlider.value, 10);
+            totalTimeMs = Math.exp(minLog + sliderVal * logScale);
+            
+            // Format output text
+            if (totalTimeMs < 1000) {
+                zoomValueDisplay.textContent = totalTimeMs.toFixed(1) + " ms";
+            } else {
+                zoomValueDisplay.textContent = (totalTimeMs / 1000).toFixed(2) + " s";
+            }
+        }
+
+        function updateSpeed() {
+            flowRate = speedSlider.value / 100;
+            speedValueDisplay.textContent = flowRate.toFixed(2) + "x";
+        }
+
+        // Add event listener to update immediately on drag
+        zoomSlider.addEventListener('input', updateZoom);
+        speedSlider.addEventListener('input', updateSpeed);
+        updateZoom(); // Initialize
+        updateSpeed();
+
+        // Generates an organic wave using sine waves modulated by smooth random noise
+        function computeAnalogVal(t) {
+            // Base periodic sine waves
+            const s1 = 0.50 * Math.sin(t * (Math.PI * 2) / 80);
+            const s2 = 0.35 * Math.sin(t * (Math.PI * 2) / 137);
+            const baseSignal = s1 + s2;
+
+            // Random organic noise at different frequencies (scales)
+            const fastNoise = smoothNoise(t / 50);
+            const midNoise = smoothNoise(t / 300);
+            const slowNoise = smoothNoise(t / 4000);
+            
+            // Modulate the sine waves organically
+            // - Amplitude is affected by midNoise
+            // - Additive jitters via fastNoise
+            // - Slow underlying drift via slowNoise
+            let modulated = baseSignal * (0.6 + 0.5 * midNoise) + (fastNoise * 0.15) + (slowNoise * 0.4);
+            
+            // Clamp to prevent exceeding canvas height bounds beautifully (-1 to 1)
+            return Math.max(-1, Math.min(1, modulated));
+        }
+
+        function drawWaveform(timeToAdvance) {
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw labels
+            ctx.fillStyle = '#888';
+            ctx.font = '14px sans-serif';
+            ctx.fillText("Changing Resistance", 20, 30);
+            ctx.fillText("555 Output", 20, 270);
+
+            // Arrays to hold our computed path points
+            const analogPoints = [];
+            const squarePoints = [];
+
+            // Calculate the 555 period exactly at the left edge to advance our phase anchor
+            const t_left = timeOffset;
+            const analogVal_left = computeAnalogVal(t_left);
+            const R_leaf_left = 775000 - 725000 * analogVal_left; 
+            const t_high_left = 0.693 * (R1 + R_leaf_left) * C * 1000;
+            const t_low_left = 0.693 * R_leaf_left * C * 1000;
+            const period_left = t_high_left + t_low_left;
+
+            // Phase strictly follows the actual time elapsed, guaranteeing lock to visual flow
+            leftEdgePhase += timeToAdvance / period_left;
+            leftEdgePhase %= 1.0;
+
+            let currentPhase = leftEdgePhase;
+            let lastState = -1;
+            const dt_pixel = totalTimeMs / width;
+
+            // Step across the canvas X-axis pixel by pixel
+            for(let x = 0; x < width; x++) {
+                // Convert current pixel to absolute time
+                const t = timeOffset + (x / width) * totalTimeMs; 
+                
+                // 1. GENERATE THE ANALOG SIGNAL
+                const analogVal = computeAnalogVal(t); 
+                const R_leaf = 775000 - 725000 * analogVal; 
+                
+                // Plot the analog point (upper half of canvas)
+                const yAnalog = 130 - (analogVal * 70);
+                analogPoints.push({x: x, y: yAnalog});
+                
+                // 2. CALCULATE 555 TIMINGS (in ms)
+                const t_high = 0.693 * (R1 + R_leaf) * C * 1000;
+                const t_low = 0.693 * R_leaf * C * 1000;
+                const period = t_high + t_low;
+                
+                // Determine state based on phase and duty cycle
+                const dutyCycleThreshold = t_high / period;
+                const state = (currentPhase % 1.0) < dutyCycleThreshold ? 1 : 0;
+                
+                // Plot the square wave point (lower half of canvas)
+                const ySquare = state === 1 ? 300 : 440;
+                
+                // Draw vertical lines for crisp square edges, even when aliasing
+                if (x > 0 && state !== lastState && lastState !== -1) {
+                    squarePoints.push({x: x, y: lastState === 1 ? 300 : 440});
+                }
+                squarePoints.push({x: x, y: ySquare});
+                lastState = state;
+                
+                // 3. INTEGRATE PHASE FOR THE NEXT PIXEL
+                currentPhase += (dt_pixel / period);
+            }
+
+            // --- Render Analog Wave ---
+            ctx.beginPath();
+            ctx.strokeStyle = '#3498db'; // Bright blue
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = 'rgba(52, 152, 219, 0.6)';
+            ctx.lineWidth = 3;
+            ctx.moveTo(analogPoints[0].x, analogPoints[0].y);
+            for (let i = 1; i < analogPoints.length; i++) {
+                ctx.lineTo(analogPoints[i].x, analogPoints[i].y);
+            }
+            ctx.stroke();
+
+            // --- Render Square Wave ---
+            ctx.beginPath();
+            ctx.strokeStyle = '#2ecc71'; // Bright green
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = 'rgba(46, 204, 113, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.moveTo(squarePoints[0].x, squarePoints[0].y);
+            for (let i = 1; i < squarePoints.length; i++) {
+                ctx.lineTo(squarePoints[i].x, squarePoints[i].y);
+            }
+            ctx.stroke();
+            
+            // Reset shadows
+            ctx.shadowBlur = 0;
+        }
+
+        function animate(currentTime) {
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            // Scroll the wave forward continuously
+            // Cap delta time to prevent massive jumps if tab is backgrounded
+            const cappedDelta = Math.min(deltaTime, 50); 
+            
+            // Scroll visually at a constant pixel speed across zoom levels
+            // Flow rate of 1.0 = 1 full screen width (totalTimeMs) per 1000 real-world ms
+            const timeToAdvance = (cappedDelta / 1000) * totalTimeMs * flowRate;
+            timeOffset += timeToAdvance;
+
+            drawWaveform(timeToAdvance);
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Start the animation loop
+        requestAnimationFrame((time) => {
+            lastFrameTime = time;
+            animate(time);
+        });
+    </script>
+</body>
+</html>

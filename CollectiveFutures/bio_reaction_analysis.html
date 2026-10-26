@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio Reaction Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Styling for Range Sliders to match the flat, dark theme */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #00bfa5;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 2px;
+            border: 1px solid #222;
+        }
+        input[type=range]::-moz-range-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #00bfa5;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 2px;
+            border: 1px solid #222;
+        }
+        
+        /* Math Fraction Styling for the Formulas */
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            padding: 0 2px;
+            vertical-align: middle;
+            text-align: center;
+            font-size: 0.85em;
+        }
+        .fraction span:first-child {
+            border-bottom: 1px solid #d1d5db; /* Tailwind gray-300 */
+            padding-bottom: 1px;
+        }
+        .fraction span:last-child {
+            padding-top: 1px;
+        }
+    </style>
+</head>
+<body class="bg-[#121212] text-gray-200 font-sans h-screen p-4 lg:p-6 box-border overflow-x-hidden flex flex-col">
+
+    <!-- Main Container -->
+    <div class="flex flex-col lg:flex-row gap-6 w-full h-full max-w-screen-2xl mx-auto">
+        
+        <!-- Left Column: Visual Formulas (30%) -->
+        <div class="w-full lg:w-[30%] bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] p-6 lg:p-8 flex flex-col shadow-lg flex-shrink-0 overflow-y-auto">
+            <h2 class="text-sm font-bold text-gray-500 mb-8 tracking-widest uppercase border-b border-[#333] pb-2">Visual Formula</h2>
+            
+            <div class="space-y-10 flex-1">
+                <!-- Average Formula -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">AVERAGE (μ)</h3>
+                    <div class="text-xl font-mono text-gray-200 flex items-center">
+                        μ = <div class="fraction mx-2 text-gray-400"><span>1</span><span>n</span></div> <span class="text-2xl mr-2">∑</span> x<sub>i</sub>
+                    </div>
+                </div>
+
+                <!-- Standard Deviation Formula -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">STANDARD DEVIATION (σ)</h3>
+                    <div class="text-xl font-mono text-gray-200 flex items-center">
+                        σ = √<span class="border-t border-gray-400 pt-1 ml-1 flex items-center"><div class="fraction mx-2 text-gray-400"><span>1</span><span>n-1</span></div> <span class="text-2xl mr-2">∑</span> (x<sub>i</sub> - μ)²</span>
+                    </div>
+                </div>
+
+                <!-- Delta Formula -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">MAGNITUDE (Δ)</h3>
+                    <div class="text-xl font-mono text-gray-200">
+                        Δ = Max - Min
+                    </div>
+                </div>
+
+                <!-- Detection Gate -->
+                <div class="mt-auto pt-6 border-t border-[#333]">
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">DETECTION GATE</h3>
+                    <div class="text-lg font-mono text-gray-200 bg-[#252525] p-4 rounded-lg border border-[#333]">
+                        IF σ > T <span class="text-red-400">→</span> EVENT FLAGGED
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Controls & Visualization (70%) -->
+        <div class="w-full lg:w-[70%] flex flex-col gap-6 h-[600px] lg:h-full">
+            
+            <!-- Controls Row -->
+            <div class="bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] p-5 shadow-lg flex flex-col sm:flex-row gap-8 items-center flex-shrink-0">
+                
+                <!-- Block Size Slider -->
+                <div class="w-full flex-1">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="blockSize" class="text-xs font-semibold text-gray-400 tracking-widest uppercase">Block Size</label>
+                        <span id="blockSizeVal" class="font-mono text-[#00bfa5] text-sm">10</span>
+                    </div>
+                    <input type="range" id="blockSize" min="5" max="15" value="10" step="1">
+                </div>
+
+                <!-- Threshold Slider -->
+                <div class="w-full flex-1">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="threshold" class="text-xs font-semibold text-gray-400 tracking-widest uppercase">Threshold Value (T)</label>
+                        <span id="thresholdVal" class="font-mono text-[#00bfa5] text-sm">1.0</span>
+                    </div>
+                    <input type="range" id="threshold" min="0.1" max="3.0" value="1.0" step="0.1">
+                </div>
+            </div>
+
+            <!-- Visualization Canvas -->
+            <div class="bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] shadow-lg flex-1 overflow-hidden relative" id="canvasContainer">
+                <canvas id="vizCanvas" class="block w-full h-full absolute inset-0"></canvas>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        // 1. Data Initialization
+        // Hardcoded 30-point data stream representing biorhythms. 
+        // Noticeable variance introduced in the middle segment (indices 10-19)
+        const bioData = [
+            10.2, 9.9, 10.3, 10.6, 9.9, 9.9, 10.6, 10.3, 9.8, 10.2, // Low variance
+            8.8, 8.8, 11.4, 5.2, 5.7, 9.2, 7.5, 11.6, 7.7, 6.5,     // High variance
+            10.8, 10.4, 10.6, 9.8, 10.2, 10.6, 9.9, 10.7, 10.2, 10.4 // Low variance
+        ];
+
+        // 2. Elements & State
+        const canvas = document.getElementById('vizCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvasContainer');
+        
+        const blockSizeSlider = document.getElementById('blockSize');
+        const thresholdSlider = document.getElementById('threshold');
+        const blockSizeDisplay = document.getElementById('blockSizeVal');
+        const thresholdDisplay = document.getElementById('thresholdVal');
+
+        let currentBlockSize = parseInt(blockSizeSlider.value);
+        let currentThreshold = parseFloat(thresholdSlider.value);
+
+        // 3. Math Helpers
+        function calculateStats(arr) {
+            const n = arr.length;
+            if (n === 0) return { mean: 0, stdev: 0, max: 0, min: 0 };
+            
+            const sum = arr.reduce((a, b) => a + b, 0);
+            const mean = sum / n;
+            
+            // Sample standard deviation
+            const sumSq = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+            const stdev = n > 1 ? Math.sqrt(sumSq / (n - 1)) : 0;
+            
+            const max = Math.max(...arr);
+            const min = Math.min(...arr);
+            
+            return { mean, stdev, max, min };
+        }
+
+        // 4. Drawing Engine
+        function render() {
+            // Fix DPI scaling for crisp canvas lines
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            const width = rect.width;
+            const height = rect.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Chart Configuration
+            const padding = { top: 90, bottom: 30, left: 30, right: 30 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+            
+            const numPoints = bioData.length;
+            const xStep = chartWidth / (numPoints - 1);
+            
+            // Define fixed Y limits based on known dataset to prevent graph jumping
+            const yMin = 4.0;
+            const yMax = 13.0;
+            const yRange = yMax - yMin;
+
+            // Coordinate mapping functions
+            const getX = (index) => padding.left + (index * xStep);
+            const getY = (val) => padding.top + chartHeight - ((val - yMin) / yRange) * chartHeight;
+
+            const numBlocks = Math.ceil(numPoints / currentBlockSize);
+
+            // PASS 1: Draw Background Highlights and Stats
+            for (let b = 0; b < numBlocks; b++) {
+                const startIdx = b * currentBlockSize;
+                const endIdx = Math.min(startIdx + currentBlockSize - 1, numPoints - 1);
+                
+                // Visual boundaries for the block highlight
+                const bStartX = startIdx === 0 ? getX(0) : getX(startIdx - 0.5);
+                const bEndX = endIdx === numPoints - 1 ? getX(endIdx) : getX(endIdx + 0.5);
+                
+                const blockData = bioData.slice(startIdx, endIdx + 1);
+                const stats = calculateStats(blockData);
+                
+                const isFlagged = stats.stdev > currentThreshold;
+
+                // Draw Block Background if Threshold Exceeded
+                if (isFlagged) {
+                    ctx.fillStyle = 'rgba(211, 47, 47, 0.15)'; // Muted red
+                    ctx.fillRect(bStartX, padding.top - 20, bEndX - bStartX, chartHeight + 40);
+
+                    // Identify and draw Magnitude line
+                    const maxIdx = startIdx + blockData.indexOf(stats.max);
+                    const minIdx = startIdx + blockData.indexOf(stats.min);
+
+                    // Vertical line at Max point, extending down to Min Y-level
+                    ctx.strokeStyle = '#d32f2f';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(getX(maxIdx), getY(stats.max));
+                    ctx.lineTo(getX(maxIdx), getY(stats.min));
+                    ctx.stroke();
+
+                    // Dashed connecting line from Min point to the vertical magnitude line
+                    ctx.beginPath();
+                    ctx.setLineDash([4, 4]);
+                    ctx.moveTo(getX(minIdx), getY(stats.min));
+                    ctx.lineTo(getX(maxIdx), getY(stats.min));
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Draw Max/Min solid red dots
+                    ctx.fillStyle = '#d32f2f';
+                    ctx.beginPath(); ctx.arc(getX(maxIdx), getY(stats.max), 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(getX(minIdx), getY(stats.min), 5, 0, Math.PI * 2); ctx.fill();
+
+                    // Label the Magnitude
+                    ctx.fillStyle = '#ef5350';
+                    ctx.font = '12px sans-serif';
+                    ctx.textAlign = maxIdx > (startIdx + currentBlockSize/2) ? 'right' : 'left';
+                    const textOffset = maxIdx > (startIdx + currentBlockSize/2) ? -10 : 10;
+                    const deltaVal = (stats.max - stats.min).toFixed(2);
+                    ctx.fillText(`Δ = ${deltaVal}`, getX(maxIdx) + textOffset, (getY(stats.max) + getY(stats.min)) / 2);
+                }
+
+                // Draw Block Separator Line (except for the first block edge)
+                if (startIdx > 0) {
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([2, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(bStartX, 10);
+                    ctx.lineTo(bStartX, height - 10);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // Draw Top Stats Text
+                ctx.fillStyle = isFlagged ? '#ef5350' : '#888';
+                ctx.font = '11px monospace';
+                ctx.textAlign = 'center';
+                const centerX = (bStartX + bEndX) / 2;
+                const textY = 25;
+                
+                ctx.fillText(`μ: ${stats.mean.toFixed(2)}`, centerX, textY);
+                // Highlight sigma text if it triggers the threshold
+                ctx.fillStyle = isFlagged ? '#ef5350' : '#888';
+                ctx.font = isFlagged ? 'bold 11px monospace' : '11px monospace';
+                ctx.fillText(`σ: ${stats.stdev.toFixed(2)}`, centerX, textY + 16);
+                
+                ctx.fillStyle = '#666';
+                ctx.font = '11px monospace';
+                ctx.fillText(`Max: ${stats.max.toFixed(1)} | Min: ${stats.min.toFixed(1)}`, centerX, textY + 32);
+            }
+
+            // PASS 2: Draw the main data line graph
+            ctx.strokeStyle = '#00bfa5'; // Teal
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < numPoints; i++) {
+                if (i === 0) ctx.moveTo(getX(i), getY(bioData[i]));
+                else ctx.lineTo(getX(i), getY(bioData[i]));
+            }
+            ctx.stroke();
+
+            // Draw Data Dots
+            ctx.fillStyle = '#1e1e1e';
+            ctx.strokeStyle = '#00bfa5';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < numPoints; i++) {
+                ctx.beginPath();
+                ctx.arc(getX(i), getY(bioData[i]), 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+
+        // 5. Event Listeners
+        blockSizeSlider.addEventListener('input', (e) => {
+            currentBlockSize = parseInt(e.target.value);
+            blockSizeDisplay.textContent = currentBlockSize;
+            render();
+        });
+
+        thresholdSlider.addEventListener('input', (e) => {
+            currentThreshold = parseFloat(e.target.value);
+            thresholdDisplay.textContent = currentThreshold.toFixed(1);
+            render();
+        });
+
+        window.addEventListener('resize', render);
+
+        // Initial render
+        window.addEventListener('load', render);
+
+    </script>
+</body>
+</html>
