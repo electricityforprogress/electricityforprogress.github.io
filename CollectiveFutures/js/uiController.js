@@ -387,11 +387,6 @@ function initPiano() {
     });
 }
 
-function togglePianoKey(noteIdx) {
-    if(!synthChannels[activeSynthIndex]) return;
-    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
-    document.getElementById('ui-scaleType').value = 'custom'; updateActiveSynth('scaleType', 'custom'); syncPianoUI();
-}
 
 function applyScalePreset() {
     if(!synthChannels[activeSynthIndex]) return;
@@ -429,13 +424,68 @@ function triggerLED(index) { const led = document.getElementById(`led-${index}`)
 function setVolume(ch, val) { if (synthChannels[ch]) synthChannels[ch].setVolume(val); }
 function toggleMute(ch) { if (synthChannels[ch]) synthChannels[ch].toggleMute(); }
 
+window.syncParamsToHardware = function(chIdx) {
+    if (!synthChannels[chIdx]) return;
+    const p = synthChannels[chIdx].params;
+    
+    // Scale Parameters to 0-127 MIDI values for UART Sync
+    sendHardwareCC(chIdx, 81, Math.min(127, Math.max(0, ((p.threshold - 0.05) / 4.95) * 127)));
+    sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, ((p.sampleSize - 10) / 90) * 127)));
+    sendHardwareCC(chIdx, 83, p.density);
+    sendHardwareCC(chIdx, 84, p.minNote);
+    sendHardwareCC(chIdx, 85, p.maxNote);
+    sendHardwareCC(chIdx, 86, p.velMin);
+    sendHardwareCC(chIdx, 87, p.velMax);
+    sendHardwareCC(chIdx, 88, p.spread);
+    sendHardwareCC(chIdx, 89, Math.min(127, Math.max(0, ((p.durMult - 0.1) / 4.9) * 127)));
+    sendHardwareCC(chIdx, 90, p.quantize);
+    sendHardwareCC(chIdx, 91, p.midiOutCh);
+    sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
+    sendHardwareCC(chIdx, 93, Math.min(127, Math.max(0, ((p.voices - 1) / 7) * 127)));
+    
+    let stealVal = p.stealMode === 'oldest' ? 0 : (p.stealMode === 'lowest' ? 42 : (p.stealMode === 'highest' ? 84 : 127));
+    sendHardwareCC(chIdx, 94, stealVal);
+    sendHardwareCC(chIdx, 95, p.legato === 1 ? 127 : 0);
+    
+    // Push Scale Toggles (CC 104-115)
+    for (let i = 0; i < 12; i++) {
+        sendHardwareCC(chIdx, 104 + i, p.activeScaleBits[i] ? 127 : 0);
+    }
+};
+
 function updateActiveSynth(param, value) {
     if (param === 'bpm') {
         if (window.midiClockMode === 'in') return;
         window.masterBPM = isNaN(value) ? window.masterBPM : parseFloat(value);
         syncUI();
+        if (window.bleTxCharacteristic) {
+            for (let i=0; i<4; i++) sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
+        }
         return;
     }
+    
+    if (!synthChannels[activeSynthIndex]) return;
+    if (param === 'stealMode' || param === 'scaleType') {
+        synthChannels[activeSynthIndex].params[param] = value;
+    } else {
+        synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+    }
+    synthChannels[activeSynthIndex].applyParams();
+    window.markChannelDirty(activeSynthIndex);
+
+    // Dynamic Hardware Sync
+    if (window.bleTxCharacteristic) window.syncParamsToHardware(activeSynthIndex);
+}
+
+// Modify togglePianoKey inside uiController to force sync on click:
+function togglePianoKey(noteIdx) {
+    if(!synthChannels[activeSynthIndex]) return;
+    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
+    document.getElementById('ui-scaleType').value = 'custom'; 
+    updateActiveSynth('scaleType', 'custom'); 
+    syncPianoUI();
+    if (window.bleTxCharacteristic) window.sendHardwareCC(activeSynthIndex, 104 + noteIdx, synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] ? 127 : 0);
+}
     
     if (!synthChannels[activeSynthIndex]) return;
     if (param === 'stealMode' || param === 'scaleType') {
