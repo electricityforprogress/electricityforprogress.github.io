@@ -19,26 +19,28 @@ navigator.requestMIDIAccess({ sysex: false }).then(access => {
     select.addEventListener('change', (e) => window.midiOutput = access.outputs.get(e.target.value) || null);
 }).catch(()=>{});
 
-// NEW: Helper to send CCs to the hardware over UART
+// --- UART SYNC COMMANDS (These were missing!) ---
 window.sendHardwareCC = function(ch, cc, val) {
     if (window.bleTxCharacteristic) {
         try {
             let cmd = `C:${ch},${cc},${Math.round(val)}\n`;
             let encoder = new TextEncoder();
             window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(cmd));
-        } catch (e) { console.error("BLE TX Error:", e); }
+        } catch (e) { console.error("BLE TX CC Error:", e); }
     }
 };
 
 window.sendHardwareScale = function(ch, mask) {
     if (window.bleTxCharacteristic) {
         try {
+            let cmd = `S:${ch},${mask}\n`;
             let encoder = new TextEncoder();
-            window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(`S:${ch},${mask}\n`));
-        } catch (e) { console.error("BLE TX Error:", e); }
+            window.bleTxCharacteristic.writeValueWithoutResponse(encoder.encode(cmd));
+        } catch (e) { console.error("BLE TX Scale Error:", e); }
     }
 };
 
+// --- MIDI OUT ---
 window.sendMidiNote = function(channel, pitch, velocity, duration, playTimeAudioCtx) {
     let played = false;
     if (synthChannels[channel]) played = synthChannels[channel].play(pitch, velocity, duration, playTimeAudioCtx);
@@ -55,6 +57,15 @@ window.sendMidiNote = function(channel, pitch, velocity, duration, playTimeAudio
     return played; 
 };
 
+window.sendMidiCC = function(channel, ccNumber, val) {
+    if (typeof midiOutput !== 'undefined' && midiOutput) {
+        let midiCh = synthChannels[channel] ? (synthChannels[channel].params.midiOutCh || channel) : channel;
+        let sysTime = window.performance.now();
+        midiOutput.send([0xB0 + midiCh, ccNumber, val], sysTime);
+    }
+};
+
+// --- BLE CONNECTION ---
 window.connectBLE = async function() {
     const btn = document.getElementById('btn-ble');
     if (window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected) {
@@ -81,7 +92,8 @@ window.connectBLE = async function() {
         
         device.addEventListener('gattserverdisconnected', () => { 
             if(btn) btn.innerHTML = 'CONNECT <span id="ble-status" class="status-offline" style="color: var(--red);">●</span>';
-            window.activeBleDevice = null; window.bleTxCharacteristic = null;
+            window.activeBleDevice = null;
+            window.bleTxCharacteristic = null;
         });
         
         await rxChar.startNotifications();
@@ -98,7 +110,7 @@ window.connectBLE = async function() {
         });
         if(btn) btn.innerHTML = 'DISCONNECT <span id="ble-status" class="status-online" style="color: var(--green);">●</span>';
         
-        // Push the entire current preset state to the hardware upon connecting!
+        // Push full state on connect
         setTimeout(() => { if (typeof syncParamsToHardware === 'function') syncParamsToHardware(activeSynthIndex); }, 500);
 
     } catch (error) { 
@@ -113,8 +125,7 @@ window.processBiodata = function(payload) {
     let chIdx = payload.ch;
     let ch = chData[chIdx];
     if (!ch) return;
-    
-    // --- HARDWARE MASTER DISPATCHER ---
+
     if (payload.type === 'note') {
         let playTime = window.audioCtx.currentTime + 0.015;
         window.sendMidiNote(chIdx, payload.n, payload.v, payload.d, playTime);
@@ -122,7 +133,7 @@ window.processBiodata = function(payload) {
         if (!ch.notes) ch.notes = [];
         ch.notes.push({ n: payload.n, t: Date.now(), dur: payload.d, v: payload.v });
         
-        // RESTORE VISUALIZER LINES: Tag the latest point in the buffer as a Note Event!
+        // Tag visualizer line
         if (ch.waveBuffer && ch.waveBuffer.length > 0) {
             let lastIdx = ch.waveBuffer.length - 1;
             ch.waveBuffer[lastIdx].evt = 1;
@@ -133,10 +144,9 @@ window.processBiodata = function(payload) {
         return;
     }
 
-    // --- TELEMETRY RENDERER & VISUALIZER MATH ---
     if (payload.type === 'raw' && Array.isArray(payload.p)) {
         if (!ch.waveBuffer) ch.waveBuffer = [];
-        if (!ch.vizBuffer) ch.vizBuffer = []; // Rolling buffer for UI math
+        if (!ch.vizBuffer) ch.vizBuffer = [];
         if (!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
 
         let pConfig = synthChannels[chIdx] ? synthChannels[chIdx].params : window.defaultParams;
@@ -157,7 +167,7 @@ window.processBiodata = function(payload) {
             if (ch.vizBuffer.length > (pConfig.sampleSize || 40)) ch.vizBuffer.shift();
         });
         
-        // Restore Local Standard Deviation specifically for the Threshold UI
+        // Rolling variance math strictly for the visualizer meter
         let maxim = 0, minim = 1000000, averg = 0, stdevi = 0;
         ch.vizBuffer.forEach(v => {
             if (v > maxim) maxim = v;
