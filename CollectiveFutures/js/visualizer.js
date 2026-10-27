@@ -208,6 +208,7 @@ function initVisualizer() {
                 chData[i].vizBuffer = [];
                 chData[i].history = [];
                 chData[i].notes = [];
+                chData[i].peakHoldPct = 0;
             }
             e.target.style.background = 'var(--red)';
             e.target.style.color = '#fff';
@@ -327,7 +328,12 @@ function renderLoop() {
             if(!ch.notes) ch.notes = [];
             if(!ch.history) ch.history = [];
             if(!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
-            if(ch.vizDeltaPct === undefined) ch.vizDeltaPct = 0;
+            
+            // Handle background memory management unconditionally
+            while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
+
+            // THE FREEZE FIX: Skip all canvas clearing and redrawing if frozen.
+            if (ch.config.freeze) continue; 
             
             let sCtx = sCtxs[i], rCtx = rCtxs[i];
             let sw = sCtx.canvas.clientWidth, sh = sCtx.canvas.clientHeight;
@@ -338,10 +344,6 @@ function renderLoop() {
             if (sCtx.canvas.height !== sh) sCtx.canvas.height = sh;
             if (rCtx.canvas.width !== rw) rCtx.canvas.width = rw;
             if (rCtx.canvas.height !== rh) rCtx.canvas.height = rh;
-
-            if (!ch.config.freeze) {
-                while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
-            }
 
             sCtx.clearRect(0, 0, sw, sh);
             let displayCount = Math.min(ch.config.zoom, ch.waveBuffer.length);
@@ -371,10 +373,14 @@ function renderLoop() {
                     if (chunkEnd > displayCount) chunkEnd = displayCount;
                     
                     let binMin = 1000000, binMax = 0;
+                    let rawMin = 1000000, rawMax = 0; 
                     
                     for (let j = chunkStart; j < chunkEnd; j++) {
                         let rawVal = ch.waveBuffer[startIndex + j].r || currentEma1;
                         if (!isFinite(rawVal)) rawVal = currentEma1;
+
+                        if (rawVal < rawMin) rawMin = rawVal;
+                        if (rawVal > rawMax) rawMax = rawVal;
 
                         currentEma1 = (rawVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
                         currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
@@ -382,7 +388,6 @@ function renderLoop() {
                         
                         sum += currentEma2;
                         
-                        // We strictly use the smoothed data to bound the Y-Axis and find the visual peaks
                         if (currentEma2 < binMin) binMin = currentEma2;
                         if (currentEma2 > binMax) binMax = currentEma2;
                         
@@ -391,7 +396,7 @@ function renderLoop() {
                     }
                     
                     if (chunkStart < chunkEnd) {
-                        binnedData.push({ x: px, yMin: binMin, yMax: binMax });
+                        binnedData.push({ x: px, yMin: binMin, yMax: binMax, rawMin: rawMin, rawMax: rawMax });
                     }
                 }
 
@@ -407,66 +412,43 @@ function renderLoop() {
                 let paddedRange = range * 1.2;
                 let getPathY = (val) => sh - ((val - paddedMin) / paddedRange * sh);
 
-                // --- THE GLOWING THRESHOLD TUBE ---
-                let vMean = avgVal; 
-                let vStd = ch.lastStdevi || 1.0;
-                let threshMult = (synthChannels[i] && synthChannels[i].params.threshold) ? synthChannels[i].params.threshold : 2.0;
-
-                let yUpper = getPathY(vMean + (threshMult * vStd));
-                let yLower = getPathY(vMean - (threshMult * vStd));
-                let yMeanLine = getPathY(vMean);
-
-                let grad = sCtx.createLinearGradient(0, yUpper, 0, yLower);
-                grad.addColorStop(0, 'rgba(0, 200, 255, 0.4)');
-                grad.addColorStop(0.5, 'rgba(0, 200, 255, 0.02)');
-                grad.addColorStop(1, 'rgba(0, 200, 255, 0.4)');
-                
-                sCtx.fillStyle = grad;
-                sCtx.fillRect(0, yUpper, sw, yLower - yUpper);
-
-                sCtx.strokeStyle = 'rgba(0, 200, 255, 0.8)';
-                sCtx.setLineDash([2, 4]);
+                // --- DATA CHART PASS 1: RAW GHOST JITTER ---
+                sCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; 
+                sCtx.lineWidth = 1; 
                 sCtx.beginPath();
-                sCtx.moveTo(0, yUpper); sCtx.lineTo(sw, yUpper);
-                sCtx.moveTo(0, yLower); sCtx.lineTo(sw, yLower);
-                sCtx.stroke();
-                sCtx.setLineDash([]);
-
-                sCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-                sCtx.beginPath(); sCtx.moveTo(0, yMeanLine); sCtx.lineTo(sw, yMeanLine); sCtx.stroke();
-
-                // --- THE DYNAMIC WAVEFORM PUNCTURE HIGHLIGHTING ---
                 if (binnedData.length > 0) {
-                    let prevX = binnedData[0].x;
-                    let prevY = getPathY((binnedData[0].yMin + binnedData[0].yMax) / 2);
-                    
-                    sCtx.lineJoin = "round"; 
-                    sCtx.lineCap = "round"; 
-
+                    sCtx.moveTo(binnedData[0].x, getPathY(binnedData[0].rawMax));
                     for (let b = 1; b < binnedData.length; b++) {
-                        let yMid = getPathY((binnedData[b].yMin + binnedData[b].yMax) / 2);
-                        
-                        // Does this specific pixel segment puncture outside the glowing tube bounds?
-                        let isPunctured = (binnedData[b].yMax > vMean + (threshMult * vStd)) || (binnedData[b].yMin < vMean - (threshMult * vStd));
-                        
-                        sCtx.beginPath();
-                        sCtx.moveTo(prevX, prevY);
-                        sCtx.lineTo(binnedData[b].x, yMid);
-                        sCtx.strokeStyle = isPunctured ? window.CH_COLORS[i] : 'rgba(255, 255, 255, 0.4)';
-                        sCtx.lineWidth = isPunctured ? 3.0 : 1.5;
-                        sCtx.stroke();
-                        
-                        if (binnedData[b].yMax - binnedData[b].yMin > (range * 0.02)) {
-                            sCtx.beginPath();
-                            sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].yMax));
-                            sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].yMin));
-                            sCtx.stroke();
+                        sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].rawMax));
+                        if (binnedData[b].rawMax - binnedData[b].rawMin > (range * 0.01)) {
+                            sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].rawMin));
+                            sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].rawMax));
                         }
-                        prevX = binnedData[b].x;
-                        prevY = yMid;
                     }
                 }
+                sCtx.stroke();
 
+                // --- DATA CHART PASS 2: SMOOTH CHANNEL TREND ---
+                sCtx.strokeStyle = window.CH_COLORS[i]; 
+                sCtx.lineWidth = 2.5; 
+                sCtx.lineJoin = "round"; 
+                sCtx.lineCap = "round"; 
+                sCtx.beginPath();
+                if (binnedData.length > 0) {
+                    sCtx.moveTo(binnedData[0].x, getPathY((binnedData[0].yMin + binnedData[0].yMax) / 2));
+                    for (let b = 1; b < binnedData.length; b++) {
+                        let yMid = getPathY((binnedData[b].yMin + binnedData[b].yMax) / 2);
+                        sCtx.lineTo(binnedData[b].x, yMid);
+                        if (binnedData[b].yMax - binnedData[b].yMin > (range * 0.02)) {
+                            sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].yMax));
+                            sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].yMin));
+                            sCtx.moveTo(binnedData[b].x, yMid); 
+                        }
+                    }
+                }
+                sCtx.stroke();
+
+                // --- DATA CHART PASS 3: NOTE HIGHLIGHTS ---
                 let step = Math.max(1, Math.floor(displayCount / (sw > 0 ? sw : 500)));
                 for(let j=0; j<displayCount; j+=step) {
                     let hasEvent = false; let eventNote = null;
@@ -554,35 +536,58 @@ function renderLoop() {
                 });
             }
 
+            // --- THE THRESHOLD CONTROL METER (PEAK + SPARK) ---
             let miniTC = document.getElementById(`ch-mini-vu-thresh-${i}`);
             if (miniTC && resizeCanvasToDisplaySize(miniTC) && synthChannels[i] && synthChannels[i].params) {
                 let ctx = miniTC.getContext('2d');
-                ctx.clearRect(0,0,miniTC.width,miniTC.height);
+                ctx.clearRect(0, 0, miniTC.width, miniTC.height);
                 
                 let minMult = 0.05, maxMult = 5.0;
-                let threshPct = (synthChannels[i].params.threshold - minMult) / (maxMult - minMult);
+                let threshVal = synthChannels[i].params.threshold;
+                let threshPct = (threshVal - minMult) / (maxMult - minMult);
+                
                 let currentMult = (ch.lastStdevi > 0) ? (ch.lastDelta / ch.lastStdevi) : 0;
-                let deltaPct = Math.max(0, Math.min(1, (currentMult - minMult) / (maxMult - minMult)));
+                let currentPct = Math.max(0, Math.min(1, (currentMult - minMult) / (maxMult - minMult)));
                 
-                if (deltaPct > ch.vizDeltaPct) ch.vizDeltaPct = deltaPct;
-                else ch.vizDeltaPct = (deltaPct * 0.1) + (ch.vizDeltaPct * 0.9);
+                if (ch.vizDeltaPct === undefined) ch.vizDeltaPct = 0;
+                if (currentPct > ch.vizDeltaPct) ch.vizDeltaPct = currentPct;
+                else ch.vizDeltaPct = (currentPct * 0.1) + (ch.vizDeltaPct * 0.9);
                 
+                // Peak Hold Logic
+                if (!ch.peakHoldPct) ch.peakHoldPct = 0;
+                if (currentPct > threshPct && currentPct > ch.peakHoldPct) {
+                    ch.peakHoldPct = currentPct;
+                    ch.peakHoldTime = nowMs;
+                } else if (nowMs - (ch.peakHoldTime || 0) > 500) {
+                    ch.peakHoldPct *= 0.95; 
+                }
+
                 let age = nowMs - (ch.lastBlockTime || nowMs);
                 let alpha = Math.max(0.1, 1 - (age / 1500));
-                
                 ctx.globalAlpha = alpha;
+                
+                // 1. Draw Normal Background Fill
                 let baseFillPct = Math.min(ch.vizDeltaPct, threshPct);
                 ctx.fillStyle = window.CH_COLORS[i];
                 ctx.fillRect(0, 0, baseFillPct * miniTC.width, miniTC.height);
                 
+                // 2. Draw The "Spark" (Aggressive Red/Pink Overflow)
                 if (ch.vizDeltaPct > threshPct) {
-                    ctx.fillStyle = '#ffd700'; 
+                    ctx.fillStyle = '#ff0055'; 
                     ctx.fillRect(threshPct * miniTC.width, 0, (ch.vizDeltaPct - threshPct) * miniTC.width, miniTC.height);
                 }
                 
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-                ctx.fillRect(threshPct * miniTC.width - 1, 0, 2, miniTC.height);
+                // 3. Draw The Gold Peak Hold Tick
+                if (ch.peakHoldPct > threshPct) {
+                    ctx.globalAlpha = 1.0;
+                    ctx.fillStyle = '#ffd700'; 
+                    ctx.fillRect(ch.peakHoldPct * miniTC.width - 2, 0, 2, miniTC.height);
+                }
+                
+                // 4. Draw The Slider Line (The Gate)
                 ctx.globalAlpha = 1.0;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.fillRect(threshPct * miniTC.width - 1, 0, 2, miniTC.height);
             }
         }
 
