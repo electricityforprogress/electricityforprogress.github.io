@@ -35,7 +35,7 @@ window.SCALES = {
 
 window.defaultParams = {
     mixVol: 0.6, muted: false, 
-    voices: 5, stealMode: 'oldest', legato: 0, glide: 0.0,
+    voices: 5, stealMode: 'none', legato: 0, glide: 0.0,
     sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } },
     filter: { cutoff: 8000, res: 2 },
     
