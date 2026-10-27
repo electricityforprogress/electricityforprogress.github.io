@@ -86,13 +86,22 @@ function hideTooltip() {
 }
 
 document.addEventListener('input', (e) => {
-    // --- THE FIX: Catch dynamic visualizer sliders to trigger BLE sync! ---
+    // FIXED: Explicitly map the values to the internal synth object BEFORE syncing to the hardware
     if (e.target.id && (e.target.id.startsWith('ch-mini-thresh-') || e.target.id.startsWith('ch-window-'))) {
         let ch = parseInt(e.target.id.split('-').pop());
-        if (!isNaN(ch)) window.debouncedHardwareSync(ch);
+        if (!isNaN(ch) && synthChannels[ch]) {
+            if (e.target.id.startsWith('ch-mini-thresh-')) {
+                synthChannels[ch].params.threshold = parseFloat(e.target.value);
+            } else {
+                synthChannels[ch].params.sampleSize = parseInt(e.target.value);
+            }
+            window.debouncedHardwareSync(ch);
+        }
     }
 
     if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
+        if (e.target.id === 'ui-test-injector') return; // FIXED: Ignore Test Injector for tooltips
+
         let slider = e.target;
         let val = parseFloat(slider.value);
         
@@ -139,7 +148,6 @@ document.addEventListener('pointerup', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    
     const makeSlidersDraggable = () => {
         document.querySelectorAll('input[type="range"]').forEach(slider => {
             if (slider.classList.contains('v-slider') || slider.classList.contains('dual-slider-input')) return; 
@@ -200,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (slider.id.includes('env')) group = 'env';
                     if (slider.id.includes('fx')) group = 'fx';
                     
-                    showTooltip(e.clientX, e.clientY - 20, steppedVal, param, group, slider);
+                    if (slider.id !== 'ui-test-injector') showTooltip(e.clientX, e.clientY - 20, steppedVal, param, group, slider);
                 }
             });
 
@@ -240,7 +248,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (synthChannels[activeSynthIndex]) {
                 synthChannels[activeSynthIndex].params[paramKey] = val;
                 if (labelId && formatFn) document.getElementById(labelId).innerText = formatFn(val);
-                window.debouncedHardwareSync(activeSynthIndex);
+                // FIXED: Do not sync testIntensity to BLE
+                if (paramKey !== 'testIntensity') window.debouncedHardwareSync(activeSynthIndex);
             }
         });
     };
@@ -502,7 +511,11 @@ function updateActiveSynth(param, value) {
     
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
-    window.debouncedHardwareSync(activeSynthIndex);
+
+    // FIXED: Block the Test slider from hitting the BLE queue
+    if (param !== 'testIntensity' && param !== 'testInjector') {
+        window.debouncedHardwareSync(activeSynthIndex);
+    }
 }
 
 function togglePianoKey(noteIdx) {
@@ -865,7 +878,11 @@ function initKnobs() {
             let rect = knob.getBoundingClientRect();
             let centerX = rect.left + (rect.width / 2);
             let topY = rect.top;
-            showTooltip(centerX, topY, newVal, param, group, knob);
+            
+            // FIXED: Exclude Test Injector from showing tooltips
+            if (param !== 'testIntensity') {
+                showTooltip(centerX, topY, newVal, param, group, knob);
+            }
             
             if (group) updateNestedSynth(group, param, newVal);
             else updateActiveSynth(param, newVal);
