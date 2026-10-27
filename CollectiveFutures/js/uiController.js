@@ -87,9 +87,9 @@ function hideTooltip() {
 
 document.addEventListener('input', (e) => {
     
-    // --- THE FIX: Aggressive Wildcard Catch for ANY Threshold Slider ---
+    // Explicit wildcard catch for visualizer sliders
     if (e.target.id && (e.target.id.toLowerCase().includes('thresh') || e.target.id.toLowerCase().includes('window'))) {
-        let ch = activeSynthIndex; // Default to active tab if no number found
+        let ch = activeSynthIndex;
         let match = e.target.id.match(/\d+/);
         if (match) ch = parseInt(match[0]);
         
@@ -150,6 +150,35 @@ document.addEventListener('pointerup', (e) => {
         hideTooltip();
     }
 });
+
+// --- PIANO FUNCTIONS (Hoisted to ensure safety) ---
+function togglePianoKey(noteIdx) {
+    if(!synthChannels[activeSynthIndex]) return;
+    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
+    document.getElementById('ui-scaleType').value = 'custom'; 
+    updateActiveSynth('scaleType', 'custom'); 
+    syncPianoUI();
+}
+
+function applyScalePreset() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    if (p.scaleType === 'custom') return; 
+    p.activeScaleBits.fill(false); 
+    window.SCALES[p.scaleType].forEach(deg => { 
+        p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
+    });
+    syncPianoUI();
+}
+
+function syncPianoUI() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
+    for(let i = 0; i < 12; i++) { 
+        let k = document.getElementById(`pkey-${i}`); 
+        if(k) k.classList.toggle('active', bits[i]); 
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     
@@ -525,15 +554,6 @@ function updateActiveSynth(param, value) {
     if (param !== 'testIntensity' && param !== 'testInjector') {
         window.debouncedHardwareSync(activeSynthIndex);
     }
-}
-
-function togglePianoKey(noteIdx) {
-    if(!synthChannels[activeSynthIndex]) return;
-    
-    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
-    document.getElementById('ui-scaleType').value = 'custom'; 
-    updateActiveSynth('scaleType', 'custom'); 
-    syncPianoUI();
 }
 
 // --- GLOBAL PRESET ENGINE ---
