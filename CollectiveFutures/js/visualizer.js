@@ -1,6 +1,6 @@
 /**
  * js/visualizer.js
- * Complete Multi-Channel Zoom, History, VU, and Threshold Gradient Visualizer
+ * Bulletproof Multi-Channel Zoom, History, VU, and Threshold Gradient Visualizer
  */
 
 window.chData = window.chData || [
@@ -10,9 +10,10 @@ window.chData = window.chData || [
     { config: { zoom: 1000, smooth: 0.5 }, waveBuffer: [], vizBuffer: [], history: [], notes: [] }
 ];
 
+window.defaultParams = window.defaultParams || { threshold: 2.5, sampleSize: 40 };
+
 window.startVisualizers = function() {
     
-    // Initialize UI controls for zoom/smooth if present
     for (let i = 0; i < 4; i++) {
         let zSlider = document.getElementById(`ch-zoom-${i}`);
         let sSlider = document.getElementById(`ch-smooth-${i}`);
@@ -40,9 +41,13 @@ window.startVisualizers = function() {
         requestAnimationFrame(draw);
 
         for (let i = 0; i < 4; i++) {
-            if (!synthChannels[i] || !chData[i]) continue;
+            if (!chData[i]) continue;
             let ch = chData[i];
-            let params = synthChannels[i].params;
+            
+            // Safe fallback if synthChannels isn't initialized yet
+            let params = (typeof synthChannels !== 'undefined' && synthChannels[i] && synthChannels[i].params) 
+                ? synthChannels[i].params 
+                : window.defaultParams;
 
             // --- 1. MIXER VU METERS ---
             let vu = document.getElementById(`vu-${i}`);
@@ -99,7 +104,8 @@ window.startVisualizers = function() {
             ctx.clearRect(0, 0, w, h);
 
             if (!ch.vizBuffer || ch.vizBuffer.length < 2) {
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                // Draw standby center line so canvas is never blank
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(0, h/2);
@@ -121,7 +127,7 @@ window.startVisualizers = function() {
             if (stdDev < minStdDev) stdDev = minStdDev;
             if (stdDev < 0.5) stdDev = 0.5;
 
-            // LOCKED Y-AXIS: Exactly 5.0 Standard Deviations for a rock-solid reference point
+            // LOCKED Y-AXIS: Exactly 5.0 Standard Deviations
             let yRangeMax = mean + (5.0 * stdDev);
             let yRangeMin = mean - (5.0 * stdDev);
             let absoluteRange = yRangeMax - yRangeMin;
@@ -206,25 +212,20 @@ window.startVisualizers = function() {
     requestAnimationFrame(draw);
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', window.startVisualizers);
-} else {
-    window.startVisualizers();
-}
-
-// --- COMPATIBILITY BINDING ---
+// --- COMPATIBILITY BINDINGS FOR MAIN.JS ---
 window.initVisualizer = function() {
-    if (typeof window.startVisualizers === 'function') {
-        window.startVisualizers();
-    }
+    if (typeof window.startVisualizers === 'function') window.startVisualizers();
 };
 
-// --- COMPATIBILITY BINDING FOR MAIN.JS ---
 window.renderLoop = function() {
-    // If the main visualizer loop is already running via requestAnimationFrame, 
-    // this acts as a safe alias so main.js stops throwing errors on load.
     if (typeof window.startVisualizers === 'function' && !window._visualizerStarted) {
         window._visualizerStarted = true;
         window.startVisualizers();
     }
 };
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', window.startVisualizers);
+} else {
+    window.startVisualizers();
+}
