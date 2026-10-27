@@ -86,6 +86,12 @@ function hideTooltip() {
 }
 
 document.addEventListener('input', (e) => {
+    // --- THE FIX: Catch dynamic visualizer sliders to trigger BLE sync! ---
+    if (e.target.id && (e.target.id.startsWith('ch-mini-thresh-') || e.target.id.startsWith('ch-window-'))) {
+        let ch = parseInt(e.target.id.split('-').pop());
+        if (!isNaN(ch)) window.debouncedHardwareSync(ch);
+    }
+
     if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
         let slider = e.target;
         let val = parseFloat(slider.value);
@@ -499,7 +505,6 @@ function updateActiveSynth(param, value) {
     window.debouncedHardwareSync(activeSynthIndex);
 }
 
-// THE FIX: Eliminated the double-send backlog!
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
     
@@ -507,7 +512,6 @@ function togglePianoKey(noteIdx) {
     document.getElementById('ui-scaleType').value = 'custom'; 
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
-    // updateActiveSynth automatically manages the debounce sync. No direct blast needed!
 }
 
 // --- GLOBAL PRESET ENGINE ---
