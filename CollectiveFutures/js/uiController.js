@@ -443,15 +443,21 @@ window.syncParamsToHardware = function(chIdx) {
     if (typeof window.sendHardwareCC === 'function') {
         window.sendHardwareCC(chIdx, 81, Math.min(127, Math.max(0, ((p.threshold - 0.05) / 4.95) * 127)));
         window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, ((p.sampleSize - 10) / 90) * 127)));
-        window.sendHardwareCC(chIdx, 83, p.density);
+        
+        // THE FIX: Properly scale 0-100 and 0-8 parameters up to 0-127 for the MIDI standard!
+        window.sendHardwareCC(chIdx, 83, Math.min(127, Math.max(0, (p.density / 100) * 127))); 
+        
         window.sendHardwareCC(chIdx, 84, p.minNote);
         window.sendHardwareCC(chIdx, 85, p.maxNote);
         window.sendHardwareCC(chIdx, 86, p.velMin);
         window.sendHardwareCC(chIdx, 87, p.velMax);
-        window.sendHardwareCC(chIdx, 88, p.spread);
+        
+        window.sendHardwareCC(chIdx, 88, Math.min(127, Math.max(0, (p.spread / 100) * 127)));
         window.sendHardwareCC(chIdx, 89, Math.min(127, Math.max(0, ((p.durMult - 0.1) / 4.9) * 127)));
-        window.sendHardwareCC(chIdx, 90, p.quantize);
-        window.sendHardwareCC(chIdx, 91, p.midiOutCh);
+        
+        window.sendHardwareCC(chIdx, 90, Math.min(127, Math.max(0, (p.quantize / 8) * 127)));
+        window.sendHardwareCC(chIdx, 91, Math.min(127, Math.max(0, (p.midiOutCh / 15) * 127)));
+        
         window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
         window.sendHardwareCC(chIdx, 93, Math.min(127, Math.max(0, ((p.voices - 1) / 7) * 127)));
         
