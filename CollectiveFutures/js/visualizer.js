@@ -1,6 +1,6 @@
 /**
  * js/visualizer.js
- * Self-Injecting Multi-Channel Zoom, History, VU, and Threshold Gradient Visualizer
+ * Fully Restored Multi-Channel Visualizer (Supports Mono & Quad Hardware)
  */
 
 window.chData = window.chData || [
@@ -11,6 +11,15 @@ window.chData = window.chData || [
 ];
 
 window.defaultParams = window.defaultParams || { threshold: 2.5, sampleSize: 40 };
+
+// Density visual flash trigger
+window.triggerDensityVisualizer = function(chIdx, type) {
+    let el = document.getElementById(`density-flash-${chIdx}`) || document.getElementById(`viz-ch-${chIdx}`);
+    if (el) {
+        el.classList.add('density-active');
+        setTimeout(() => el.classList.remove('density-active'), 150);
+    }
+};
 
 window.startVisualizers = function() {
     
@@ -40,7 +49,10 @@ window.startVisualizers = function() {
     function draw() {
         requestAnimationFrame(draw);
 
-        for (let i = 0; i < 4; i++) {
+        // Determine active channels (Supports Mono single-channel or Quad multi-channel)
+        let activeCount = (typeof synthChannels !== 'undefined' && synthChannels.length) ? synthChannels.length : 4;
+
+        for (let i = 0; i < activeCount; i++) {
             if (!chData[i]) continue;
             let ch = chData[i];
             
@@ -48,21 +60,22 @@ window.startVisualizers = function() {
                 ? synthChannels[i].params 
                 : window.defaultParams;
 
-            // --- 1. MIXER VU METERS ---
+            // --- 1. RESTORED MIXER VU METERS ---
             let vu = document.getElementById(`vu-${i}`);
             if (vu) {
                 let vCtx = vu.getContext('2d');
-                let vw = vu.width || 30;
-                let vvh = vu.height || 100;
+                let vw = vu.width || vu.clientWidth || 30;
+                let vvh = vu.height || vu.clientHeight || 120;
+                if (vu.width !== vw || vu.height !== vvh) { vu.width = vw; vu.height = vvh; }
+                
                 vCtx.clearRect(0, 0, vw, vvh);
-
-                vCtx.fillStyle = '#111';
+                vCtx.fillStyle = '#0a0d12';
                 vCtx.fillRect(0, 0, vw, vvh);
 
                 let level = 0;
                 if (ch.notes && ch.notes.length > 0) {
                     let now = Date.now();
-                    ch.notes = ch.notes.filter(n => now - n.t < n.dur);
+                    ch.notes = ch.notes.filter(n => now - n.t < (n.dur || 300));
                     if (ch.notes.length > 0) {
                         let maxVel = Math.max(...ch.notes.map(n => n.v));
                         level = maxVel / 127.0;
@@ -92,22 +105,14 @@ window.startVisualizers = function() {
                 valSlew.innerText = (ch.lastSlew !== undefined ? ch.lastSlew : 0).toFixed(3);
             }
 
-            // --- 3. MAIN THRESHOLD WAVEFORM CANVAS (WITH AUTO-INJECTION) ---
+            // --- 3. MAIN THRESHOLD WAVEFORM CANVAS & GRADIENT TUBE ---
             let canvas = document.getElementById(`ch-canvas-${i}`) || document.getElementById(`viz-ch-${i}`);
-            if (!canvas) {
-                // Self-heal: If canvas is missing from HTML, inject it into the matching panel div or body
-                let container = document.getElementById(`synth-panel-${i}`) || document.getElementById(`ch-panel-${i}`) || document.body;
-                canvas = document.createElement('canvas');
-                canvas.id = `ch-canvas-${i}`;
-                canvas.width = 600;
-                canvas.height = 150;
-                canvas.style.cssText = 'width: 100%; height: 120px; display: block; background: #080a0f; border-radius: 4px; margin-top: 5px;';
-                container.appendChild(canvas);
-            }
+            if (!canvas) continue;
 
             let ctx = canvas.getContext('2d');
-            let w = canvas.width;
-            let h = canvas.height;
+            let w = canvas.width || canvas.clientWidth || 600;
+            let h = canvas.height || canvas.clientHeight || 150;
+            if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 
             ctx.clearRect(0, 0, w, h);
 
@@ -134,7 +139,7 @@ window.startVisualizers = function() {
             if (stdDev < minStdDev) stdDev = minStdDev;
             if (stdDev < 0.5) stdDev = 0.5;
 
-            // LOCKED Y-AXIS: Exactly 5.0 Standard Deviations
+            // LOCKED Y-AXIS: Exactly 5.0 Standard Deviations for slider synchronization
             let yRangeMax = mean + (5.0 * stdDev);
             let yRangeMin = mean - (5.0 * stdDev);
             let absoluteRange = yRangeMax - yRangeMin;
@@ -219,7 +224,7 @@ window.startVisualizers = function() {
     requestAnimationFrame(draw);
 };
 
-// --- COMPATIBILITY BINDINGS FOR MAIN.JS ---
+// --- COMPATIBILITY BINDINGS ---
 window.initVisualizer = function() {
     if (typeof window.startVisualizers === 'function') window.startVisualizers();
 };
