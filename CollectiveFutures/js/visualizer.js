@@ -218,3 +218,13 @@ window.initVisualizer = function() {
         window.startVisualizers();
     }
 };
+
+// --- COMPATIBILITY BINDING FOR MAIN.JS ---
+window.renderLoop = function() {
+    // If the main visualizer loop is already running via requestAnimationFrame, 
+    // this acts as a safe alias so main.js stops throwing errors on load.
+    if (typeof window.startVisualizers === 'function' && !window._visualizerStarted) {
+        window._visualizerStarted = true;
+        window.startVisualizers();
+    }
+};
