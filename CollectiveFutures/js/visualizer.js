@@ -211,3 +211,10 @@ if (document.readyState === 'loading') {
 } else {
     window.startVisualizers();
 }
+
+// --- COMPATIBILITY BINDING ---
+window.initVisualizer = function() {
+    if (typeof window.startVisualizers === 'function') {
+        window.startVisualizers();
+    }
+};
