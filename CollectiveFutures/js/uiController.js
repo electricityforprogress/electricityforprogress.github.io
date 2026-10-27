@@ -938,7 +938,8 @@ function initKnobs() {
             }
         };
         
-        knob.addEventListener('pointerdown', (e) => { 
+        knob.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return; // FIX: Ignore stray touchpad scroll-wheel/right-clicks
             isDragging = true; startY = e.clientY; 
             startVal = parseFloat(knob.dataset.val); 
             knob.setPointerCapture(e.pointerId);
