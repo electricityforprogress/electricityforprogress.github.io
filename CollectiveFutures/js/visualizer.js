@@ -1,6 +1,6 @@
 /**
  * js/visualizer.js
- * Bulletproof Multi-Channel Zoom, History, VU, and Threshold Gradient Visualizer
+ * Self-Injecting Multi-Channel Zoom, History, VU, and Threshold Gradient Visualizer
  */
 
 window.chData = window.chData || [
@@ -44,7 +44,6 @@ window.startVisualizers = function() {
             if (!chData[i]) continue;
             let ch = chData[i];
             
-            // Safe fallback if synthChannels isn't initialized yet
             let params = (typeof synthChannels !== 'undefined' && synthChannels[i] && synthChannels[i].params) 
                 ? synthChannels[i].params 
                 : window.defaultParams;
@@ -53,8 +52,8 @@ window.startVisualizers = function() {
             let vu = document.getElementById(`vu-${i}`);
             if (vu) {
                 let vCtx = vu.getContext('2d');
-                let vw = vu.width;
-                let vvh = vu.height;
+                let vw = vu.width || 30;
+                let vvh = vu.height || 100;
                 vCtx.clearRect(0, 0, vw, vvh);
 
                 vCtx.fillStyle = '#111';
@@ -93,9 +92,18 @@ window.startVisualizers = function() {
                 valSlew.innerText = (ch.lastSlew !== undefined ? ch.lastSlew : 0).toFixed(3);
             }
 
-            // --- 3. MAIN THRESHOLD WAVEFORM CANVAS ---
+            // --- 3. MAIN THRESHOLD WAVEFORM CANVAS (WITH AUTO-INJECTION) ---
             let canvas = document.getElementById(`ch-canvas-${i}`) || document.getElementById(`viz-ch-${i}`);
-            if (!canvas) continue;
+            if (!canvas) {
+                // Self-heal: If canvas is missing from HTML, inject it into the matching panel div or body
+                let container = document.getElementById(`synth-panel-${i}`) || document.getElementById(`ch-panel-${i}`) || document.body;
+                canvas = document.createElement('canvas');
+                canvas.id = `ch-canvas-${i}`;
+                canvas.width = 600;
+                canvas.height = 150;
+                canvas.style.cssText = 'width: 100%; height: 120px; display: block; background: #080a0f; border-radius: 4px; margin-top: 5px;';
+                container.appendChild(canvas);
+            }
 
             let ctx = canvas.getContext('2d');
             let w = canvas.width;
@@ -104,7 +112,6 @@ window.startVisualizers = function() {
             ctx.clearRect(0, 0, w, h);
 
             if (!ch.vizBuffer || ch.vizBuffer.length < 2) {
-                // Draw standby center line so canvas is never blank
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
