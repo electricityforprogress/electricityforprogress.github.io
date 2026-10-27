@@ -86,10 +86,15 @@ function hideTooltip() {
 }
 
 document.addEventListener('input', (e) => {
-    if (e.target.id && (e.target.id.startsWith('ch-mini-thresh-') || e.target.id.startsWith('ch-window-'))) {
-        let ch = parseInt(e.target.id.split('-').pop());
-        if (!isNaN(ch) && synthChannels[ch]) {
-            if (e.target.id.startsWith('ch-mini-thresh-')) {
+    
+    // --- THE FIX: Aggressive Wildcard Catch for ANY Threshold Slider ---
+    if (e.target.id && (e.target.id.toLowerCase().includes('thresh') || e.target.id.toLowerCase().includes('window'))) {
+        let ch = activeSynthIndex; // Default to active tab if no number found
+        let match = e.target.id.match(/\d+/);
+        if (match) ch = parseInt(match[0]);
+        
+        if (synthChannels[ch]) {
+            if (e.target.id.toLowerCase().includes('thresh')) {
                 synthChannels[ch].params.threshold = parseFloat(e.target.value);
             } else {
                 synthChannels[ch].params.sampleSize = parseInt(e.target.value);
@@ -148,7 +153,6 @@ document.addEventListener('pointerup', (e) => {
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    // Catch the first user click anywhere to securely resume the AudioContext
     document.body.addEventListener('pointerdown', () => {
         if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
             window.audioCtx.resume().catch(()=>{});
@@ -517,10 +521,12 @@ function updateActiveSynth(param, value) {
     
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
-    window.debouncedHardwareSync(activeSynthIndex);
+
+    if (param !== 'testIntensity' && param !== 'testInjector') {
+        window.debouncedHardwareSync(activeSynthIndex);
+    }
 }
 
-// --- RESTORED PIANO FUNCTIONS ---
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
     
@@ -528,27 +534,6 @@ function togglePianoKey(noteIdx) {
     document.getElementById('ui-scaleType').value = 'custom'; 
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
-}
-
-function applyScalePreset() {
-    if(!synthChannels[activeSynthIndex]) return;
-    const p = synthChannels[activeSynthIndex].params;
-    if (p.scaleType === 'custom') return; 
-    
-    p.activeScaleBits.fill(false); 
-    window.SCALES[p.scaleType].forEach(deg => { 
-        p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
-    });
-    syncPianoUI();
-}
-
-function syncPianoUI() {
-    if(!synthChannels[activeSynthIndex]) return;
-    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
-    for(let i = 0; i < 12; i++) { 
-        let k = document.getElementById(`pkey-${i}`); 
-        if(k) k.classList.toggle('active', bits[i]); 
-    }
 }
 
 // --- GLOBAL PRESET ENGINE ---
