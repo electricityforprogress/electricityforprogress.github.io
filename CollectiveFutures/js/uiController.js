@@ -1256,3 +1256,26 @@ window.markChannelDirty = function(ch) {
         if (btn) btn.innerHTML = `${synthChannels[ch].patchName}* ▼`;
     }
 };
+
+// --- V022 AGGRESSIVE BLUETOOTH SYNC PATCH ---
+const catchVisualizerSliders = (e) => {
+    if (e.target.id && (e.target.id.includes('mini-thresh') || e.target.id.includes('window'))) {
+        let ch = parseInt(e.target.id.replace(/[^\d]/g, ''));
+        if (!isNaN(ch) && synthChannels[ch]) {
+            if (e.target.id.includes('thresh')) synthChannels[ch].params.threshold = parseFloat(e.target.value);
+            else synthChannels[ch].params.sampleSize = parseInt(e.target.value);
+            if (typeof window.debouncedHardwareSync === 'function') window.debouncedHardwareSync(ch);
+        }
+    }
+};
+// Use 'true' to capture the event before visualizer.js blocks it!
+document.addEventListener('input', catchVisualizerSliders, true);
+document.addEventListener('change', catchVisualizerSliders, true);
+
+// Suppress the Chrome AudioContext warning natively
+const resumeAudio = () => {
+    if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
+        window.audioCtx.resume().catch(()=>{});
+    }
+};
+['click', 'touchstart', 'keydown'].forEach(evt => document.body.addEventListener(evt, resumeAudio, { once: true }));
