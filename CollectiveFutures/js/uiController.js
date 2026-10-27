@@ -2,7 +2,6 @@
  * js/uiController.js
  */
 
-// --- HARDWARE DEBOUNCER (The Traffic Cop) ---
 window.syncTimers = {};
 window.debouncedHardwareSync = function(chIdx) {
     if (!window.bleTxCharacteristic) return;
@@ -14,7 +13,6 @@ window.debouncedHardwareSync = function(chIdx) {
     }, 100); 
 };
 
-// --- GLOBAL PARAMETER TOOLTIP ---
 const paramTooltip = document.createElement('div');
 paramTooltip.id = 'param-tooltip';
 paramTooltip.style.cssText = 'position: fixed; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; background: rgba(10, 13, 18, 0.95); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 14px; z-index: 9999; transform: translate(-50%, -150%); font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.8);';
@@ -87,7 +85,6 @@ function hideTooltip() {
     tooltipTimer = setTimeout(() => { paramTooltip.style.opacity = 0; }, 800);
 }
 
-// --- VERTICAL & DYNAMIC SLIDER TOOLTIPS ---
 document.addEventListener('input', (e) => {
     if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
         let slider = e.target;
@@ -443,21 +440,15 @@ window.syncParamsToHardware = function(chIdx) {
     if (typeof window.sendHardwareCC === 'function') {
         window.sendHardwareCC(chIdx, 81, Math.min(127, Math.max(0, ((p.threshold - 0.05) / 4.95) * 127)));
         window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, ((p.sampleSize - 10) / 90) * 127)));
-        
-        // THE FIX: Properly scale 0-100 and 0-8 parameters up to 0-127 for the MIDI standard!
         window.sendHardwareCC(chIdx, 83, Math.min(127, Math.max(0, (p.density / 100) * 127))); 
-        
         window.sendHardwareCC(chIdx, 84, p.minNote);
         window.sendHardwareCC(chIdx, 85, p.maxNote);
         window.sendHardwareCC(chIdx, 86, p.velMin);
         window.sendHardwareCC(chIdx, 87, p.velMax);
-        
         window.sendHardwareCC(chIdx, 88, Math.min(127, Math.max(0, (p.spread / 100) * 127)));
         window.sendHardwareCC(chIdx, 89, Math.min(127, Math.max(0, ((p.durMult - 0.1) / 4.9) * 127)));
-        
         window.sendHardwareCC(chIdx, 90, Math.min(127, Math.max(0, (p.quantize / 8) * 127)));
         window.sendHardwareCC(chIdx, 91, Math.min(127, Math.max(0, (p.midiOutCh / 15) * 127)));
-        
         window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
         window.sendHardwareCC(chIdx, 93, Math.min(127, Math.max(0, ((p.voices - 1) / 7) * 127)));
         
@@ -508,6 +499,17 @@ function updateActiveSynth(param, value) {
     window.debouncedHardwareSync(activeSynthIndex);
 }
 
+// THE FIX: Eliminated the double-send backlog!
+function togglePianoKey(noteIdx) {
+    if(!synthChannels[activeSynthIndex]) return;
+    
+    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
+    document.getElementById('ui-scaleType').value = 'custom'; 
+    updateActiveSynth('scaleType', 'custom'); 
+    syncPianoUI();
+    // updateActiveSynth automatically manages the debounce sync. No direct blast needed!
+}
+
 // --- GLOBAL PRESET ENGINE ---
 let globalPresets = {};
 
@@ -528,7 +530,6 @@ function updatePresetDropdown() {
     const select = document.getElementById('preset-select');
     if(!select) return;
     
-    // Ensure the event listener is forcibly attached in JS
     select.onchange = (e) => {
         loadPreset(e.target.value);
     };
@@ -696,7 +697,6 @@ function loadPreset(name) {
     
     syncUI();
 
-    // FORCE DIRECT SYNC: Blast all 4 channels to the hardware instantly upon load
     for (let i=0; i<4; i++) {
         if (typeof window.syncParamsToHardware === 'function') window.syncParamsToHardware(i);
     }
@@ -1040,8 +1040,6 @@ function updateChannelPresetDropdowns() {
         const select = document.getElementById(`ch-preset-select-${i}`);
         if(!select) continue;
         
-        // THE FIX: Explicitly bind the onchange event here in JavaScript 
-        // to guarantee the preset loads even if the HTML tag is missing it!
         select.onchange = (e) => {
             loadChannelPreset(i, e.target.value);
         };
@@ -1175,10 +1173,7 @@ function loadChannelPreset(ch, name) {
         if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
     }, 150);
     
-    // FORCE DIRECT SYNC: Blast the 16 parameters to the hardware instantly upon load
-    if (typeof window.syncParamsToHardware === 'function') {
-        window.syncParamsToHardware(ch);
-    }
+    window.debouncedHardwareSync(ch);
 }
 
 function deleteChannelPreset(ch) {
@@ -1212,42 +1207,3 @@ window.markChannelDirty = function(ch) {
         if (btn) btn.innerHTML = `${synthChannels[ch].patchName}* ▼`;
     }
 };
-
-// --- PIANO & SCALE UI ---
-function togglePianoKey(noteIdx) {
-    if(!synthChannels[activeSynthIndex]) return;
-    
-    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
-    document.getElementById('ui-scaleType').value = 'custom'; 
-    updateActiveSynth('scaleType', 'custom'); 
-    syncPianoUI();
-    
-    if (window.bleTxCharacteristic && typeof window.sendHardwareScale === 'function') {
-        let mask = 0;
-        for (let i = 0; i < 12; i++) {
-            if (synthChannels[activeSynthIndex].params.activeScaleBits[i]) mask |= (1 << i);
-        }
-        window.sendHardwareScale(activeSynthIndex, mask);
-    }
-}
-
-function applyScalePreset() {
-    if(!synthChannels[activeSynthIndex]) return;
-    const p = synthChannels[activeSynthIndex].params;
-    if (p.scaleType === 'custom') return; 
-    
-    p.activeScaleBits.fill(false); 
-    window.SCALES[p.scaleType].forEach(deg => { 
-        p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
-    });
-    syncPianoUI();
-}
-
-function syncPianoUI() {
-    if(!synthChannels[activeSynthIndex]) return;
-    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
-    for(let i = 0; i < 12; i++) { 
-        let k = document.getElementById(`pkey-${i}`); 
-        if(k) k.classList.toggle('active', bits[i]); 
-    }
-}
