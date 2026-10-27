@@ -208,7 +208,9 @@ function initVisualizer() {
                 chData[i].vizBuffer = [];
                 chData[i].history = [];
                 chData[i].notes = [];
-                chData[i].peakHoldPct = 0;
+                chData[i].frozenWaveBuffer = null;
+                chData[i].frozenVizBuffer = null;
+                chData[i].peak = { val: 0, time: 0, vel: 0 };
             }
             e.target.style.background = 'var(--red)';
             e.target.style.color = '#fff';
@@ -329,11 +331,21 @@ function renderLoop() {
             if(!ch.history) ch.history = [];
             if(!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
             
-            // Handle background memory management unconditionally
+            // Memory management happens relentlessly in the background
             while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
 
-            // THE FREEZE FIX: Skip all canvas clearing and redrawing if frozen.
-            if (ch.config.freeze) continue; 
+            // TRUE FREEZE LOGIC
+            if (ch.config.freeze) {
+                if (!ch.frozenWaveBuffer) ch.frozenWaveBuffer = [...ch.waveBuffer];
+                if (!ch.frozenVizBuffer) ch.frozenVizBuffer = ch.vizBuffer ? [...ch.vizBuffer] : [];
+            } else {
+                ch.frozenWaveBuffer = null;
+                ch.frozenVizBuffer = null;
+            }
+            
+            // Route pointers to whichever array is currently active
+            let renderWave = ch.config.freeze ? ch.frozenWaveBuffer : ch.waveBuffer;
+            let renderViz = ch.config.freeze ? ch.frozenVizBuffer : (ch.vizBuffer || []);
             
             let sCtx = sCtxs[i], rCtx = rCtxs[i];
             let sw = sCtx.canvas.clientWidth, sh = sCtx.canvas.clientHeight;
@@ -346,18 +358,18 @@ function renderLoop() {
             if (rCtx.canvas.height !== rh) rCtx.canvas.height = rh;
 
             sCtx.clearRect(0, 0, sw, sh);
-            let displayCount = Math.min(ch.config.zoom, ch.waveBuffer.length);
+            let displayCount = Math.min(ch.config.zoom, renderWave.length);
             let avgVal = 0;
             
             if(displayCount > 1) {
-                let startIndex = ch.waveBuffer.length - displayCount;
+                let startIndex = renderWave.length - displayCount;
                 let smoothAlpha = ch.config.smooth;
                 let requiredPreWarm = Math.floor(3.0 / smoothAlpha); 
                 let preWarmIndex = Math.max(0, startIndex - requiredPreWarm);
                 
                 let seedSum = 0, seedCount = 0;
-                for(let j = 0; j < 20 && (preWarmIndex + j) < ch.waveBuffer.length; j++) {
-                    if (isFinite(ch.waveBuffer[preWarmIndex + j].r)) { seedSum += ch.waveBuffer[preWarmIndex + j].r; seedCount++; }
+                for(let j = 0; j < 20 && (preWarmIndex + j) < renderWave.length; j++) {
+                    if (isFinite(renderWave[preWarmIndex + j].r)) { seedSum += renderWave[preWarmIndex + j].r; seedCount++; }
                 }
                 let currentEma1 = seedCount > 0 ? (seedSum / seedCount) : (ch.ema || 1000);
                 let currentEma2 = currentEma1;
@@ -376,7 +388,7 @@ function renderLoop() {
                     let rawMin = 1000000, rawMax = 0; 
                     
                     for (let j = chunkStart; j < chunkEnd; j++) {
-                        let rawVal = ch.waveBuffer[startIndex + j].r || currentEma1;
+                        let rawVal = renderWave[startIndex + j].r || currentEma1;
                         if (!isFinite(rawVal)) rawVal = currentEma1;
 
                         if (rawVal < rawMin) rawMin = rawVal;
@@ -452,7 +464,7 @@ function renderLoop() {
                 let step = Math.max(1, Math.floor(displayCount / (sw > 0 ? sw : 500)));
                 for(let j=0; j<displayCount; j+=step) {
                     let hasEvent = false; let eventNote = null;
-                    for(let k=0; k<step && (j+k)<displayCount; k++) { let pt = ch.waveBuffer[startIndex + j + k]; if(pt.evt === 1 && pt.n) { hasEvent = true; eventNote = pt.n; break; } }
+                    for(let k=0; k<step && (j+k)<displayCount; k++) { let pt = renderWave[startIndex + j + k]; if(pt.evt === 1 && pt.n) { hasEvent = true; eventNote = pt.n; break; } }
                     if(hasEvent && eventNote) {
                         let x = j * (sw / (displayCount - 1)); 
                         sCtx.save();
@@ -464,12 +476,12 @@ function renderLoop() {
                 
                 if (!ch.lastHudTime || nowMs - ch.lastHudTime > 200) {
                     ch.lastHudTime = nowMs;
-                    let curVal = ch.waveBuffer[ch.waveBuffer.length - 1].r || 0; 
-                    let curTicks = ch.waveBuffer && ch.waveBuffer.length > 0 ? ch.waveBuffer[ch.waveBuffer.length-1].ticks : 0;
+                    let curVal = renderWave[renderWave.length - 1].r || 0; 
+                    let curTicks = renderWave.length > 0 ? renderWave[renderWave.length-1].ticks : 0;
                     
-                    if (ch.vizBuffer && ch.vizBuffer.length > 1) {
-                        let vLen = ch.vizBuffer.length;
-                        ch.slew = ch.vizBuffer[vLen - 1] - ch.vizBuffer[vLen - 2];
+                    if (renderViz && renderViz.length > 1) {
+                        let vLen = renderViz.length;
+                        ch.slew = renderViz[vLen - 1] - renderViz[vLen - 2];
                     }
 
                     let kOhm = curVal > 0 ? (1000 / curVal) : 0; 
@@ -536,11 +548,12 @@ function renderLoop() {
                 });
             }
 
-            // --- THE THRESHOLD CONTROL METER (PEAK + SPARK) ---
+            // --- THE THRESHOLD CONTROL METER (ELEGANT DEPTH) ---
             let miniTC = document.getElementById(`ch-mini-vu-thresh-${i}`);
             if (miniTC && resizeCanvasToDisplaySize(miniTC) && synthChannels[i] && synthChannels[i].params) {
                 let ctx = miniTC.getContext('2d');
-                ctx.clearRect(0, 0, miniTC.width, miniTC.height);
+                let w = miniTC.width, h = miniTC.height;
+                ctx.clearRect(0, 0, w, h);
                 
                 let minMult = 0.05, maxMult = 5.0;
                 let threshVal = synthChannels[i].params.threshold;
@@ -550,44 +563,74 @@ function renderLoop() {
                 let currentPct = Math.max(0, Math.min(1, (currentMult - minMult) / (maxMult - minMult)));
                 
                 if (ch.vizDeltaPct === undefined) ch.vizDeltaPct = 0;
+                ch.vizDeltaPct = (currentPct * 0.15) + (ch.vizDeltaPct * 0.85);
                 if (currentPct > ch.vizDeltaPct) ch.vizDeltaPct = currentPct;
-                else ch.vizDeltaPct = (currentPct * 0.1) + (ch.vizDeltaPct * 0.9);
                 
-                // Peak Hold Logic
-                if (!ch.peakHoldPct) ch.peakHoldPct = 0;
-                if (currentPct > threshPct && currentPct > ch.peakHoldPct) {
-                    ch.peakHoldPct = currentPct;
-                    ch.peakHoldTime = nowMs;
-                } else if (nowMs - (ch.peakHoldTime || 0) > 500) {
-                    ch.peakHoldPct *= 0.95; 
+                // True Gravity Peak Hold (Fixes the stuck bug)
+                if (!ch.peak) ch.peak = { val: 0, time: 0, vel: 0 };
+                if (currentPct > ch.peak.val) {
+                    ch.peak.val = currentPct;
+                    ch.peak.time = nowMs;
+                    ch.peak.vel = 0;
+                } else if (nowMs - ch.peak.time > 400) {
+                    ch.peak.vel += 0.001; 
+                    ch.peak.val -= ch.peak.vel;
+                    if (ch.peak.val < 0) { ch.peak.val = 0; ch.peak.vel = 0; }
                 }
 
-                let age = nowMs - (ch.lastBlockTime || nowMs);
-                let alpha = Math.max(0.1, 1 - (age / 1500));
-                ctx.globalAlpha = alpha;
+                let chColor = window.CH_COLORS[i] || '#00f0ff';
                 
-                // 1. Draw Normal Background Fill
-                let baseFillPct = Math.min(ch.vizDeltaPct, threshPct);
-                ctx.fillStyle = window.CH_COLORS[i];
-                ctx.fillRect(0, 0, baseFillPct * miniTC.width, miniTC.height);
+                // 1. Subtle Background Track
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+                ctx.fillRect(0, 0, w, h);
                 
-                // 2. Draw The "Spark" (Aggressive Red/Pink Overflow)
+                // 2. Base Fill (Under Threshold)
+                let baseFill = Math.min(ch.vizDeltaPct, threshPct);
+                ctx.globalAlpha = 0.2;
+                ctx.fillStyle = chColor;
+                ctx.fillRect(0, 0, baseFill * w, h);
+                
+                // 3. Overflow Spark (Elegant Glow, No ugly red blocks)
                 if (ch.vizDeltaPct > threshPct) {
-                    ctx.fillStyle = '#ff0055'; 
-                    ctx.fillRect(threshPct * miniTC.width, 0, (ch.vizDeltaPct - threshPct) * miniTC.width, miniTC.height);
+                    let grd = ctx.createLinearGradient(threshPct * w, 0, ch.vizDeltaPct * w, 0);
+                    grd.addColorStop(0, chColor);
+                    grd.addColorStop(1, '#ffffff'); // Fades to white-hot at the tip
+                    
+                    ctx.globalAlpha = 0.6;
+                    ctx.fillStyle = grd;
+                    ctx.fillRect(threshPct * w, 0, (ch.vizDeltaPct - threshPct) * w, h);
                 }
-                
-                // 3. Draw The Gold Peak Hold Tick
-                if (ch.peakHoldPct > threshPct) {
-                    ctx.globalAlpha = 1.0;
-                    ctx.fillStyle = '#ffd700'; 
-                    ctx.fillRect(ch.peakHoldPct * miniTC.width - 2, 0, 2, miniTC.height);
-                }
-                
-                // 4. Draw The Slider Line (The Gate)
+
+                // 4. Live Signal Tip Edge
                 ctx.globalAlpha = 1.0;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                ctx.fillRect(threshPct * miniTC.width - 1, 0, 2, miniTC.height);
+                ctx.fillStyle = chColor;
+                ctx.fillRect(Math.max(0, ch.vizDeltaPct * w - 1), 0, 1, h);
+
+                // 5. Gravity Peak Hold Dash
+                if (ch.peak.val > 0) {
+                    let isOver = (ch.peak.val > threshPct);
+                    ctx.fillStyle = isOver ? '#ffffff' : chColor;
+                    ctx.globalAlpha = isOver ? 1.0 : 0.5;
+                    
+                    if (isOver) {
+                        ctx.shadowBlur = 5;
+                        ctx.shadowColor = chColor;
+                    }
+                    ctx.fillRect(Math.max(0, ch.peak.val * w - 2), h * 0.25, 2, h * 0.5);
+                    ctx.shadowBlur = 0;
+                }
+
+                // 6. The Gate (Threshold Marker)
+                ctx.globalAlpha = 0.8;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(threshPct * w, 0, 1, h);
+                
+                // 7. Depth/Scale Ticks
+                ctx.globalAlpha = 0.15;
+                for (let t = 0.2; t < 1.0; t += 0.2) {
+                    ctx.fillRect(t * w, h - 3, 1, 3);
+                }
+                ctx.globalAlpha = 1.0;
             }
         }
 
