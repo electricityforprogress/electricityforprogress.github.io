@@ -55,7 +55,7 @@ function initVisualizer() {
         if(!chData[i].notes) chData[i].notes = [];
         if(!chData[i].history) chData[i].history = [];
         if(!chData[i].densityEvents) chData[i].densityEvents = [];
-        if(!chData[i].config) chData[i].config = { zoom: 500, smooth: 0.05 };
+        if(!chData[i].config) chData[i].config = { zoom: 500, smooth: 0.05, freeze: false };
         if(!chData[i].bounds) chData[i].bounds = { min: 0, max: 10 }; 
         if(!chData[i].acc) chData[i].acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
         if(chData[i].vizDeltaPct === undefined) chData[i].vizDeltaPct = 0; 
@@ -106,6 +106,7 @@ function initVisualizer() {
                             <div id="hud-slew-color-${i}" style="color: #888; display: flex; align-items: baseline; justify-content: center;">
                                 <div id="hud-slew-icon-${i}" style="text-align: right; font-size: 11px; margin-right: 2px;">—</div>
                                 <div id="hud-slew-val-${i}" style="text-align: right; font-size: 14px; font-weight: bold; font-variant-numeric: tabular-nums;">0.00</div>
+                                <div style="font-size: 9px; color: #666; margin-left: 3px; line-height: 14px;">ΔµS</div>
                             </div>
                         </div>
                     </div>
@@ -113,7 +114,12 @@ function initVisualizer() {
                     <div class="hud-settings-wrapper">
                         <div class="hud-gear-icon">⚙️</div>
                         <div class="hud-settings-menu">
-                            <button id="ch-clear-${i}" style="width: 100%; margin-bottom: 8px; background: transparent; color: var(--red); border: 1px solid var(--border); padding: 4px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;">🗑️ CLEAR</button>                            
+                            
+                            <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+                                <button id="ch-freeze-${i}" style="flex: 1; background: transparent; color: #888; border: 1px solid #444; padding: 4px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;">❄️ FREEZE</button>
+                                <button id="ch-clear-${i}" style="flex: 0 0 50px; background: transparent; color: var(--red); border: 1px solid var(--border); padding: 4px; border-radius: 12px; cursor: pointer; font-size: 10px; font-weight: bold; transition: 0.2s;">🗑 CLR</button>
+                            </div>
+
                             <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: #888;">
                                 <label style="display: flex; align-items: center; justify-content: space-between;">
                                     <span style="font-weight: bold; width: 12px;">Z</span>
@@ -146,6 +152,7 @@ function initVisualizer() {
         let sSlider = document.getElementById(`ch-smooth-${i}`);
         let tSlider = document.getElementById(`ch-mini-thresh-${i}`);
         let wSlider = document.getElementById(`ch-window-${i}`);
+        let fBtn = document.getElementById(`ch-freeze-${i}`);
         let cBtn = document.getElementById(`ch-clear-${i}`);
         
         let zVal = document.getElementById(`ch-val-zoom-${i}`);
@@ -183,6 +190,15 @@ function initVisualizer() {
             if (typeof synthChannels !== 'undefined' && synthChannels[i]) {
                 synthChannels[i].params.sampleSize = val;
                 if (wVal) wVal.innerText = val;
+            }
+        });
+
+        if (fBtn) fBtn.addEventListener('click', (e) => {
+            if(chData[i]) {
+                chData[i].config.freeze = !chData[i].config.freeze;
+                e.target.style.background = chData[i].config.freeze ? '#ff3333' : 'transparent';
+                e.target.style.color = chData[i].config.freeze ? '#fff' : '#888';
+                e.target.style.borderColor = chData[i].config.freeze ? '#ff3333' : '#444';
             }
         });
 
@@ -305,7 +321,7 @@ function renderLoop() {
             let ch = chData[i];
             
             if(!ch.waveBuffer) ch.waveBuffer = [];
-            if(!ch.config) ch.config = { zoom: 500, smooth: 0.05 };
+            if(!ch.config) ch.config = { zoom: 500, smooth: 0.05, freeze: false };
             if(!ch.bounds) ch.bounds = { min: 0, max: 10 }; 
             if(!ch.densityEvents) ch.densityEvents = [];
             if(!ch.notes) ch.notes = [];
@@ -323,8 +339,9 @@ function renderLoop() {
             if (rCtx.canvas.width !== rw) rCtx.canvas.width = rw;
             if (rCtx.canvas.height !== rh) rCtx.canvas.height = rh;
 
-            // Safe memory cap - data is now strictly pushed from bleMidi.js
-            while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
+            if (!ch.config.freeze) {
+                while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
+            }
 
             sCtx.clearRect(0, 0, sw, sh);
             let displayCount = Math.min(ch.config.zoom, ch.waveBuffer.length);
@@ -343,7 +360,6 @@ function renderLoop() {
                 let currentEma1 = seedCount > 0 ? (seedSum / seedCount) : (ch.ema || 1000);
                 let currentEma2 = currentEma1;
                 
-                // THE ZOOM FIX: Allow fractions instead of hard-capping at 1 to prevent half-screens
                 let pointsPerPixel = displayCount / sw;
                 let binnedData = [];
                 let targetMin = 1000000, targetMax = 0, sum = 0;
@@ -351,18 +367,14 @@ function renderLoop() {
                 for (let px = 0; px < sw; px++) {
                     let chunkStart = Math.floor(px * pointsPerPixel);
                     let chunkEnd = Math.floor((px + 1) * pointsPerPixel);
-                    if (chunkEnd <= chunkStart) chunkEnd = chunkStart + 1; // Ensure at least 1 point evaluated per pixel
+                    if (chunkEnd <= chunkStart) chunkEnd = chunkStart + 1; 
                     if (chunkEnd > displayCount) chunkEnd = displayCount;
                     
                     let binMin = 1000000, binMax = 0;
-                    let rawMin = 1000000, rawMax = 0; // Capture raw transient spikes
                     
                     for (let j = chunkStart; j < chunkEnd; j++) {
                         let rawVal = ch.waveBuffer[startIndex + j].r || currentEma1;
                         if (!isFinite(rawVal)) rawVal = currentEma1;
-                        
-                        if (rawVal < rawMin) rawMin = rawVal;
-                        if (rawVal > rawMax) rawMax = rawVal;
 
                         currentEma1 = (rawVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
                         currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
@@ -370,6 +382,7 @@ function renderLoop() {
                         
                         sum += currentEma2;
                         
+                        // We strictly use the smoothed data to bound the Y-Axis and find the visual peaks
                         if (currentEma2 < binMin) binMin = currentEma2;
                         if (currentEma2 > binMax) binMax = currentEma2;
                         
@@ -378,7 +391,7 @@ function renderLoop() {
                     }
                     
                     if (chunkStart < chunkEnd) {
-                        binnedData.push({ x: px, yMin: binMin, yMax: binMax, rawMin: rawMin, rawMax: rawMax });
+                        binnedData.push({ x: px, yMin: binMin, yMax: binMax });
                     }
                 }
 
@@ -394,42 +407,65 @@ function renderLoop() {
                 let paddedRange = range * 1.2;
                 let getPathY = (val) => sh - ((val - paddedMin) / paddedRange * sh);
 
-                // --- PASS 1: RAW TRANSIENT SPIKES (Faint background) ---
-                sCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; 
-                sCtx.lineWidth = 1; 
-                sCtx.beginPath();
-                if (binnedData.length > 0) {
-                    sCtx.moveTo(binnedData[0].x, getPathY(binnedData[0].rawMax));
-                    for (let b = 1; b < binnedData.length; b++) {
-                        sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].rawMax));
-                        if (binnedData[b].rawMax - binnedData[b].rawMin > (range * 0.01)) {
-                            sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].rawMin));
-                            sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].rawMax));
-                        }
-                    }
-                }
-                sCtx.stroke();
+                // --- THE GLOWING THRESHOLD TUBE ---
+                let vMean = avgVal; 
+                let vStd = ch.lastStdevi || 1.0;
+                let threshMult = (synthChannels[i] && synthChannels[i].params.threshold) ? synthChannels[i].params.threshold : 2.0;
 
-                // --- PASS 2: SMOOTHED TREND (Foreground) ---
-                sCtx.strokeStyle = window.CH_COLORS[i]; 
-                sCtx.lineWidth = 2.5; 
-                sCtx.lineJoin = "round"; 
-                sCtx.lineCap = "round"; 
-                sCtx.beginPath();
+                let yUpper = getPathY(vMean + (threshMult * vStd));
+                let yLower = getPathY(vMean - (threshMult * vStd));
+                let yMeanLine = getPathY(vMean);
+
+                let grad = sCtx.createLinearGradient(0, yUpper, 0, yLower);
+                grad.addColorStop(0, 'rgba(0, 200, 255, 0.4)');
+                grad.addColorStop(0.5, 'rgba(0, 200, 255, 0.02)');
+                grad.addColorStop(1, 'rgba(0, 200, 255, 0.4)');
                 
+                sCtx.fillStyle = grad;
+                sCtx.fillRect(0, yUpper, sw, yLower - yUpper);
+
+                sCtx.strokeStyle = 'rgba(0, 200, 255, 0.8)';
+                sCtx.setLineDash([2, 4]);
+                sCtx.beginPath();
+                sCtx.moveTo(0, yUpper); sCtx.lineTo(sw, yUpper);
+                sCtx.moveTo(0, yLower); sCtx.lineTo(sw, yLower);
+                sCtx.stroke();
+                sCtx.setLineDash([]);
+
+                sCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                sCtx.beginPath(); sCtx.moveTo(0, yMeanLine); sCtx.lineTo(sw, yMeanLine); sCtx.stroke();
+
+                // --- THE DYNAMIC WAVEFORM PUNCTURE HIGHLIGHTING ---
                 if (binnedData.length > 0) {
-                    sCtx.moveTo(binnedData[0].x, getPathY((binnedData[0].yMin + binnedData[0].yMax) / 2));
+                    let prevX = binnedData[0].x;
+                    let prevY = getPathY((binnedData[0].yMin + binnedData[0].yMax) / 2);
+                    
+                    sCtx.lineJoin = "round"; 
+                    sCtx.lineCap = "round"; 
+
                     for (let b = 1; b < binnedData.length; b++) {
                         let yMid = getPathY((binnedData[b].yMin + binnedData[b].yMax) / 2);
+                        
+                        // Does this specific pixel segment puncture outside the glowing tube bounds?
+                        let isPunctured = (binnedData[b].yMax > vMean + (threshMult * vStd)) || (binnedData[b].yMin < vMean - (threshMult * vStd));
+                        
+                        sCtx.beginPath();
+                        sCtx.moveTo(prevX, prevY);
                         sCtx.lineTo(binnedData[b].x, yMid);
+                        sCtx.strokeStyle = isPunctured ? window.CH_COLORS[i] : 'rgba(255, 255, 255, 0.4)';
+                        sCtx.lineWidth = isPunctured ? 3.0 : 1.5;
+                        sCtx.stroke();
+                        
                         if (binnedData[b].yMax - binnedData[b].yMin > (range * 0.02)) {
+                            sCtx.beginPath();
                             sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].yMax));
                             sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].yMin));
-                            sCtx.moveTo(binnedData[b].x, yMid); 
+                            sCtx.stroke();
                         }
+                        prevX = binnedData[b].x;
+                        prevY = yMid;
                     }
                 }
-                sCtx.stroke();
 
                 let step = Math.max(1, Math.floor(displayCount / (sw > 0 ? sw : 500)));
                 for(let j=0; j<displayCount; j+=step) {
@@ -449,7 +485,6 @@ function renderLoop() {
                     let curVal = ch.waveBuffer[ch.waveBuffer.length - 1].r || 0; 
                     let curTicks = ch.waveBuffer && ch.waveBuffer.length > 0 ? ch.waveBuffer[ch.waveBuffer.length-1].ticks : 0;
                     
-                    // THE SLEW FIX: Actively compute differential from the raw buffer
                     if (ch.vizBuffer && ch.vizBuffer.length > 1) {
                         let vLen = ch.vizBuffer.length;
                         ch.slew = ch.vizBuffer[vLen - 1] - ch.vizBuffer[vLen - 2];
