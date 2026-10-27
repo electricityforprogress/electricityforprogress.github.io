@@ -86,7 +86,6 @@ function hideTooltip() {
 }
 
 document.addEventListener('input', (e) => {
-    // FIXED: Explicitly map the values to the internal synth object BEFORE syncing to the hardware
     if (e.target.id && (e.target.id.startsWith('ch-mini-thresh-') || e.target.id.startsWith('ch-window-'))) {
         let ch = parseInt(e.target.id.split('-').pop());
         if (!isNaN(ch) && synthChannels[ch]) {
@@ -100,7 +99,7 @@ document.addEventListener('input', (e) => {
     }
 
     if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
-        if (e.target.id === 'ui-test-injector') return; // FIXED: Ignore Test Injector for tooltips
+        if (e.target.id === 'ui-test-injector') return; 
 
         let slider = e.target;
         let val = parseFloat(slider.value);
@@ -148,6 +147,14 @@ document.addEventListener('pointerup', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // Catch the first user click anywhere to securely resume the AudioContext
+    document.body.addEventListener('pointerdown', () => {
+        if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
+            window.audioCtx.resume().catch(()=>{});
+        }
+    }, { once: true });
+    
     const makeSlidersDraggable = () => {
         document.querySelectorAll('input[type="range"]').forEach(slider => {
             if (slider.classList.contains('v-slider') || slider.classList.contains('dual-slider-input')) return; 
@@ -248,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (synthChannels[activeSynthIndex]) {
                 synthChannels[activeSynthIndex].params[paramKey] = val;
                 if (labelId && formatFn) document.getElementById(labelId).innerText = formatFn(val);
-                // FIXED: Do not sync testIntensity to BLE
                 if (paramKey !== 'testIntensity') window.debouncedHardwareSync(activeSynthIndex);
             }
         });
@@ -511,13 +517,10 @@ function updateActiveSynth(param, value) {
     
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
-
-    // FIXED: Block the Test slider from hitting the BLE queue
-    if (param !== 'testIntensity' && param !== 'testInjector') {
-        window.debouncedHardwareSync(activeSynthIndex);
-    }
+    window.debouncedHardwareSync(activeSynthIndex);
 }
 
+// --- RESTORED PIANO FUNCTIONS ---
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
     
@@ -525,6 +528,27 @@ function togglePianoKey(noteIdx) {
     document.getElementById('ui-scaleType').value = 'custom'; 
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
+}
+
+function applyScalePreset() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    if (p.scaleType === 'custom') return; 
+    
+    p.activeScaleBits.fill(false); 
+    window.SCALES[p.scaleType].forEach(deg => { 
+        p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
+    });
+    syncPianoUI();
+}
+
+function syncPianoUI() {
+    if(!synthChannels[activeSynthIndex]) return;
+    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
+    for(let i = 0; i < 12; i++) { 
+        let k = document.getElementById(`pkey-${i}`); 
+        if(k) k.classList.toggle('active', bits[i]); 
+    }
 }
 
 // --- GLOBAL PRESET ENGINE ---
@@ -879,7 +903,6 @@ function initKnobs() {
             let centerX = rect.left + (rect.width / 2);
             let topY = rect.top;
             
-            // FIXED: Exclude Test Injector from showing tooltips
             if (param !== 'testIntensity') {
                 showTooltip(centerX, topY, newVal, param, group, knob);
             }
