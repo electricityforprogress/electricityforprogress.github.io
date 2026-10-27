@@ -52,11 +52,10 @@ function initVisualizer() {
     for(let i=0; i<4; i++) {
         if(!chData[i]) chData[i] = {};
         if(!chData[i].waveBuffer) chData[i].waveBuffer = [];
-        if(!chData[i].renderQueue) chData[i].renderQueue = [];
         if(!chData[i].notes) chData[i].notes = [];
         if(!chData[i].history) chData[i].history = [];
         if(!chData[i].densityEvents) chData[i].densityEvents = [];
-        if(!chData[i].config) chData[i].config = { zoom: 500, smooth: 0.05, freeze: false };
+        if(!chData[i].config) chData[i].config = { zoom: 500, smooth: 0.05 };
         if(!chData[i].bounds) chData[i].bounds = { min: 0, max: 10 }; 
         if(!chData[i].acc) chData[i].acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
         if(chData[i].vizDeltaPct === undefined) chData[i].vizDeltaPct = 0; 
@@ -114,7 +113,8 @@ function initVisualizer() {
                     <div class="hud-settings-wrapper">
                         <div class="hud-gear-icon">⚙️</div>
                         <div class="hud-settings-menu">
-                            <button id="ch-freeze-${i}" style="width: 100%; margin-bottom: 8px; background: transparent; color: #888; border: 1px solid #444; padding: 4px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: bold;">❄️ FREEZE</button>                            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: #888;">
+                            <button id="ch-clear-${i}" style="width: 100%; margin-bottom: 8px; background: transparent; color: var(--red); border: 1px solid var(--border); padding: 4px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;">🗑️ CLEAR</button>                            
+                            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: #888;">
                                 <label style="display: flex; align-items: center; justify-content: space-between;">
                                     <span style="font-weight: bold; width: 12px;">Z</span>
                                     <input type="range" id="ch-zoom-${i}" class="pro-slider" min="0" max="1000" value="230" style="flex-grow: 1; margin: 0 8px; background: #333;">
@@ -146,7 +146,7 @@ function initVisualizer() {
         let sSlider = document.getElementById(`ch-smooth-${i}`);
         let tSlider = document.getElementById(`ch-mini-thresh-${i}`);
         let wSlider = document.getElementById(`ch-window-${i}`);
-        let fBtn = document.getElementById(`ch-freeze-${i}`);
+        let cBtn = document.getElementById(`ch-clear-${i}`);
         
         let zVal = document.getElementById(`ch-val-zoom-${i}`);
         let sVal = document.getElementById(`ch-val-smooth-${i}`);
@@ -186,11 +186,16 @@ function initVisualizer() {
             }
         });
 
-        if (fBtn) fBtn.addEventListener('click', (e) => {
-            chData[i].config.freeze = !chData[i].config.freeze;
-            e.target.style.background = chData[i].config.freeze ? '#ff3333' : 'transparent';
-            e.target.style.color = chData[i].config.freeze ? '#fff' : '#888';
-            e.target.style.borderColor = chData[i].config.freeze ? '#ff3333' : '#444';
+        if (cBtn) cBtn.addEventListener('click', (e) => {
+            if (chData[i]) {
+                chData[i].waveBuffer = [];
+                chData[i].vizBuffer = [];
+                chData[i].history = [];
+                chData[i].notes = [];
+            }
+            e.target.style.background = 'var(--red)';
+            e.target.style.color = '#fff';
+            setTimeout(() => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--red)'; }, 200);
         });
     }
 
@@ -300,8 +305,7 @@ function renderLoop() {
             let ch = chData[i];
             
             if(!ch.waveBuffer) ch.waveBuffer = [];
-            if(!ch.renderQueue) ch.renderQueue = [];
-            if(!ch.config) ch.config = { zoom: 500, smooth: 0.05, freeze: false };
+            if(!ch.config) ch.config = { zoom: 500, smooth: 0.05 };
             if(!ch.bounds) ch.bounds = { min: 0, max: 10 }; 
             if(!ch.densityEvents) ch.densityEvents = [];
             if(!ch.notes) ch.notes = [];
@@ -319,13 +323,8 @@ function renderLoop() {
             if (rCtx.canvas.width !== rw) rCtx.canvas.width = rw;
             if (rCtx.canvas.height !== rh) rCtx.canvas.height = rh;
 
-            if (ch.config.freeze) { ch.renderQueue = []; } 
-            else {
-                if (ch.renderQueue && ch.renderQueue.length > 0) {
-                    while (ch.renderQueue.length > 0) ch.waveBuffer.push(ch.renderQueue.shift());
-                }
-                while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
-            }
+            // Safe memory cap - data is now strictly pushed from bleMidi.js
+            while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
 
             sCtx.clearRect(0, 0, sw, sh);
             let displayCount = Math.min(ch.config.zoom, ch.waveBuffer.length);
@@ -344,28 +343,28 @@ function renderLoop() {
                 let currentEma1 = seedCount > 0 ? (seedSum / seedCount) : (ch.ema || 1000);
                 let currentEma2 = currentEma1;
                 
-                for(let j = preWarmIndex; j < startIndex; j++) {
-                    let rVal = ch.waveBuffer[j].r || currentEma1;
-                    if (!isFinite(rVal)) rVal = currentEma1;
-                    currentEma1 = (rVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
-                    currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
-                }
-
-                let pointsPerPixel = Math.max(1, displayCount / sw);
+                // THE ZOOM FIX: Allow fractions instead of hard-capping at 1 to prevent half-screens
+                let pointsPerPixel = displayCount / sw;
                 let binnedData = [];
                 let targetMin = 1000000, targetMax = 0, sum = 0;
 
                 for (let px = 0; px < sw; px++) {
                     let chunkStart = Math.floor(px * pointsPerPixel);
                     let chunkEnd = Math.floor((px + 1) * pointsPerPixel);
+                    if (chunkEnd <= chunkStart) chunkEnd = chunkStart + 1; // Ensure at least 1 point evaluated per pixel
                     if (chunkEnd > displayCount) chunkEnd = displayCount;
                     
                     let binMin = 1000000, binMax = 0;
+                    let rawMin = 1000000, rawMax = 0; // Capture raw transient spikes
                     
                     for (let j = chunkStart; j < chunkEnd; j++) {
-                        let rVal = ch.waveBuffer[startIndex + j].r || currentEma1;
-                        if (!isFinite(rVal)) rVal = currentEma1;
-                        currentEma1 = (rVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
+                        let rawVal = ch.waveBuffer[startIndex + j].r || currentEma1;
+                        if (!isFinite(rawVal)) rawVal = currentEma1;
+                        
+                        if (rawVal < rawMin) rawMin = rawVal;
+                        if (rawVal > rawMax) rawMax = rawVal;
+
+                        currentEma1 = (rawVal * smoothAlpha) + (currentEma1 * (1 - smoothAlpha));
                         currentEma2 = (currentEma1 * smoothAlpha) + (currentEma2 * (1 - smoothAlpha));
                         if (isNaN(currentEma2)) currentEma2 = 0;
                         
@@ -379,7 +378,7 @@ function renderLoop() {
                     }
                     
                     if (chunkStart < chunkEnd) {
-                        binnedData.push({ x: px, yMin: binMin, yMax: binMax });
+                        binnedData.push({ x: px, yMin: binMin, yMax: binMax, rawMin: rawMin, rawMax: rawMax });
                     }
                 }
 
@@ -395,15 +394,34 @@ function renderLoop() {
                 let paddedRange = range * 1.2;
                 let getPathY = (val) => sh - ((val - paddedMin) / paddedRange * sh);
 
-                sCtx.strokeStyle = window.CH_COLORS[i]; sCtx.lineWidth = 2.5; sCtx.lineJoin = "round"; sCtx.lineCap = "round"; sCtx.beginPath();
+                // --- PASS 1: RAW TRANSIENT SPIKES (Faint background) ---
+                sCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; 
+                sCtx.lineWidth = 1; 
+                sCtx.beginPath();
+                if (binnedData.length > 0) {
+                    sCtx.moveTo(binnedData[0].x, getPathY(binnedData[0].rawMax));
+                    for (let b = 1; b < binnedData.length; b++) {
+                        sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].rawMax));
+                        if (binnedData[b].rawMax - binnedData[b].rawMin > (range * 0.01)) {
+                            sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].rawMin));
+                            sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].rawMax));
+                        }
+                    }
+                }
+                sCtx.stroke();
+
+                // --- PASS 2: SMOOTHED TREND (Foreground) ---
+                sCtx.strokeStyle = window.CH_COLORS[i]; 
+                sCtx.lineWidth = 2.5; 
+                sCtx.lineJoin = "round"; 
+                sCtx.lineCap = "round"; 
+                sCtx.beginPath();
                 
                 if (binnedData.length > 0) {
                     sCtx.moveTo(binnedData[0].x, getPathY((binnedData[0].yMin + binnedData[0].yMax) / 2));
-                    
                     for (let b = 1; b < binnedData.length; b++) {
                         let yMid = getPathY((binnedData[b].yMin + binnedData[b].yMax) / 2);
                         sCtx.lineTo(binnedData[b].x, yMid);
-                        
                         if (binnedData[b].yMax - binnedData[b].yMin > (range * 0.02)) {
                             sCtx.moveTo(binnedData[b].x, getPathY(binnedData[b].yMax));
                             sCtx.lineTo(binnedData[b].x, getPathY(binnedData[b].yMin));
@@ -430,6 +448,13 @@ function renderLoop() {
                     ch.lastHudTime = nowMs;
                     let curVal = ch.waveBuffer[ch.waveBuffer.length - 1].r || 0; 
                     let curTicks = ch.waveBuffer && ch.waveBuffer.length > 0 ? ch.waveBuffer[ch.waveBuffer.length-1].ticks : 0;
+                    
+                    // THE SLEW FIX: Actively compute differential from the raw buffer
+                    if (ch.vizBuffer && ch.vizBuffer.length > 1) {
+                        let vLen = ch.vizBuffer.length;
+                        ch.slew = ch.vizBuffer[vLen - 1] - ch.vizBuffer[vLen - 2];
+                    }
+
                     let kOhm = curVal > 0 ? (1000 / curVal) : 0; 
                     let slw = (ch.slew || 0) * 100;
                     
