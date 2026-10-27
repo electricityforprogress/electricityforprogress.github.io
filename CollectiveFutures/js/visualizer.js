@@ -1,10 +1,41 @@
 /**
  * js/visualizer.js
- * The Biological Entropy & Threshold Gradient Visualizer
+ * Complete Multi-Channel Zoom, History, VU, and Threshold Gradient Visualizer
  */
+
+window.chData = window.chData || [
+    { config: { zoom: 1000, smooth: 0.5 }, waveBuffer: [], vizBuffer: [], history: [], notes: [] },
+    { config: { zoom: 1000, smooth: 0.5 }, waveBuffer: [], vizBuffer: [], history: [], notes: [] },
+    { config: { zoom: 1000, smooth: 0.5 }, waveBuffer: [], vizBuffer: [], history: [], notes: [] },
+    { config: { zoom: 1000, smooth: 0.5 }, waveBuffer: [], vizBuffer: [], history: [], notes: [] }
+];
 
 window.startVisualizers = function() {
     
+    // Initialize UI controls for zoom/smooth if present
+    for (let i = 0; i < 4; i++) {
+        let zSlider = document.getElementById(`ch-zoom-${i}`);
+        let sSlider = document.getElementById(`ch-smooth-${i}`);
+        
+        if (zSlider) {
+            zSlider.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value);
+                let minLog = Math.log(50), maxLog = Math.log(120000);
+                chData[i].config.zoom = Math.exp(minLog + (val / 1000) * (maxLog - minLog));
+                let zVal = document.getElementById(`ch-val-zoom-${i}`);
+                if(zVal) zVal.innerText = Math.round(chData[i].config.zoom);
+            });
+        }
+        
+        if (sSlider) {
+            sSlider.addEventListener('input', (e) => {
+                chData[i].config.smooth = parseFloat(e.target.value);
+                let sVal = document.getElementById(`ch-val-smooth-${i}`);
+                if(sVal) sVal.innerText = chData[i].config.smooth.toFixed(2);
+            });
+        }
+    }
+
     function draw() {
         requestAnimationFrame(draw);
 
@@ -18,35 +49,46 @@ window.startVisualizers = function() {
             if (vu) {
                 let vCtx = vu.getContext('2d');
                 let vw = vu.width;
-                let vh = vu.height;
-                vCtx.clearRect(0, 0, vw, vh);
+                let vvh = vu.height;
+                vCtx.clearRect(0, 0, vw, vvh);
 
-                // Draw VU background
                 vCtx.fillStyle = '#111';
-                vCtx.fillRect(0, 0, vw, vh);
+                vCtx.fillRect(0, 0, vw, vvh);
 
                 let level = 0;
                 if (ch.notes && ch.notes.length > 0) {
                     let now = Date.now();
-                    // Clean up old notes
                     ch.notes = ch.notes.filter(n => now - n.t < n.dur);
                     if (ch.notes.length > 0) {
-                        // Find the loudest active note
                         let maxVel = Math.max(...ch.notes.map(n => n.v));
                         level = maxVel / 127.0;
                     }
                 }
 
                 if (level > 0) {
-                    let fillHeight = level * vh;
+                    let fillHeight = level * vvh;
                     let color = (window.CH_COLORS && window.CH_COLORS[i]) ? window.CH_COLORS[i] : '#00FFCC';
                     vCtx.fillStyle = color;
-                    vCtx.fillRect(0, vh - fillHeight, vw, fillHeight);
+                    vCtx.fillRect(0, vvh - fillHeight, vw, fillHeight);
                 }
             }
 
-            // --- 2. MAIN THRESHOLD WAVEFORM ---
-            // Catch whichever ID your HTML uses for the rolling graph
+            // --- 2. NUMERIC STATS DISPLAY ---
+            let valThresh = document.getElementById(`ch-val-thresh-${i}`);
+            if (valThresh) valThresh.innerText = parseFloat(params.threshold).toFixed(2) + 'x';
+
+            let valAvg = document.getElementById(`ch-val-avg-${i}`);
+            if (valAvg && ch.vizBuffer && ch.vizBuffer.length > 0) {
+                let sum = ch.vizBuffer.reduce((a, b) => a + b, 0);
+                valAvg.innerText = (sum / ch.vizBuffer.length).toFixed(3);
+            }
+
+            let valSlew = document.getElementById(`ch-val-slew-${i}`);
+            if (valSlew) {
+                valSlew.innerText = (ch.lastSlew !== undefined ? ch.lastSlew : 0).toFixed(3);
+            }
+
+            // --- 3. MAIN THRESHOLD WAVEFORM CANVAS ---
             let canvas = document.getElementById(`ch-canvas-${i}`) || document.getElementById(`viz-ch-${i}`);
             if (!canvas) continue;
 
@@ -57,7 +99,6 @@ window.startVisualizers = function() {
             ctx.clearRect(0, 0, w, h);
 
             if (!ch.vizBuffer || ch.vizBuffer.length < 2) {
-                // Draw standby center line if no data
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
@@ -67,7 +108,7 @@ window.startVisualizers = function() {
                 continue;
             }
 
-            // EXACT MATH MATCH TO HARDWARE V023
+            // Math alignment to Hardware V023
             let sum = 0;
             for(let j = 0; j < ch.vizBuffer.length; j++) sum += ch.vizBuffer[j];
             let mean = sum / ch.vizBuffer.length;
@@ -76,30 +117,23 @@ window.startVisualizers = function() {
             for(let j = 0; j < ch.vizBuffer.length; j++) sumSq += Math.pow(ch.vizBuffer[j] - mean, 2);
             let stdDev = Math.sqrt(sumSq / ch.vizBuffer.length);
             
-            // Replicate the hardware's 0.5f noise floor minimum
             let minStdDev = mean * 0.005;
             if (stdDev < minStdDev) stdDev = minStdDev;
             if (stdDev < 0.5) stdDev = 0.5;
 
-            // Anchor the Y-Axis to exactly 5.0 Standard Deviations.
-            // This guarantees the UI slider (0-5.0) visually locks to the canvas height perfectly.
+            // LOCKED Y-AXIS: Exactly 5.0 Standard Deviations for a rock-solid reference point
             let yRangeMax = mean + (5.0 * stdDev);
             let yRangeMin = mean - (5.0 * stdDev);
             let absoluteRange = yRangeMax - yRangeMin;
 
-            // Pixel mapping function
             const getY = (val) => h - ((val - yRangeMin) / absoluteRange) * h;
 
             let yMean = getY(mean);
             let yUpper = getY(mean + (params.threshold * stdDev));
             let yLower = getY(mean - (params.threshold * stdDev));
 
-            // --- A. DRAW THE HOLLOW GLOWING THRESHOLD TUBE ---
+            // --- A. GLOWING THRESHOLD TUBE ---
             let grad = ctx.createLinearGradient(0, yUpper, 0, yLower);
-            let colorBase = (window.CH_COLORS && window.CH_COLORS[i]) ? window.CH_COLORS[i] : 'rgba(0, 255, 200,';
-            
-            // Extract rgb from hex/hsl to build the gradient if necessary, 
-            // or just use a stunning generic cyan/purple glow
             grad.addColorStop(0, 'rgba(0, 200, 255, 0.35)');
             grad.addColorStop(0.5, 'rgba(0, 200, 255, 0.02)');
             grad.addColorStop(1, 'rgba(0, 200, 255, 0.35)');
@@ -107,7 +141,6 @@ window.startVisualizers = function() {
             ctx.fillStyle = grad;
             ctx.fillRect(0, yUpper, w, yLower - yUpper);
 
-            // Glowing Boundary Dashes
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.8)';
             ctx.setLineDash([4, 4]);
             ctx.lineWidth = 1;
@@ -115,19 +148,18 @@ window.startVisualizers = function() {
             ctx.moveTo(0, yUpper); ctx.lineTo(w, yUpper);
             ctx.moveTo(0, yLower); ctx.lineTo(w, yLower);
             ctx.stroke();
-            ctx.setLineDash([]); // Reset dash
+            ctx.setLineDash([]);
 
-            // Draw faint center Mean line
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.beginPath();
             ctx.moveTo(0, yMean); ctx.lineTo(w, yMean);
             ctx.stroke();
 
-            // --- B. DRAW THE BIOLOGICAL SIGNAL ---
+            // --- B. BIOLOGICAL SIGNAL & PUNCTURE HIGHLIGHTING ---
             let step = w / (ch.vizBuffer.length - 1);
             let highlightColor = (window.CH_COLORS && window.CH_COLORS[i]) ? window.CH_COLORS[i] : '#00FFCC';
 
-            // Base Pass: Draw the entire waveform as a thin ghost line
+            // Ghost baseline
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -139,7 +171,7 @@ window.startVisualizers = function() {
             }
             ctx.stroke();
 
-            // Highlight Pass: Draw thick, bright lines ONLY when the signal punctures the Threshold Tube
+            // Highlight punctures
             ctx.strokeStyle = highlightColor;
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -149,14 +181,11 @@ window.startVisualizers = function() {
                 let val = ch.vizBuffer[j];
                 let x = j * step;
                 let y = getY(val);
-                
-                // Does this specific data point puncture the threshold?
                 let isPunctured = Math.abs(val - mean) > (params.threshold * stdDev);
 
                 if (isPunctured) {
                     if (!isDrawingHighlight) {
                         ctx.beginPath();
-                        // Anchor to the previous point so the line emerges smoothly from the tube
                         if (j > 0) ctx.moveTo((j-1) * step, getY(ch.vizBuffer[j-1]));
                         else ctx.moveTo(x, y);
                         isDrawingHighlight = true;
@@ -164,21 +193,19 @@ window.startVisualizers = function() {
                     ctx.lineTo(x, y);
                 } else {
                     if (isDrawingHighlight) {
-                        ctx.lineTo(x, y); // Tie back into the safe zone
+                        ctx.lineTo(x, y);
                         ctx.stroke();
                         isDrawingHighlight = false;
                     }
                 }
             }
-            if (isDrawingHighlight) ctx.stroke(); // Flush any remaining highlighted path
+            if (isDrawingHighlight) ctx.stroke();
         }
     }
     
-    // Kick off the animation loop
     requestAnimationFrame(draw);
 };
 
-// Initialize when the DOM is fully loaded
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', window.startVisualizers);
 } else {
