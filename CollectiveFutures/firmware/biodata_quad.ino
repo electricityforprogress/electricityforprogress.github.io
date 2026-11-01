@@ -19,7 +19,7 @@
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 
-#define CONFIG_VERSION 30 // Bumped to force NVS structural update
+#define CONFIG_VERSION 32 // Bumped to force NVS structural update
 #define NUM_CHANNELS 4
 
 Adafruit_USBD_MIDI usb_midi_interface;
