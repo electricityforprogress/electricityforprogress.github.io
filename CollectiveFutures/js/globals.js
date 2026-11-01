@@ -79,35 +79,18 @@ window.applySpreadCurve = function(normPitch, spread) {
 };
 
 window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote = 0, maxNote = 127) {
-    let allowedClasses = [];
+    let snappedNote = Math.max(minNote, Math.min(maxNote, rawNote));
     
-    if (scaleType === 'custom' && activeScaleBits) {
-        for (let i = 0; i < 12; i++) {
-            if (activeScaleBits[i]) allowedClasses.push(i);
-        }
-        if (allowedClasses.length === 0) allowedClasses = [0,2,4,5,7,9,11]; 
-    } else if (scaleType !== 'chromatic') {
-        let scale = window.SCALES[scaleType] || window.SCALES['major'];
-        root = parseInt(root);
-        for (let i = 0; i < scale.length; i++) {
-            allowedClasses.push((scale[i] + root) % 12);
-        }
-    } else {
-        allowedClasses = [0,1,2,3,4,5,6,7,8,9,10,11];
-    }
+    if (scaleType === 'chromatic') return snappedNote;
+    if (activeScaleBits[snappedNote % 12]) return snappedNote;
 
-    let validNotes = [];
-    for (let note = minNote; note <= maxNote; note++) {
-        if (allowedClasses.includes(note % 12)) validNotes.push(note);
+    for (let offset = 1; offset <= 12; offset++) {
+        let up = snappedNote + offset;
+        if (up <= maxNote && activeScaleBits[up % 12]) return up;
+        let down = snappedNote - offset;
+        if (down >= minNote && activeScaleBits[down % 12]) return down;
     }
-    
-    if (validNotes.length === 0) return Math.max(minNote, Math.min(maxNote, 60));
-
-    let pct = (rawNote - minNote) / (maxNote - minNote || 1);
-    let index = Math.round(pct * (validNotes.length - 1));
-    index = Math.max(0, Math.min(validNotes.length - 1, index));
-    
-    return validNotes[index];
+    return snappedNote;
 };
 
 window.globalFX = {
