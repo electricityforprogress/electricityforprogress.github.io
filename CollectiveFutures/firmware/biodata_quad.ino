@@ -142,18 +142,18 @@ void processIncomingCC(uint8_t ch, uint8_t cc, uint8_t val) {
             config[ch].threshold = config[ch].thresh_base + config[ch].thresh_boost; 
             break; 
         case 82: config[ch].window_size = map(val, 0, 127, 10, 100); break;
-        case 83: config[ch].density = map(val, 0, 127, 0, 100); break;
+        case 83: config[ch].density = val; break;
         case 84: config[ch].note_min = val; break;
         case 85: config[ch].note_max = val; break;
         case 86: config[ch].vel_min = val; break;
         case 87: config[ch].vel_max = val; break;
-        case 88: config[ch].spread = map(val, 0, 127, 0, 100); break;
-        case 89: config[ch].dur_mult = (val / 127.0f) * 4.9f + 0.1f; break; 
-        case 90: config[ch].quantize = map(val, 0, 127, 0, 8); break;
-        case 91: config[ch].midi_channel = map(val, 0, 127, 0, 15); break;
-        case 92: config[ch].bpm = map(val, 0, 127, 60, 240); break;
-        case 93: config[ch].polyphony = map(val, 0, 127, 1, 8); break;
-        case 94: config[ch].steal_mode = map(val, 0, 127, 0, 3); break;
+        case 88: config[ch].spread = val; break;
+        case 89: config[ch].dur_mult = val / 10.0f; break;
+        case 90: config[ch].quantize = val; break; // 1:1 discrete mapping
+        case 91: config[ch].midi_channel = val; break; // 1:1 exact MIDI channel
+        case 92: config[ch].bpm = round(60.0f + (val / 127.0f) * 180.0f); break;
+        case 93: config[ch].polyphony = val; break; // 1:1 discrete mapping
+        case 94: config[ch].steal_mode = val; break; // 1:1 discrete mapping
         case 95: config[ch].legato = (val > 63) ? 1 : 0; break;
     }
 }
