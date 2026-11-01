@@ -198,7 +198,7 @@ function initVisualizer() {
                                 </label>
                                 <label style="display: flex; align-items: center; justify-content: space-between;">
                                     <span style="font-weight: bold; width: 12px;">W</span>
-                                    <input type="range" id="ch-window-${i}" class="pro-slider" min="10" max="200" step="1" value="40" style="flex-grow: 1; margin: 0 8px; background: #333;">
+                                    <input type="range" id="ch-window-${i}" class="pro-slider" min="10" max="100" step="1" value="40" style="flex-grow: 1; margin: 0 8px; background: #333;">
                                     <span id="ch-val-window-${i}" style="color: #ccc; width: 30px; text-align: right;">40</span>
                                 </label>
                             </div>
