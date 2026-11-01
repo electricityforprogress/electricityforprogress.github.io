@@ -514,7 +514,7 @@ window.syncParamsToHardware = function(chIdx) {
         window.sendHardwareCC(chIdx, 80, cc80Val);
         
         window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, Math.round(((p.sampleSize - 10) / 90) * 127))));
-        window.sendHardwareCC(chIdx, 83, Math.min(127, Math.max(0, Math.round((p.density / 100) * 127)))); 
+        window.sendHardwareCC(chIdx, 83, Math.round(p.density)); 
         
         // Force strict integers on discrete boundaries
         window.sendHardwareCC(chIdx, 84, Math.round(p.minNote));
@@ -522,7 +522,7 @@ window.syncParamsToHardware = function(chIdx) {
         window.sendHardwareCC(chIdx, 86, Math.round(p.velMin));
         window.sendHardwareCC(chIdx, 87, Math.round(p.velMax));
         
-        window.sendHardwareCC(chIdx, 88, Math.min(127, Math.max(0, Math.round((p.spread / 100) * 127))));
+        window.sendHardwareCC(chIdx, 88, Math.round(p.spread));
         window.sendHardwareCC(chIdx, 89, Math.round(p.durMult * 10)); // 1.0 becomes 10 (Max 50 fits in 127)   
         window.sendHardwareCC(chIdx, 90, Math.round(p.quantize));
         window.sendHardwareCC(chIdx, 91, Math.round(p.midiOutCh));
