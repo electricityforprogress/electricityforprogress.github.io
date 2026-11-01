@@ -847,6 +847,24 @@ function switchModView(type, targetView) {
     syncUI();
 }
 
+window.updateEnvTimeMode = function(val) {
+    if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
+    p[activeEnvView].timeMode = val;
+    let env = p[activeEnvView];
+    
+    // Clamp values if switching from EXT down to NRM
+    if (val === 'norm') {
+        if (env.atk > 2.0) env.atk = 2.0;
+        if (env.dec > 2.0) env.dec = 2.0;
+        if (env.rel > 5.0) env.rel = 5.0;
+    }
+    
+    synthChannels[activeSynthIndex].applyParams();
+    syncUI();
+    window.markChannelDirty(activeSynthIndex);
+};
+
 window.updateLfoRateMode = function(val) {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
@@ -997,6 +1015,23 @@ function syncUI() {
 
     let lfoShape = document.getElementById('ui-lfo-shape');
     if(lfoShape && p[activeLfoView]) lfoShape.value = p[activeLfoView].shape;
+    
+    if (p[activeEnvView]) {
+        let timeMode = p[activeEnvView].timeMode || 'norm';
+        let tmEl = document.getElementById(timeMode === 'norm' ? 'env-time-norm' : 'env-time-ext');
+        if (tmEl) tmEl.checked = true;
+        
+        let atkEl = document.getElementById('ui-env-atk');
+        let decEl = document.getElementById('ui-env-dec');
+        let relEl = document.getElementById('ui-env-rel');
+        if (atkEl && decEl && relEl) {
+            if (timeMode === 'norm') {
+                atkEl.max = "2"; decEl.max = "2"; relEl.max = "5";
+            } else {
+                atkEl.max = "10"; decEl.max = "10"; relEl.max = "20";
+            }
+        }
+    }
     
     ['atk', 'dec', 'sus', 'rel'].forEach(id => { let el = document.getElementById(`ui-env-${id}`); if(el && p[activeEnvView]) el.value = p[activeEnvView][id]; });
     

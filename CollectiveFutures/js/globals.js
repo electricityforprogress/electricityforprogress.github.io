@@ -46,10 +46,10 @@ window.defaultParams = {
     filterLfo: { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     ampLfo:    { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     
-    env: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5 },
-    pitchEnv: { atk: 0.0, dec: 0.0, sus: 0.0, rel: 0.0, amt: 0.0 },
-    filterEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5 },
-    ampEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 1.0 },
+    env: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5, timeMode: 'norm' },
+    pitchEnv: { atk: 0.0, dec: 0.0, sus: 0.0, rel: 0.0, amt: 0.0, timeMode: 'norm' },
+    filterEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5, timeMode: 'norm' },
+    ampEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 1.0, timeMode: 'norm' },
     
     fx: { drv: 0, drvGrit: 10, drvTone: 2000, drvLvl: 1.0, dly: 0, rev: 0 },
     
@@ -101,15 +101,15 @@ window.globalFX = {
 // --- FACTORY CHANNEL PRESETS (Individual Synth Tracks) ---
 window.FACTORY_CHANNEL_PRESETS = {
     "Deep Sub Drone": {
-        params: { ...window.defaultParams, mixVol: 0.8, voices: 1, legato: 1, stealMode: 'env', steal: 'env', glide: 0.2, minNote: 24, maxNote: 48, durMult: 4.0, sources: { osc1: { type: 'sine', level: 1.0 }, sub: { level: 0.5 }, noise: { level: 0.0 } }, ampEnv: { atk: 2.0, dec: 1.0, sus: 1.0, rel: 4.0, amt: 1.0 } },
+        params: { ...window.defaultParams, mixVol: 0.8, voices: 1, legato: 1, stealMode: 'env', steal: 'env', glide: 0.2, minNote: 24, maxNote: 48, durMult: 4.0, sources: { osc1: { type: 'sine', level: 1.0 }, sub: { level: 0.5 }, noise: { level: 0.0 } }, ampEnv: { atk: 2.0, dec: 1.0, sus: 1.0, rel: 4.0, amt: 1.0, timeMode: 'norm' } },
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Soft Plucks": {
-        params: { ...window.defaultParams, mixVol: 0.6, voices: 6, stealMode: 'oldest', steal: 'oldest', minNote: 48, maxNote: 72, durMult: 0.5, sources: { osc1: { type: 'triangle', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.05, dec: 0.3, sus: 0.2, rel: 1.5, amt: 1.0 }, filter: { cutoff: 2000, res: 4 } },
+        params: { ...window.defaultParams, mixVol: 0.6, voices: 6, stealMode: 'oldest', steal: 'oldest', minNote: 48, maxNote: 72, durMult: 0.5, sources: { osc1: { type: 'triangle', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.05, dec: 0.3, sus: 0.2, rel: 1.5, amt: 1.0, timeMode: 'norm' }, filter: { cutoff: 2000, res: 4 } },
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Shimmer Arp": {
-        params: { ...window.defaultParams, mixVol: 0.5, voices: 4, stealMode: 'oldest', steal: 'oldest', minNote: 72, maxNote: 96, quantize: 4, durMult: 0.2, sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.01, dec: 0.1, sus: 0.0, rel: 0.5, amt: 1.0 } },
+        params: { ...window.defaultParams, mixVol: 0.5, voices: 4, stealMode: 'oldest', steal: 'oldest', minNote: 72, maxNote: 96, quantize: 4, durMult: 0.2, sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.01, dec: 0.1, sus: 0.0, rel: 0.5, amt: 1.0, timeMode: 'norm' } },
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Bio Percussion": {
