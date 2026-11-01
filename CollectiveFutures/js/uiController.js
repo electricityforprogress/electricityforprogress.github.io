@@ -523,15 +523,14 @@ window.syncParamsToHardware = function(chIdx) {
         window.sendHardwareCC(chIdx, 87, Math.round(p.velMax));
         
         window.sendHardwareCC(chIdx, 88, Math.min(127, Math.max(0, Math.round((p.spread / 100) * 127))));
-        window.sendHardwareCC(chIdx, 89, Math.min(127, Math.max(0, Math.round(((p.durMult - 0.1) / 4.9) * 127))));
-        window.sendHardwareCC(chIdx, 90, Math.min(127, Math.max(0, Math.round((Math.round(p.quantize) / 8) * 127))));
-        window.sendHardwareCC(chIdx, 91, Math.min(127, Math.max(0, Math.round((Math.round(p.midiOutCh) / 15) * 127))));
-        window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, Math.round(((Math.round(window.masterBPM) - 60) / 180) * 127))));
+        window.sendHardwareCC(chIdx, 89, Math.round(p.durMult * 10)); // 1.0 becomes 10 (Max 50 fits in 127)   
+        window.sendHardwareCC(chIdx, 90, Math.round(p.quantize));
+        window.sendHardwareCC(chIdx, 91, Math.round(p.midiOutCh));
+        window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, Math.round(((Math.round(window.masterBPM) - 60) / 180) * 127)))); // BPM stays scaled (range 180)
         
-        // FIX: Explicitly round polyphony voices before CC transmission to prevent hardware truncation
-        window.sendHardwareCC(chIdx, 93, Math.min(127, Math.max(0, Math.round(((Math.round(p.voices) - 1) / 7) * 127))));
+        window.sendHardwareCC(chIdx, 93, Math.round(p.voices));
         
-        let stealVal = p.stealMode === 'oldest' ? 0 : (p.stealMode === 'lowest' ? 42 : (p.stealMode === 'highest' ? 84 : 127));
+        let stealVal = p.stealMode === 'oldest' ? 0 : (p.stealMode === 'lowest' ? 1 : (p.stealMode === 'highest' ? 2 : 3));
         window.sendHardwareCC(chIdx, 94, stealVal);
         window.sendHardwareCC(chIdx, 95, p.legato === 1 ? 127 : 0);
     }
