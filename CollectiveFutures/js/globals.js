@@ -1,11 +1,13 @@
 /**
  * js/globals.js
+ * bioQuad Master State & Calibration Matrix
  */
 window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 window.isMasterMuted = false;
-window.masterVolumeLevel = 1.0; 
+window.masterVolumeLevel = 0.75; 
 window.masterGain = window.audioCtx.createGain();
+window.masterGain.gain.value = 0.75;
 window.masterAnalyser = window.audioCtx.createAnalyser();
 window.masterGain.connect(window.masterAnalyser);
 window.masterAnalyser.connect(window.audioCtx.destination);
@@ -19,10 +21,10 @@ window.midiOutput = null;
 window.CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
 window.ZOOM_STEPS = [50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 120000];
 
-// The Master Grid
+// Master Clock & Grid
 window.masterBPM = 120;
 window.midiClockMode = 'out'; 
-window.lastBeatTime = 0; // For flashing the global LED
+window.lastBeatTime = 0; 
 
 window.SCALES = {
     'chromatic': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
@@ -34,8 +36,8 @@ window.SCALES = {
 };
 
 window.defaultParams = {
-    mixVol: 0.6, muted: false, 
-    voices: 5, stealMode: 'none', legato: 0, glide: 0.0,
+    mixVol: 0.50, muted: false, 
+    voices: 5, stealMode: 'none', steal: 'none', legato: 0, glide: 0.0,
     sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } },
     filter: { cutoff: 8000, res: 2 },
     
@@ -51,7 +53,12 @@ window.defaultParams = {
     
     fx: { drv: 0, drvGrit: 10, drvTone: 2000, drvLvl: 1.0, dly: 0, rev: 0 },
     
-    threshold: 2.0, noiseFloor: 0.1, density: 100, quantize: 0, sampleSize: 40,
+    threshold: 2.0, 
+    threshMax: 5.0, // Scalable: 1.0 to 10.0
+    noiseFloor: 0.1, 
+    density: 100, 
+    quantize: 0, 
+    sampleSize: 40,
     minNote: 36, maxNote: 84, velMin: 60, velMax: 110,
     spread: 75, durMult: 1.0, 
     scaleRoot: 0, scaleType: 'chromatic',
@@ -59,7 +66,9 @@ window.defaultParams = {
     testIntensity: 0
 };
 
-window.mapScale = function(value, inMin, inMax, outMin, outMax) { return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin; };
+window.mapScale = function(value, inMin, inMax, outMin, outMax) { 
+    return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin; 
+};
 
 window.applySpreadCurve = function(normPitch, spread) {
     let spreadNorm = spread / 100.0;
@@ -72,7 +81,6 @@ window.applySpreadCurve = function(normPitch, spread) {
 window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote = 0, maxNote = 127) {
     let allowedClasses = [];
     
-    // 1. Gather valid note classes (0-11) based on scale mode
     if (scaleType === 'custom' && activeScaleBits) {
         for (let i = 0; i < 12; i++) {
             if (activeScaleBits[i]) allowedClasses.push(i);
@@ -88,7 +96,6 @@ window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote =
         allowedClasses = [0,1,2,3,4,5,6,7,8,9,10,11];
     }
 
-    // 2. Generate a strict, sorted array of ONLY the valid MIDI notes within the bounds
     let validNotes = [];
     for (let note = minNote; note <= maxNote; note++) {
         if (allowedClasses.includes(note % 12)) validNotes.push(note);
@@ -96,10 +103,7 @@ window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote =
     
     if (validNotes.length === 0) return Math.max(minNote, Math.min(maxNote, 60));
 
-    // 3. Convert the incoming rawNote back into a 0.0 - 1.0 percentage across the slider bounds
     let pct = (rawNote - minNote) / (maxNote - minNote || 1);
-    
-    // 4. Map that percentage evenly across the available valid notes
     let index = Math.round(pct * (validNotes.length - 1));
     index = Math.max(0, Math.min(validNotes.length - 1, index));
     
@@ -109,4 +113,44 @@ window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote =
 window.globalFX = {
     dly: { time: 0.5, feedback: 0.5, tone: 2000, toRev: 0.2 },
     rev: { size: 2.0, damp: 3000, hpf: 100 }
+};
+
+// --- FACTORY CHANNEL PRESETS (Individual Synth Tracks) ---
+window.FACTORY_CHANNEL_PRESETS = {
+    "Deep Sub Drone": {
+        params: { ...window.defaultParams, mixVol: 0.8, voices: 1, legato: 1, stealMode: 'env', steal: 'env', glide: 0.2, minNote: 24, maxNote: 48, durMult: 4.0, sources: { osc1: { type: 'sine', level: 1.0 }, sub: { level: 0.5 }, noise: { level: 0.0 } }, ampEnv: { atk: 2.0, dec: 1.0, sus: 1.0, rel: 4.0, amt: 1.0 } },
+        config: { zoom: 500, smooth: 0.05, freeze: false }
+    },
+    "Soft Plucks": {
+        params: { ...window.defaultParams, mixVol: 0.6, voices: 6, stealMode: 'oldest', steal: 'oldest', minNote: 48, maxNote: 72, durMult: 0.5, sources: { osc1: { type: 'triangle', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.05, dec: 0.3, sus: 0.2, rel: 1.5, amt: 1.0 }, filter: { cutoff: 2000, res: 4 } },
+        config: { zoom: 500, smooth: 0.05, freeze: false }
+    },
+    "Shimmer Arp": {
+        params: { ...window.defaultParams, mixVol: 0.5, voices: 4, stealMode: 'oldest', steal: 'oldest', minNote: 72, maxNote: 96, quantize: 4, durMult: 0.2, sources: { osc1: { type: 'sawtooth', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.01, dec: 0.1, sus: 0.0, rel: 0.5, amt: 1.0 } },
+        config: { zoom: 500, smooth: 0.05, freeze: false }
+    },
+    "Bio Percussion": {
+        params: { ...window.defaultParams, mixVol: 0.7, voices: 4, stealMode: 'oldest', steal: 'oldest', density: 15, quantize: 3, minNote: 36, maxNote: 50, sources: { osc1: { type: 'drums', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } } },
+        config: { zoom: 500, smooth: 0.05, freeze: false }
+    }
+};
+
+// --- FACTORY GLOBAL PRESETS (The 4-Channel Master State) ---
+window.FACTORY_PRESETS = {
+    "Ambient Orchid": {
+        master: { vol: 0.75, muted: false, bpm: 90 },
+        globalFX: { dly: { time: 0.75, feedback: 0.6, tone: 1500, toRev: 0.4 }, rev: { size: 3.5, damp: 2000, hpf: 150 } },
+        channels: [
+            { ...window.FACTORY_CHANNEL_PRESETS["Deep Sub Drone"].params, savedPatchName: "Deep Sub Drone" },
+            { ...window.FACTORY_CHANNEL_PRESETS["Soft Plucks"].params, savedPatchName: "Soft Plucks" },
+            { ...window.FACTORY_CHANNEL_PRESETS["Shimmer Arp"].params, savedPatchName: "Shimmer Arp" },
+            { ...window.FACTORY_CHANNEL_PRESETS["Bio Percussion"].params, savedPatchName: "Bio Percussion" }
+        ],
+        viz: [
+            window.FACTORY_CHANNEL_PRESETS["Deep Sub Drone"].config,
+            window.FACTORY_CHANNEL_PRESETS["Soft Plucks"].config,
+            window.FACTORY_CHANNEL_PRESETS["Shimmer Arp"].config,
+            window.FACTORY_CHANNEL_PRESETS["Bio Percussion"].config
+        ]
+    }
 };

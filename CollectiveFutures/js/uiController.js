@@ -1,5 +1,6 @@
 /**
  * js/uiController.js
+ * bioQuad Control Surface, Tooltips, Presets & Additive CC Sync
  */
 
 window.syncTimers = {};
@@ -56,6 +57,8 @@ const paramFormats = {
     'noteMax': v => { let m = Math.round(v); return `MAX: ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m%12]}${Math.floor(m/12)-2}`; },
     'velMin': v => `MIN: ${Math.round(v)}`,
     'velMax': v => `MAX: ${Math.round(v)}`,
+    'threshold': v => v.toFixed(2) + 'x',
+    'threshMax': v => 'MAX: ' + v.toFixed(2) + 'x',
     'default': v => v.toFixed(2)
 };
 
@@ -86,8 +89,6 @@ function hideTooltip() {
 }
 
 document.addEventListener('input', (e) => {
-    
-    // Explicit wildcard catch for visualizer sliders
     if (e.target.id && (e.target.id.toLowerCase().includes('thresh') || e.target.id.toLowerCase().includes('window'))) {
         let ch = activeSynthIndex;
         let match = e.target.id.match(/\d+/);
@@ -96,8 +97,12 @@ document.addEventListener('input', (e) => {
         if (synthChannels[ch]) {
             if (e.target.id.toLowerCase().includes('thresh')) {
                 synthChannels[ch].params.threshold = parseFloat(e.target.value);
+                let vEl = document.getElementById(`ch-val-thresh-${ch}`);
+                if (vEl) vEl.innerText = parseFloat(e.target.value).toFixed(2) + 'x';
             } else {
                 synthChannels[ch].params.sampleSize = parseInt(e.target.value);
+                let wEl = document.getElementById(`ch-val-window-${ch}`);
+                if (wEl) wEl.innerText = e.target.value;
             }
             window.debouncedHardwareSync(ch);
         }
@@ -151,11 +156,11 @@ document.addEventListener('pointerup', (e) => {
     }
 });
 
-// --- PIANO FUNCTIONS (Hoisted to ensure safety) ---
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
     synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
-    document.getElementById('ui-scaleType').value = 'custom'; 
+    let sel = document.getElementById('ui-scaleType');
+    if (sel) sel.value = 'custom'; 
     updateActiveSynth('scaleType', 'custom'); 
     syncPianoUI();
 }
@@ -181,7 +186,6 @@ function syncPianoUI() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    
     document.body.addEventListener('pointerdown', () => {
         if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
             window.audioCtx.resume().catch(()=>{});
@@ -211,20 +215,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 startY = e.clientY; 
                 startX = e.clientX;
                 startVal = parseFloat(slider.value);
-                
                 e.preventDefault(); 
             });
 
             window.addEventListener('mousemove', (e) => {
                 if (!isDragging) return;
-                
                 let min = parseFloat(slider.min) || 0;
                 let max = parseFloat(slider.max) || 100;
                 let step = parseFloat(slider.step) || 1;
                 
                 let deltaX = e.clientX - startX;
                 let deltaY = startY - e.clientY; 
-                
                 let width = slider.clientWidth || 100;
                 
                 let coarseChange = (deltaX / width) * (max - min);
@@ -232,7 +233,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 let newVal = startVal + coarseChange + fineChange;
                 newVal = Math.max(min, Math.min(max, newVal));
-                
                 let steppedVal = Math.round(newVal / step) * step;
                 
                 if (Math.abs(parseFloat(slider.value) - steppedVal) >= step/2) {
@@ -243,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (slider.id.includes('vol')) param = 'mixVol';
                     if (slider.id.includes('density')) param = 'density';
                     if (slider.id === 'ui-quantize') param = 'quantize';
+                    if (slider.id.includes('thresh')) param = 'threshold';
                     
                     let group = '';
                     if (slider.id.includes('env')) group = 'env';
@@ -287,7 +288,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let val = parseFloat(e.target.value);
             if (synthChannels[activeSynthIndex]) {
                 synthChannels[activeSynthIndex].params[paramKey] = val;
-                if (labelId && formatFn) document.getElementById(labelId).innerText = formatFn(val);
+                if (labelId && formatFn) {
+                    let lbl = document.getElementById(labelId);
+                    if (lbl) lbl.innerText = formatFn(val);
+                }
                 if (paramKey !== 'testIntensity') window.debouncedHardwareSync(activeSynthIndex);
             }
         });
@@ -367,19 +371,20 @@ function buildMixerAndMidiUI() {
     for(let i=0; i<4; i++) {
         html += `
         <div class="strip">
-            <div class="strip-label" style="color: ${window.CH_COLORS ? window.CH_COLORS[i] : 'hsl('+(i*90)+', 100%, 60%)'}; margin-bottom: 5px;">CH ${i+1}</div>
+            <div class="strip-label" style="color: ${window.CH_COLORS ? window.CH_COLORS[i] : '#00f0ff'}; margin-bottom: 5px;">CH ${i+1}</div>
             <div class="strip-controls">
-                <div class="v-slider-container"><input type="range" id="ch-vol-${i}" class="v-slider slider-ch-${i}" min="0" max="1" step="0.01" value="0.8" oninput="synthChannels[${i}].setVolume(this.value)"></div>
+                <div class="v-slider-container"><input type="range" id="ch-vol-${i}" class="v-slider slider-ch-${i}" min="0" max="1" step="0.01" value="0.5" oninput="synthChannels[${i}].setVolume(this.value)"></div>
                 <canvas class="vu ch-vu" id="vu-${i}"></canvas>
             </div>
-            <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 12px;">M</button>        </div>`;
+            <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 12px;">M</button>
+        </div>`;
     }
     
     html += `
         <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px; border-right: none !important;">
             <div class="strip-label" style="color: var(--cyan); margin-bottom: 5px;">MIX</div>
             <div class="strip-controls" style="justify-content: center; width: 100%;">
-                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider slider-master" min="0" max="1" step="0.01" value="1.0" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
+                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider slider-master" min="0" max="1" step="0.01" value="0.75" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
             </div>
             <div style="height: 25px; margin-top: 5px;"></div>
         </div>`;
@@ -483,28 +488,48 @@ function selectTab(index) {
     syncUI(); 
 }
 
-function triggerLED(index) { const led = document.getElementById(`led-${index}`); if (led) { led.classList.add('active'); setTimeout(() => led.classList.remove('active'), 100); } }
-function setVolume(ch, val) { if (synthChannels[ch]) synthChannels[ch].setVolume(val); }
-function toggleMute(ch) { if (synthChannels[ch]) synthChannels[ch].toggleMute(); }
+function triggerLED(index) { 
+    const led = document.getElementById(`led-${index}`); 
+    if (led) { 
+        led.classList.add('active'); 
+        setTimeout(() => led.classList.remove('active'), 100); 
+    } 
+}
 
+// --- ADDITIVE HARDWARE SYNC PROTOCOL ---
 window.syncParamsToHardware = function(chIdx) {
     if (!synthChannels[chIdx]) return;
     const p = synthChannels[chIdx].params;
-    
+         
     if (typeof window.sendHardwareCC === 'function') {
-        window.sendHardwareCC(chIdx, 81, Math.min(127, Math.max(0, ((p.threshold - 0.05) / 4.95) * 127)));
-        window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, ((p.sampleSize - 10) / 90) * 127)));
-        window.sendHardwareCC(chIdx, 83, Math.min(127, Math.max(0, (p.density / 100) * 127))); 
-        window.sendHardwareCC(chIdx, 84, p.minNote);
-        window.sendHardwareCC(chIdx, 85, p.maxNote);
-        window.sendHardwareCC(chIdx, 86, p.velMin);
-        window.sendHardwareCC(chIdx, 87, p.velMax);
-        window.sendHardwareCC(chIdx, 88, Math.min(127, Math.max(0, (p.spread / 100) * 127)));
-        window.sendHardwareCC(chIdx, 89, Math.min(127, Math.max(0, ((p.durMult - 0.1) / 4.9) * 127)));
-        window.sendHardwareCC(chIdx, 90, Math.min(127, Math.max(0, (p.quantize / 8) * 127)));
-        window.sendHardwareCC(chIdx, 91, Math.min(127, Math.max(0, (p.midiOutCh / 15) * 127)));
-        window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
-        window.sendHardwareCC(chIdx, 93, Math.min(127, Math.max(0, ((p.voices - 1) / 7) * 127)));
+        // ADDITIVE THRESHOLD (CC 81 Base: 1.0..5.0 + CC 80 Boost: 0..5.0, Total 1.0..10.0)
+        const thresh = Math.min(10.0, Math.max(1.0, p.threshold));
+        const baseVal = Math.min(5.0, thresh);
+        const boostVal = Math.max(0.0, thresh - 5.0);
+        
+        const cc81Val = Math.min(127, Math.max(0, Math.round(((baseVal - 1.0) / 4.0) * 127)));
+        const cc80Val = Math.min(127, Math.max(0, Math.round((boostVal / 5.0) * 127))); 
+        
+        window.sendHardwareCC(chIdx, 81, cc81Val);
+        window.sendHardwareCC(chIdx, 80, cc80Val);
+        
+        window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, Math.round(((p.sampleSize - 10) / 90) * 127))));
+        window.sendHardwareCC(chIdx, 83, Math.min(127, Math.max(0, Math.round((p.density / 100) * 127)))); 
+        
+        // Force strict integers on discrete boundaries
+        window.sendHardwareCC(chIdx, 84, Math.round(p.minNote));
+        window.sendHardwareCC(chIdx, 85, Math.round(p.maxNote));
+        window.sendHardwareCC(chIdx, 86, Math.round(p.velMin));
+        window.sendHardwareCC(chIdx, 87, Math.round(p.velMax));
+        
+        window.sendHardwareCC(chIdx, 88, Math.min(127, Math.max(0, Math.round((p.spread / 100) * 127))));
+        window.sendHardwareCC(chIdx, 89, Math.min(127, Math.max(0, Math.round(((p.durMult - 0.1) / 4.9) * 127))));
+        window.sendHardwareCC(chIdx, 90, Math.min(127, Math.max(0, Math.round((Math.round(p.quantize) / 8) * 127))));
+        window.sendHardwareCC(chIdx, 91, Math.min(127, Math.max(0, Math.round((Math.round(p.midiOutCh) / 15) * 127))));
+        window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, Math.round(((Math.round(window.masterBPM) - 60) / 180) * 127))));
+        
+        // FIX: Explicitly round polyphony voices before CC transmission to prevent hardware truncation
+        window.sendHardwareCC(chIdx, 93, Math.min(127, Math.max(0, Math.round(((Math.round(p.voices) - 1) / 7) * 127))));
         
         let stealVal = p.stealMode === 'oldest' ? 0 : (p.stealMode === 'lowest' ? 42 : (p.stealMode === 'highest' ? 84 : 127));
         window.sendHardwareCC(chIdx, 94, stealVal);
@@ -531,7 +556,10 @@ function updateActiveSynth(param, value) {
     
     if (!synthChannels[activeSynthIndex]) return;
     
-    if (param === 'stealMode' || param === 'scaleType' || param === 'scaleRoot') {
+    if (param === 'stealMode' || param === 'steal') {
+        synthChannels[activeSynthIndex].params.stealMode = value || 'none';
+        synthChannels[activeSynthIndex].params.steal = value || 'none';
+    } else if (param === 'scaleType' || param === 'scaleRoot') {
         synthChannels[activeSynthIndex].params[param] = value;
     } else {
         synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
@@ -556,7 +584,7 @@ function updateActiveSynth(param, value) {
     }
 }
 
-// --- GLOBAL PRESET ENGINE ---
+// --- GLOBAL PRESETS ---
 let globalPresets = {};
 
 function loadPresetsFromStorage() {
@@ -565,10 +593,27 @@ function loadPresetsFromStorage() {
         if (stored) globalPresets = JSON.parse(stored);
         else globalPresets = {};
     } catch(e) { console.error("Error loading presets", e); }
+    
+    // Inject factory presets if they don't already exist in the user's local storage
+    if (window.FACTORY_PRESETS) {
+        Object.keys(window.FACTORY_PRESETS).forEach(key => {
+            if (!globalPresets[key]) globalPresets[key] = window.FACTORY_PRESETS[key];
+        });
+    }
+    
     updatePresetDropdown();
     
     if (typeof loadChannelPresetsFromStorage === 'function') {
         loadChannelPresetsFromStorage(); 
+    }
+
+    // Auto-load the default factory preset on initial page load
+    if (globalPresets["Ambient Orchid"]) {
+        setTimeout(() => {
+            loadPreset("Ambient Orchid");
+            const sel = document.getElementById('preset-select');
+            if (sel) sel.value = "Ambient Orchid";
+        }, 300);
     }
 }
 
@@ -639,7 +684,6 @@ function loadPreset(name) {
         if (channelData[i] && synthChannels[i]) {
             synthChannels[i].params = JSON.parse(JSON.stringify(channelData[i]));
             synthChannels[i].applyParams();
-            
             synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
             
             if (synthChannels[i].channelOut) {
@@ -657,10 +701,16 @@ function loadPreset(name) {
             let midiSel = document.getElementById(`ui-midi-ch-${i}`);
             if (midiSel) midiSel.value = synthChannels[i].params.midiOutCh;
             
+            let maxScale = synthChannels[i].params.threshMax || 5.0;
             let miniT = document.getElementById(`ch-mini-thresh-${i}`);
             let miniV = document.getElementById(`ch-val-thresh-${i}`);
-            if (miniT) miniT.value = synthChannels[i].params.threshold;
+            let maxBtn = document.getElementById(`ch-max-btn-${i}`);
+            if (miniT) {
+                miniT.max = maxScale.toString();
+                miniT.value = synthChannels[i].params.threshold;
+            }
             if (miniV) miniV.innerText = parseFloat(synthChannels[i].params.threshold).toFixed(2) + 'x';
+            if (maxBtn) maxBtn.innerText = `${maxScale.toFixed(2)}x`;
             
             let miniW = document.getElementById(`ch-window-${i}`);
             let miniWV = document.getElementById(`ch-val-window-${i}`);
@@ -687,31 +737,6 @@ function loadPreset(name) {
 
         if (synthChannels[i]) {
             synthChannels[i].isDirty = false;
-            let pName = synthChannels[i].patchName;
-            
-            if (pName !== "INIT") {
-                if (globalChannelPresets[pName]) {
-                    let canonical = globalChannelPresets[pName];
-                    
-                    let cParams = JSON.parse(JSON.stringify(canonical.params));
-                    let currParams = JSON.parse(JSON.stringify(synthChannels[i].params));
-                    delete cParams.savedPatchName;
-                    delete currParams.savedPatchName;
-                    
-                    let isParamDirty = JSON.stringify(cParams) !== JSON.stringify(currParams);
-                    let isConfigDirty = false;
-                    
-                    if (canonical.config && chData[i]) {
-                        isConfigDirty = JSON.stringify(canonical.config) !== JSON.stringify(chData[i].config);
-                    }
-                    
-                    if (isParamDirty || isConfigDirty) {
-                        synthChannels[i].isDirty = true;
-                    }
-                } else {
-                    synthChannels[i].isDirty = true;
-                }
-            }
         }
     }
     
@@ -740,7 +765,6 @@ function loadPreset(name) {
     }
     
     if (typeof updateChannelPresetDropdowns === 'function') updateChannelPresetDropdowns();
-    
     syncUI();
 
     for (let i=0; i<4; i++) {
@@ -872,7 +896,6 @@ function updateNestedSynth(group, param, value) {
 function initKnobs() {
     document.querySelectorAll('.knob-track').forEach(knob => {
         let isDragging = false, startY = 0, startVal = 0;
-        
         knob.style.touchAction = 'none';
 
         const updateDial = (val) => {
@@ -939,7 +962,7 @@ function initKnobs() {
         };
         
         knob.addEventListener('pointerdown', (e) => {
-            if (e.button !== 0) return; // FIX: Ignore stray touchpad scroll-wheel/right-clicks
+            if (e.button !== 0) return;
             isDragging = true; startY = e.clientY; 
             startVal = parseFloat(knob.dataset.val); 
             knob.setPointerCapture(e.pointerId);
@@ -967,7 +990,9 @@ function syncUI() {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
     
-    ['ui-scaleRoot', 'ui-scaleType', 'ui-steal'].forEach(id => { let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; });
+    ['ui-scaleRoot', 'ui-scaleType'].forEach(id => { let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; });
+    const stealEl = document.getElementById('ui-steal');
+    if (stealEl) stealEl.value = p.stealMode || p.steal || 'none';
     const waveEl = document.getElementById('ui-wave'); if(waveEl) waveEl.value = p.sources.osc1.type;
     
     let legEl = document.getElementById('ui-legato');
@@ -998,10 +1023,10 @@ function syncUI() {
     const setT = (id, t) => { let el = document.getElementById(id); if(el) el.innerText = t; };
 
     setV('ui-slider-density', p.density); setT('ui-density-display', p.density + '%');
-    
     setV('ui-quantize', p.quantize);
     let testInj = document.getElementById('ui-test-injector');
     if (testInj) testInj.value = p.testIntensity || 0;
+    
     let qSlider = document.getElementById('ui-quantize');
     if (qSlider) {
         const spans = qSlider.nextElementSibling.querySelectorAll('span');
@@ -1074,7 +1099,7 @@ function syncUI() {
     syncPianoUI();
 }
 
-/// --- CHANNEL PRESET ENGINE ---
+// --- CHANNEL PRESET ENGINE ---
 let globalChannelPresets = {};
 
 function loadChannelPresetsFromStorage() {
@@ -1082,6 +1107,16 @@ function loadChannelPresetsFromStorage() {
         const stored = localStorage.getItem('biodataChannelPresets');
         if (stored) globalChannelPresets = JSON.parse(stored);
     } catch(e) { console.error("Error loading channel presets", e); }
+    
+    // Inject factory channel presets into the dropdowns
+    if (window.FACTORY_CHANNEL_PRESETS) {
+        Object.keys(window.FACTORY_CHANNEL_PRESETS).forEach(key => {
+            if (!globalChannelPresets[key]) {
+                globalChannelPresets[key] = JSON.parse(JSON.stringify(window.FACTORY_CHANNEL_PRESETS[key]));
+            }
+        });
+    }
+
     updateChannelPresetDropdowns();
 }
 
@@ -1177,20 +1212,21 @@ function loadChannelPreset(ch, name) {
         let midiSel = document.getElementById(`ui-midi-ch-${ch}`);
         if (midiSel) midiSel.value = synthChannels[ch].params.midiOutCh;
         
+        let maxScale = synthChannels[ch].params.threshMax || 5.0;
         let miniT = document.getElementById(`ch-mini-thresh-${ch}`);
         let miniV = document.getElementById(`ch-val-thresh-${ch}`);
-        if (miniT) miniT.value = synthChannels[ch].params.threshold;
+        let maxBtn = document.getElementById(`ch-max-btn-${ch}`);
+        if (miniT) {
+            miniT.max = maxScale.toString();
+            miniT.value = synthChannels[ch].params.threshold;
+        }
         if (miniV) miniV.innerText = parseFloat(synthChannels[ch].params.threshold).toFixed(2) + 'x';
+        if (maxBtn) maxBtn.innerText = `${maxScale.toFixed(2)}x`;
         
         let miniW = document.getElementById(`ch-window-${ch}`);
         let miniWV = document.getElementById(`ch-val-window-${ch}`);
         if (miniW) miniW.value = synthChannels[ch].params.sampleSize;
         if (miniWV) miniWV.innerText = synthChannels[ch].params.sampleSize;
-
-        let floorS = document.getElementById(`ch-floor-${ch}`);
-        let floorV = document.getElementById(`ch-val-floor-${ch}`);
-        if (floorS && synthChannels[ch].params.noiseFloor !== undefined) floorS.value = synthChannels[ch].params.noiseFloor;
-        if (floorV && synthChannels[ch].params.noiseFloor !== undefined) floorV.innerText = synthChannels[ch].params.noiseFloor.toFixed(1);
     }
     
     if (presetData.config && chData[ch]) {
@@ -1258,25 +1294,25 @@ window.markChannelDirty = function(ch) {
     }
 };
 
-// --- V022 AGGRESSIVE BLUETOOTH SYNC PATCH ---
 const catchVisualizerSliders = (e) => {
     if (e.target.id && (e.target.id.includes('mini-thresh') || e.target.id.includes('window'))) {
         let ch = parseInt(e.target.id.replace(/[^\d]/g, ''));
         if (!isNaN(ch) && synthChannels[ch]) {
-            if (e.target.id.includes('thresh')) synthChannels[ch].params.threshold = parseFloat(e.target.value);
-            else synthChannels[ch].params.sampleSize = parseInt(e.target.value);
+            if (e.target.id.includes('thresh')) {
+                let maxLimit = Math.min(10.0, Math.max(1.0, synthChannels[ch].params.threshMax || 5.0));
+                let val = Math.max(1.0, Math.min(maxLimit, Math.min(10.0, parseFloat(e.target.value))));
+                synthChannels[ch].params.threshold = val;
+                let vEl = document.getElementById(`ch-val-thresh-${ch}`);
+                if (vEl) vEl.innerText = val.toFixed(2) + 'x';
+            } else {
+                synthChannels[ch].params.sampleSize = parseInt(e.target.value);
+                let wEl = document.getElementById(`ch-val-window-${ch}`);
+                if (wEl) wEl.innerText = e.target.value;
+            }
             if (typeof window.debouncedHardwareSync === 'function') window.debouncedHardwareSync(ch);
         }
     }
 };
-// Use 'true' to capture the event before visualizer.js blocks it!
+
 document.addEventListener('input', catchVisualizerSliders, true);
 document.addEventListener('change', catchVisualizerSliders, true);
-
-// Suppress the Chrome AudioContext warning natively
-const resumeAudio = () => {
-    if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
-        window.audioCtx.resume().catch(()=>{});
-    }
-};
-['click', 'touchstart', 'keydown'].forEach(evt => document.body.addEventListener(evt, resumeAudio, { once: true }));

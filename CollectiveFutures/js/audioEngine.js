@@ -1,16 +1,18 @@
 /**
  * js/audioEngine.js
+ * bioQuad Polyphonic Modular Synthesizer DSP Engine
  */
 
 function initCustomWaves() {
+    if (!window.audioCtx) return;
     const numHarms = 32; 
     const real = new Float32Array(numHarms), imag = new Float32Array(numHarms);
     for (let i = 1; i < numHarms; i++) imag[i] = -(2 / (i * Math.PI)); 
-    window.rampDownWave = audioCtx.createPeriodicWave(real, imag);
+    window.rampDownWave = window.audioCtx.createPeriodicWave(real, imag);
     
-    const bufSize = audioCtx.sampleRate * 2;
-    window.noiseBuffer = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
+    const bufSize = window.audioCtx.sampleRate * 2;
+    window.noiseBuffer = window.audioCtx.createBuffer(1, bufSize, window.audioCtx.sampleRate);
+    const output = window.noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufSize; i++) output[i] = Math.random() * 2 - 1;
 }
 
@@ -110,42 +112,51 @@ class EnvelopeGen {
         
         param.cancelScheduledValues(now);
 
-        if (type === 'amp') {
-            param.setValueAtTime(silenceFloor, now);
-            param.exponentialRampToValueAtTime(Math.max(peakVal * amt, 0.01), now + atk);
-            param.setTargetAtTime(Math.max(peakVal * amt * sus, silenceFloor), now + atk, dec / 3);
-            
-            param.cancelScheduledValues(stopTime); 
-            if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(stopTime);
+        const safeAtk = Math.max(0.005, atk || 0.01);
+        const safeDec = Math.max(0.005, dec || 0.01);
+        const safeRel = Math.max(0.005, rel || 0.01);
 
-            param.exponentialRampToValueAtTime(silenceFloor, stopTime + rel);
-            param.linearRampToValueAtTime(0, stopTime + rel + 0.01); 
+        if (type === 'amp') {
+            const peak = Math.max(peakVal * (amt !== undefined ? amt : 1.0), 0.02);
+            const susLevel = Math.max(peak * (sus !== undefined ? sus : 1.0), silenceFloor);
+
+            param.setValueAtTime(silenceFloor, now);
+            param.linearRampToValueAtTime(peak, now + safeAtk);
+            param.linearRampToValueAtTime(susLevel, now + safeAtk + safeDec);
+            
+            param.setValueAtTime(susLevel, stopTime);
+            param.linearRampToValueAtTime(silenceFloor, stopTime + safeRel);
+            param.setValueAtTime(0, stopTime + safeRel + 0.005);
         } 
         else if (type === 'filter') {
-            const targetCutoff = baseVal + (5000 * amt); 
-            param.setValueAtTime(baseVal, now);
-            param.exponentialRampToValueAtTime(targetCutoff, now + atk); 
-            param.setTargetAtTime(baseVal + ((targetCutoff - baseVal) * sus), now + atk, dec / 3);
+            const base = baseVal !== undefined && baseVal !== null ? baseVal : 8000;
+            const filterAmt = (amt !== undefined ? amt : 0.5);
+            const targetCutoff = Math.min(20000, Math.max(40, base + (5000 * filterAmt))); 
+            const susCutoff = Math.min(20000, Math.max(40, base + ((targetCutoff - base) * (sus !== undefined ? sus : 1.0))));
+
+            param.setValueAtTime(base, now);
+            param.linearRampToValueAtTime(targetCutoff, now + safeAtk); 
+            param.linearRampToValueAtTime(susCutoff, now + safeAtk + safeDec);
             
-            param.cancelScheduledValues(stopTime);
-            if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(stopTime);
-            param.setTargetAtTime(baseVal, stopTime, rel / 3);
+            param.setValueAtTime(susCutoff, stopTime);
+            param.linearRampToValueAtTime(base, stopTime + safeRel);
         } 
         else if (type === 'pitch') {
-            const detunePeak = 2400 * amt; 
+            const detunePeak = 2400 * (amt || 0); 
+            const susDetune = detunePeak * (sus !== undefined ? sus : 0);
+
             param.setValueAtTime(0, now);
-            param.linearRampToValueAtTime(detunePeak, now + atk);
-            param.setTargetAtTime(detunePeak * sus, now + atk, dec / 3);
+            param.linearRampToValueAtTime(detunePeak, now + safeAtk);
+            param.linearRampToValueAtTime(susDetune, now + safeAtk + safeDec);
             
-            param.cancelScheduledValues(stopTime);
-            if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(stopTime);
-            param.setTargetAtTime(0, stopTime, rel / 3);
+            param.setValueAtTime(susDetune, stopTime);
+            param.linearRampToValueAtTime(0, stopTime + safeRel);
         }
     }
 }
 
 class SourceModule {
-    constructor() { this.output = audioCtx.createGain(); this.detuneNode = null; }
+    constructor() { this.output = window.audioCtx.createGain(); this.detuneNode = null; }
     connect(destination) { this.output.connect(destination); }
     start() {}
     setFrequency(freq, time, glide = 0) {}
@@ -155,7 +166,7 @@ class SourceModule {
 class AnalogOscillator extends SourceModule {
     constructor(type = 'sawtooth') {
         super();
-        this.osc = audioCtx.createOscillator();
+        this.osc = window.audioCtx.createOscillator();
         this.osc.type = type;
         this.detuneNode = this.osc.detune;
         this.osc.connect(this.output);
@@ -163,7 +174,7 @@ class AnalogOscillator extends SourceModule {
     }
     setFrequency(freq, time, glide) {
         if (glide > 0) {
-            this.osc.frequency.setTargetAtTime(freq, time, glide / 3); // smoother glide
+            this.osc.frequency.setTargetAtTime(freq, time, glide / 3);
         } else { 
             this.osc.frequency.cancelScheduledValues(time); 
             this.osc.frequency.setValueAtTime(freq, time); 
@@ -286,9 +297,9 @@ class SynthVoice {
             sub: new AnalogOscillator('square'),
             noise: new NoiseGenerator()
         };
-        this.vcf = audioCtx.createBiquadFilter();
+        this.vcf = window.audioCtx.createBiquadFilter();
         this.vcf.type = 'lowpass';
-        this.vca = audioCtx.createGain();
+        this.vca = window.audioCtx.createGain();
         this.vca.gain.value = 0.00001;
 
         Object.values(this.sources).forEach(src => src.connect(this.vcf));
@@ -348,14 +359,12 @@ class SynthVoice {
                 this.sources.sub.detuneNode.setValueAtTime(0, now);
             }
         } else {
-            // Anchor current amp value, re-sustain, and push release to the extended stopTime
             let curAmp = this.vca.gain.value;
             this.vca.gain.cancelScheduledValues(now);
             this.vca.gain.setValueAtTime(curAmp, now);
             this.vca.gain.setTargetAtTime(Math.max((velocity/127) * params.ampEnv.amt * params.ampEnv.sus, 0.00001), now, params.ampEnv.dec / 3);
             this.vca.gain.setTargetAtTime(0, stopTime, params.ampEnv.rel / 3);
 
-            // Anchor current filter value and push release
             let curFilter = this.vcf.frequency.value;
             this.vcf.frequency.cancelScheduledValues(now);
             this.vcf.frequency.setValueAtTime(curFilter, now);
@@ -367,9 +376,12 @@ class SynthVoice {
 
 class PolyChannel {
     constructor(id) {
-        this.id = id; this.masterVolume = 0.8;
+        this.id = id; this.masterVolume = 0.50;
         this.lastTriggerTime = 0; this.lastDuration = 0; this.voiceIndex = 0;
         this.params = JSON.parse(JSON.stringify(window.defaultParams));
+        this.params.mixVol = 0.50;
+        this.params.stealMode = this.params.stealMode || 'none';
+        this.params.steal = this.params.stealMode;
         this.params.midiOutCh = id;
 
         this.voiceMix = window.audioCtx.createGain();
@@ -382,7 +394,7 @@ class PolyChannel {
         this.dryOut = window.audioCtx.createGain();  
 
         this.channelOut = window.audioCtx.createGain(); 
-        this.channelOut.gain.value = this.masterVolume;
+        this.channelOut.gain.value = 0.50;
         
         this.voiceMix.connect(this.distNode);
         this.distNode.connect(this.distFilter);
@@ -460,7 +472,7 @@ class PolyChannel {
             const lfo = this.lfos[lfoKey];
             if (config.shape === 'random') lfo.gain.gain.value = 0; 
             else {
-                if (config.shape === 'rampdown' && typeof rampDownWave !== 'undefined') lfo.osc.setPeriodicWave(rampDownWave); 
+                if (config.shape === 'rampdown' && typeof window.rampDownWave !== 'undefined') lfo.osc.setPeriodicWave(window.rampDownWave); 
                 else lfo.osc.type = config.shape;
                 lfo.osc.frequency.value = config.rate;
                 lfo.gain.gain.value = config.depth * depthMult;
@@ -487,8 +499,8 @@ class PolyChannel {
         const now = scheduleTime || (window.audioCtx.currentTime + 0.015); 
         const freq = 440 * Math.pow(2, (pitch - 69) / 12);
         
-        let maxVoices = this.params.voices !== undefined ? Math.round(this.params.voices) : 5;
-        let stealMode = this.params.stealMode || 'oldest';
+		let maxVoices = this.params.voices !== undefined ? Math.round(this.params.voices) : 5;
+        let stealMode = this.params.stealMode || this.params.steal || 'none';
         
         let targetIdx = -1;
         let oldestTime = now + 1000;
@@ -499,19 +511,18 @@ class PolyChannel {
         let highestIdx = 0;
 
         if (maxVoices === 1) {
-            // Respect 'Off' in Mono Mode
-            if (stealMode === 'none' && now < this.voices[0].activeUntil) {
+            // Strictly protect the mono voice if Env or Off mode is active and the release trail is still playing
+            if ((stealMode === 'none' || stealMode === 'env') && now < this.voices[0].activeUntil) {
                 targetIdx = -1; 
             } else {
-                targetIdx = 0; 
+                targetIdx = 0;
             }
         } else {
-            // Find free voice or track metadata for stealing
             for (let i = 0; i < maxVoices; i++) {
                 let v = this.voices[i];
-                if (now >= v.activeUntil) { 
-                    targetIdx = i; break; 
-                }
+                if (now >= v.activeUntil) {
+                     targetIdx = i; break;
+                 }
                 
                 let tTime = v.lastTriggerTime || 0;
                 if (tTime < oldestTime) { oldestTime = tTime; oldestIdx = i; }
@@ -521,15 +532,15 @@ class PolyChannel {
                 if (p > highestPitch) { highestPitch = p; highestIdx = i; }
             }
             
-            // NOTE STEALING LOGIC
-            if (targetIdx === -1 && stealMode !== 'none') {
+            // Steal a voice ONLY if we aren't in Env or Off mode
+            if (targetIdx === -1 && stealMode !== 'none' && stealMode !== 'env') {
                 if (stealMode === 'lowest') targetIdx = lowestIdx;
                 else if (stealMode === 'highest') targetIdx = highestIdx;
-                else targetIdx = oldestIdx; // default to oldest
+                else targetIdx = oldestIdx;
             }
         }
         
-        if (targetIdx === -1) return false; // Dropped note because 'none' steal mode
+        if (targetIdx === -1) return false; // Drops the note, allowing the current ADSR trails to ring out
         
         this.voiceIndex = targetIdx;
         this.lastTriggerTime = now; 
@@ -538,7 +549,6 @@ class PolyChannel {
         
         let v = this.voices[this.voiceIndex];
 
-        // Never shorten an existing drone if Legato is active
         if (maxVoices === 1 && this.params.legato === 1 && now < v.activeUntil) {
             let oldStopTime = v.activeUntil - this.params.ampEnv.rel;
             if (oldStopTime > stopTime) {
