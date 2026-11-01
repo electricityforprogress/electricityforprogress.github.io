@@ -14,23 +14,6 @@
     <link rel="stylesheet" href="./css/styles.css?v=12">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
-	<style>
-	@media (max-width: 600px) {
-	    .dropdown-content {
-	        position: fixed !important;
-	        top: 60px !important; /* Sits safely below the toolbar */
-	        left: 5% !important;
-	        right: auto !important;
-	        width: 90% !important;
-	        min-width: 0 !important; /* Overrides the inline 240px min-width */
-	        box-sizing: border-box !important;
-	        z-index: 9999 !important;
-	        max-height: 80vh !important;
-	        overflow-y: auto !important;
-	    }
-	}
-	</style>
-	
 </head>
 <body>
 
@@ -322,10 +305,20 @@
         <div class="synth-module mod-module">
             <div class="module-header">
                 <div class="mod-title">MODULATION</div>
-                <div class="target-selectors">
-                    <label><input type="radio" name="activeLfo" value="pitchLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'pitchEnv');"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span>PITCH</span></label>
-                    <label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'filterEnv');"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span>FILTER</span></label>
-                    <label><input type="radio" name="activeLfo" value="ampLfo" checked onchange="switchModView('lfo', this.value); switchModView('env', 'ampEnv');"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span>AMP</span></label>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <div class="target-selectors">
+                        <label><input type="radio" name="activeLfo" value="pitchLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'pitchEnv');"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span>PITCH</span></label>
+                        <label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'filterEnv');"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span>FILTER</span></label>
+                        <label><input type="radio" name="activeLfo" value="ampLfo" checked onchange="switchModView('lfo', this.value); switchModView('env', 'ampEnv');"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span>AMP</span></label>
+                    </div>
+                    
+                    <!-- NEW ENV TIME TOGGLE -->
+                    <div class="pill-toggle" style="width: 50px; height: 14px;">
+                        <input type="radio" id="env-time-norm" name="envTimeMode" value="norm" checked onchange="window.updateEnvTimeMode(this.value)">
+                        <label for="env-time-norm" style="line-height: 14px; font-size: 8px;">NRM</label>
+                        <input type="radio" id="env-time-ext" name="envTimeMode" value="ext" onchange="window.updateEnvTimeMode(this.value)">
+                        <label for="env-time-ext" style="line-height: 14px; font-size: 8px;">EXT</label>
+                    </div>
                 </div>
             </div>
 
@@ -361,10 +354,10 @@
                 <div class="divider"></div>
 
                 <div class="adsr-group">
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-atk" min="0.01" max="10" step="0.01" oninput="updateNestedSynth('env', 'atk', this.value)"></div></div><div class="control-label">A</div></div>
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-dec" min="0.01" max="10" step="0.01" oninput="updateNestedSynth('env', 'dec', this.value)"></div></div><div class="control-label">D</div></div>
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-atk" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'atk', this.value)"></div></div><div class="control-label">A</div></div>
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-dec" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'dec', this.value)"></div></div><div class="control-label">D</div></div>
                     <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-sus" min="0" max="1" step="0.01" oninput="updateNestedSynth('env', 'sus', this.value)"></div></div><div class="control-label">S</div></div>
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-rel" min="0.01" max="20" step="0.01" oninput="updateNestedSynth('env', 'rel', this.value)"></div></div><div class="control-label">R</div></div>
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-rel" min="0.01" max="5" step="0.01" oninput="updateNestedSynth('env', 'rel', this.value)"></div></div><div class="control-label">R</div></div>
                 </div>
             </div>
         </div>
@@ -451,9 +444,9 @@
 <div id="root" style="display: none;"></div>
 
 <!-- Core Engine Scripts -->
-<script src="./js/globals.js?v=12"></script>
+<script src="./js/globals.js?v=13"></script>
 <script src="./js/audioEngine.js?v=12"></script>
-<script src="./js/uiController.js?v=12"></script>
+<script src="./js/uiController.js?v=13"></script>
 <script src="./js/visualizer.js?v=12"></script>
 <script src="./js/bleMidi.js?v=12"></script>
 <script src="./js/main.js?v=13"></script>
