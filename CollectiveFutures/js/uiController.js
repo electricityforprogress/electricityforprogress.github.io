@@ -513,20 +513,20 @@ window.syncParamsToHardware = function(chIdx) {
         window.sendHardwareCC(chIdx, 81, cc81Val);
         window.sendHardwareCC(chIdx, 80, cc80Val);
         
-        window.sendHardwareCC(chIdx, 82, Math.min(127, Math.max(0, Math.round(((p.sampleSize - 10) / 90) * 127))));
+        // --- FIXED 1:1 DISCRETE TRANSMISSIONS ---
+        window.sendHardwareCC(chIdx, 82, Math.round(p.sampleSize));
         window.sendHardwareCC(chIdx, 83, Math.round(p.density)); 
         
-        // Force strict integers on discrete boundaries
         window.sendHardwareCC(chIdx, 84, Math.round(p.minNote));
         window.sendHardwareCC(chIdx, 85, Math.round(p.maxNote));
         window.sendHardwareCC(chIdx, 86, Math.round(p.velMin));
         window.sendHardwareCC(chIdx, 87, Math.round(p.velMax));
         
         window.sendHardwareCC(chIdx, 88, Math.round(p.spread));
-        window.sendHardwareCC(chIdx, 89, Math.round(p.durMult * 10)); // 1.0 becomes 10 (Max 50 fits in 127)   
+        window.sendHardwareCC(chIdx, 89, Math.round(p.durMult * 10)); // Scale for float recovery
         window.sendHardwareCC(chIdx, 90, Math.round(p.quantize));
         window.sendHardwareCC(chIdx, 91, Math.round(p.midiOutCh));
-        window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, Math.round(((Math.round(window.masterBPM) - 60) / 180) * 127)))); // BPM stays scaled (range 180)
+        window.sendHardwareCC(chIdx, 92, Math.min(127, Math.max(0, Math.round(((Math.round(window.masterBPM) - 60) / 180) * 127)))); // BPM maintains 127-step scaling
         
         window.sendHardwareCC(chIdx, 93, Math.round(p.voices));
         
@@ -593,7 +593,6 @@ function loadPresetsFromStorage() {
         else globalPresets = {};
     } catch(e) { console.error("Error loading presets", e); }
     
-    // Inject factory presets if they don't already exist in the user's local storage
     if (window.FACTORY_PRESETS) {
         Object.keys(window.FACTORY_PRESETS).forEach(key => {
             if (!globalPresets[key]) globalPresets[key] = window.FACTORY_PRESETS[key];
@@ -606,7 +605,6 @@ function loadPresetsFromStorage() {
         loadChannelPresetsFromStorage(); 
     }
 
-    // Auto-load the default factory preset on initial page load
     if (globalPresets["Ambient Orchid"]) {
         setTimeout(() => {
             loadPreset("Ambient Orchid");
