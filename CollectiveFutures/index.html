@@ -14,6 +14,23 @@
     <link rel="stylesheet" href="./css/styles.css?v=12">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
+	<style>
+	@media (max-width: 600px) {
+	    .dropdown-content {
+	        position: fixed !important;
+	        top: 60px !important; /* Sits safely below the toolbar */
+	        left: 5% !important;
+	        right: auto !important;
+	        width: 90% !important;
+	        min-width: 0 !important; /* Overrides the inline 240px min-width */
+	        box-sizing: border-box !important;
+	        z-index: 9999 !important;
+	        max-height: 80vh !important;
+	        overflow-y: auto !important;
+	    }
+	}
+	</style>
+	
 </head>
 <body>
 
