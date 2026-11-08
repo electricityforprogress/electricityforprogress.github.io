@@ -101,7 +101,7 @@ window.globalFX = {
 // --- FACTORY CHANNEL PRESETS (Individual Synth Tracks) ---
 window.FACTORY_CHANNEL_PRESETS = {
     "Deep Sub Drone": {
-        params: { ...window.defaultParams, mixVol: 0.8, voices: 1, legato: 1, stealMode: 'env', steal: 'env', glide: 0.2, minNote: 24, maxNote: 48, durMult: 4.0, sources: { osc1: { type: 'sine', level: 1.0 }, sub: { level: 0.5 }, noise: { level: 0.0 } }, ampEnv: { atk: 2.0, dec: 1.0, sus: 1.0, rel: 4.0, amt: 1.0, timeMode: 'norm' } },
+        params: { ...window.defaultParams, mixVol: 0.8, voices: 1, legato: 1, stealMode: 'env', steal: 'env', glide: 0.2, minNote: 24, maxNote: 48, durMult: 4.0, sources: { osc1: { type: 'sine', level: 1.0 }, sub: { level: 0.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 2.0, dec: 1.0, sus: 1.0, rel: 4.0, amt: 1.0, timeMode: 'norm' } },
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Soft Plucks": {
