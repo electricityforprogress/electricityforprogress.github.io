@@ -3,141 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Collective Futures</title>
+    <title>Perturbations - Collective Futures</title>
     
-    <!-- Link to the root stylesheet -->
-    <link rel="stylesheet" href="../css/style.css">
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" href="/favicon/apple-touch-icon.png">
+
+    <!-- One centralized stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
     
     <style>
-        /* Presentation Structural Overrides */
-        html, body {
-            height: 100%;
-            overflow: hidden; /* Hide main scrollbar to use the container's snap scroll */
-        }
-
-        /* Snap scrolling container */
-        .presentation-container {
-            height: 100vh;
-            overflow-y: scroll;
-            scroll-snap-type: y mandatory;
-            scroll-behavior: smooth;
-            position: relative;
-            z-index: 10; /* Keep above the starfield canvas */
-        }
-
-        /* Individual slide container */
-        .slide {
-            height: 100vh;
-            width: 100vw;
-            scroll-snap-align: start;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            box-sizing: border-box;
-            position: relative;
-            padding: 2rem;
-        }
-
-        /* Extend the root <main> tag to fit the presentation style */
-        main.intro-slide {
-            margin: 0; /* Override the 2rem auto from style.css to keep it vertically centered */
-            text-align: center;
+        /* Smooth, seamless iframe integration */
+        .viz-iframe {
             width: 100%;
-        }
-
-        main.intro-slide h1 {
-            font-size: 2.5rem;
-            margin-bottom: 5px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
-        main.intro-slide h2 {
-            color: var(--text-color);
-            opacity: 0.8;
-            font-size: 1.2rem;
-            margin-bottom: 25px;
-            font-weight: 400;
-        }
-
-        main.intro-slide p {
-            font-size: 1.1rem;
-            text-align: left;
-        }
-
-        /* Iframe reset and scaling */
-        iframe {
+            height: 600px;
             border: none;
-            width: 100%;
-            height: 100%;
-            max-width: 1200px;
-            max-height: 90vh;
             border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-            background: var(--content-bg); /* Match the site's transparent panel look */
+            margin: 2.5rem 0;
+            background: transparent;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
         }
         
+        .slides-container {
+            display: flex;
+            justify-content: center;
+            margin: 3rem 0 1rem 0;
+        }
+
         .g-slides-iframe {
+            width: 100%;
             max-width: 960px;
-            max-height: 569px;
+            height: 569px;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
         }
-
-        /* Scroll indicator */
-        .scroll-down {
-            position: absolute;
-            bottom: 20px;
-            font-size: 12px;
-            color: var(--text-color);
-            opacity: 0.7;
-            letter-spacing: 2px;
+        
+        .credits {
+            text-align: center;
+            font-size: 0.9rem;
+            color: #aaa;
+            margin-top: -10px;
+            margin-bottom: 2.5rem;
             text-transform: uppercase;
-            animation: pulse 2s infinite;
+            letter-spacing: 1px;
         }
-
-        @keyframes pulse {
-            0% { opacity: 0.4; }
-            50% { opacity: 1; }
-            100% { opacity: 0.4; }
+        
+        .intro-text {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
         }
     </style>
 </head>
 <body>
 
-    <!-- Canvas expected by your root style.css for the background -->
-    <canvas id="starfield"></canvas>
+    <!-- Integrated Canvas -->
+    <canvas id="starfieldCanvas"></canvas>
 
-    <div class="presentation-container">
-        
-        <!-- Slide 1: Description -->
-        <section class="slide">
-            <!-- Wrapping content in <main> automatically applies your style.css content-bg, box-shadow, and borders -->
-            <main class="intro-slide">
-                <h1>Collective Futures</h1>
-                <h2>Perturbations Workshop & Performance</h2>
-                <p>
-                    On October 25, 2026, at 11am at the Asian Arts Initiative, Sam Cusumano and Raúl Romero presented "Perturbations" as part of the Collective Futures Parallel Play Symposium. The session explored the intersection of human perception and the invisible changes happening in organic systems like plants. By extracting complex information from living biological systems, the exhibition featured data analysis algorithms, visualization methods for plant music, and physical perturbations that allowed live plants to actuate and play a modified drum kit using actuators.
-                </p>
-            </main>
-            <div class="scroll-down">Scroll Down ↓</div>
-        </section>
+    <!-- Navigation Component Placeholder -->
+    <div id="nav-placeholder"></div>
 
-        <!-- Slide 2: 555 Visualization -->
-        <section class="slide">
-            <iframe src="555Visualization.html" title="555 Timer Visualization"></iframe>
-        </section>
+    <main>
+        <article>
+            <h1 style="text-align: center;">Collective Futures: Parallel Play</h1>
+            <h2 style="text-align: center; color: var(--text-color);">Perturbations</h2>
+            <div class="credits">Presented by BYO Print</div>
 
-        <!-- Slide 3: Bio Reaction Analysis -->
-        <section class="slide">
-            <iframe src="bio_reaction_analysis.html" title="Bio Reaction Analysis Dashboard"></iframe>
-        </section>
+            <p class="intro-text"><strong>An exploration and examination of Biodata Sonification with Raúl Romero and Sam Cusumano.</strong></p>
 
-        <!-- Slide 4: Google Slides Embed -->
-        <section class="slide">
-            <iframe class="g-slides-iframe" src="https://docs.google.com/presentation/d/e/2PACX-1vQ4F38RAjTUTzoQ7EB9b9_EcCjqGojCb5LogJswyoajAjKutyEiaUxl2W-ateJDET7H8EadYaLwBSg-/pubembed?start=false&loop=false&delayms=3000" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
-        </section>
+            <p class="intro-text">Hosted on October 25th, 2026, at the Asian Arts Initiative, this free workshop and performance delved into the intersection of human perception and the invisible changes happening in organic systems. The music you are listening to is being generated in real-time by three plants.</p>
 
-    </div>
+            <p class="intro-text">Through our four-part process—<em>Introduction, Amplification, Explication, and Interrogation</em>—we extract complex information from living biological systems. By translating real-time microcurrent fluctuations into MIDI data, we employ data analysis algorithms, visualization methods, and physical perturbations to allow live plants to actuate and play a modified physical drum kit.</p>
+
+            <iframe class="viz-iframe" src="555Visualization.html" title="555 Timer Visualization"></iframe>
+
+            <iframe class="viz-iframe" src="bio_reaction_analysis.html" title="Bio Reaction Analysis Dashboard" style="height: 650px;"></iframe>
+
+            <div class="slides-container">
+                <iframe class="g-slides-iframe" src="https://docs.google.com/presentation/d/e/2PACX-1vQ4F38RAjTUTzoQ7EB9b9_EcCjqGojCb5LogJswyoajAjKutyEiaUxl2W-ateJDET7H8EadYaLwBSg-/pubembed?start=false&loop=false&delayms=3000" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+            </div>
+            
+        </article>
+    </main>
+
+    <!-- Footer Component Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <!-- Centralized Scripts -->
+    <script src="/js/loader.js"></script>
+    <script src="/js/starfield.js"></script>
 
 </body>
 </html>
