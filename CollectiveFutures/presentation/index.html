@@ -15,30 +15,200 @@
     <link rel="stylesheet" href="/css/style.css">
     
     <style>
-        /* Smooth, seamless iframe integration */
-        .viz-iframe {
-            width: 100%;
-            height: 600px;
-            border: none;
-            border-radius: 8px;
-            margin: 2.5rem 0;
-            background: transparent;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        /* Shared Visualizer Styles */
+        .viz-section {
+            margin: 4rem 0;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
         
-        .slides-container {
-            display: flex;
-            justify-content: center;
-            margin: 3rem 0 1rem 0;
+        .viz-section h3 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: var(--accent-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 1.2rem;
         }
 
+        /* Custom Range Sliders unified with your site's accent color */
+        .viz-section input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        .viz-section input[type=range]:focus {
+            outline: none;
+        }
+        .viz-section input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        .viz-section input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        .viz-section input[type=range]::-moz-range-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        .viz-section input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        /* 555 Timer Integration Styles */
+        .control-panel-555 {
+            background-color: rgba(30, 30, 30, 0.6);
+            padding: 16px 24px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 24px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .control-group-555 {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+        .control-group-555 label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #aaa;
+            min-width: 140px;
+        }
+        .value-display-555 {
+            font-family: monospace;
+            font-size: 14px;
+            background: #111;
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            min-width: 80px;
+            text-align: right;
+            color: var(--accent-color);
+        }
+        #pwmCanvas {
+            background-color: rgba(30, 30, 30, 0.6);
+            border: 1px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Bio Reaction Integration Styles */
+        .bio-dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+        }
+        @media(min-width: 768px) {
+            .bio-dashboard { flex-direction: row; }
+        }
+        .bio-sidebar {
+            flex: 1 1 35%;
+            background-color: rgba(30, 30, 30, 0.6);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        .bio-main {
+            flex: 1 1 65%;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .bio-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background-color: rgba(30, 30, 30, 0.6);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        @media(min-width: 500px) {
+            .bio-controls { flex-direction: row; }
+        }
+        .bio-control-item {
+            flex: 1;
+        }
+        .bio-control-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .bio-control-val {
+            color: var(--accent-color);
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .bio-canvas-container {
+            flex: 1;
+            min-height: 400px;
+            background-color: rgba(30, 30, 30, 0.6);
+            border: 1px solid #444;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        #vizCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Formula styling */
+        .formula-group { margin-bottom: 24px; }
+        .formula-group:last-child { border-top: 1px solid #444; padding-top: 16px; margin-bottom: 0; }
+        .formula-title { font-size: 11px; font-weight: 600; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .formula-text { font-family: monospace; font-size: 1.1rem; color: #eee; display: flex; align-items: center; }
+        .fraction { display: inline-flex; flex-direction: column; padding: 0 4px; font-size: 0.8em; text-align: center; color: #aaa; }
+        .fraction span:first-child { border-bottom: 1px solid #aaa; padding-bottom: 2px; }
+        .fraction span:last-child { padding-top: 2px; }
+
+        /* Google Slides Styles */
         .g-slides-iframe {
             width: 100%;
-            max-width: 960px;
-            height: 569px;
+            aspect-ratio: 16 / 9;
             border: none;
             border-radius: 8px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.6);
         }
         
         .credits {
@@ -78,12 +248,93 @@
 
             <p class="intro-text">Through our four-part process—<em>Introduction, Amplification, Explication, and Interrogation</em>—we extract complex information from living biological systems. By translating real-time microcurrent fluctuations into MIDI data, we employ data analysis algorithms, visualization methods, and physical perturbations to allow live plants to actuate and play a modified physical drum kit.</p>
 
-            <iframe class="viz-iframe" src="555Visualization.html" title="555 Timer Visualization"></iframe>
+            <!-- 555 Timer Section -->
+            <div class="viz-section">
+                <h3>555 Timer Interactive Visualization</h3>
+                <div class="control-panel-555">
+                    <div class="control-group-555">
+                        <label for="zoomSlider">Time Scale (Zoom):</label>
+                        <input type="range" id="zoomSlider" min="0" max="1000" value="434">
+                        <span id="zoomValue" class="value-display-555">100.0 ms</span>
+                    </div>
+                    <div class="control-group-555">
+                        <label for="speedSlider">Visual Flow Rate:</label>
+                        <input type="range" id="speedSlider" min="0" max="200" value="3">
+                        <span id="speedValue" class="value-display-555">0.03x</span>
+                    </div>
+                </div>
+                <!-- Internal canvas coordinates remain fixed while CSS scales it responsibly -->
+                <canvas id="pwmCanvas" width="1000" height="500"></canvas>
+            </div>
 
-            <iframe class="viz-iframe" src="bio_reaction_analysis.html" title="Bio Reaction Analysis Dashboard" style="height: 650px;"></iframe>
+            <!-- Bio Reaction Section -->
+            <div class="viz-section">
+                <h3>Bio Reaction Analysis Dashboard</h3>
+                <div class="bio-dashboard">
+                    <!-- Left Sidebar / Formulas -->
+                    <div class="bio-sidebar">
+                        <h4 class="formula-title" style="border-bottom: 1px solid #444; padding-bottom: 8px; margin-bottom: 16px;">Visual Formula</h4>
+                        
+                        <div class="formula-group">
+                            <div class="formula-title">AVERAGE (μ)</div>
+                            <div class="formula-text">μ = <div class="fraction"><span>1</span><span>n</span></div> <span style="font-size: 1.5em; margin: 0 8px;">∑</span> x<sub>i</sub></div>
+                        </div>
 
-            <div class="slides-container">
-                <iframe class="g-slides-iframe" src="https://docs.google.com/presentation/d/e/2PACX-1vQ4F38RAjTUTzoQ7EB9b9_EcCjqGojCb5LogJswyoajAjKutyEiaUxl2W-ateJDET7H8EadYaLwBSg-/pubembed?start=false&loop=false&delayms=3000" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+                        <div class="formula-group">
+                            <div class="formula-title">STANDARD DEVIATION (σ)</div>
+                            <div class="formula-text">σ = √<span style="border-top: 1px solid #eee; margin-left: 4px; display: flex; align-items: center;"><div class="fraction"><span>1</span><span>n-1</span></div> <span style="font-size: 1.5em; margin: 0 8px;">∑</span> (x<sub>i</sub> - μ)²</span></div>
+                        </div>
+
+                        <div class="formula-group">
+                            <div class="formula-title">MAGNITUDE (Δ)</div>
+                            <div class="formula-text">Δ = Max - Min</div>
+                        </div>
+
+                        <div class="formula-group">
+                            <div class="formula-title">DETECTION GATE</div>
+                            <div class="formula-text" style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; font-size: 0.95rem; border: 1px solid #333;">
+                                IF σ > T <span style="color: #ef5350; margin: 0 8px;">→</span> EVENT FLAGGED
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Main Area -->
+                    <div class="bio-main">
+                        <div class="bio-controls">
+                            <div class="bio-control-item">
+                                <div class="bio-control-header">
+                                    <label for="windowStart">Window Start</label>
+                                    <span id="windowStartVal" class="bio-control-val">0</span>
+                                </div>
+                                <input type="range" id="windowStart" min="0" max="160" value="0" step="1">
+                            </div>
+                            <div class="bio-control-item">
+                                <div class="bio-control-header">
+                                    <label for="blockSize">Block Size</label>
+                                    <span id="blockSizeVal" class="bio-control-val">40</span>
+                                </div>
+                                <input type="range" id="blockSize" min="10" max="100" value="40" step="1">
+                            </div>
+                            <div class="bio-control-item">
+                                <div class="bio-control-header">
+                                    <label for="threshold">Threshold (T)</label>
+                                    <span id="thresholdVal" class="bio-control-val">1.5</span>
+                                </div>
+                                <input type="range" id="threshold" min="0.1" max="3.0" value="1.5" step="0.1">
+                            </div>
+                        </div>
+                        <div class="bio-canvas-container" id="canvasContainer">
+                            <canvas id="vizCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Presentation Embed -->
+            <div class="viz-section">
+                <h3>Workshop Presentation</h3>
+                <!-- &rm=minimal removes the white player chrome at the bottom -->
+                <iframe class="g-slides-iframe" src="https://docs.google.com/presentation/d/e/2PACX-1vQ4F38RAjTUTzoQ7EB9b9_EcCjqGojCb5LogJswyoajAjKutyEiaUxl2W-ateJDET7H8EadYaLwBSg-/pubembed?start=false&loop=false&delayms=3000&rm=minimal" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
             </div>
             
         </article>
@@ -96,5 +347,403 @@
     <script src="/js/loader.js"></script>
     <script src="/js/starfield.js"></script>
 
+    <!-- Visualizer Scripts (Scoped via IIFE blocks to prevent variable conflicts) -->
+    <script>
+        // ----------------------------------------------------
+        // 555 Timer Visualization Script
+        // ----------------------------------------------------
+        {
+            const canvas = document.getElementById('pwmCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            const zoomSlider = document.getElementById('zoomSlider');
+            const zoomValueDisplay = document.getElementById('zoomValue');
+            
+            const speedSlider = document.getElementById('speedSlider');
+            const speedValueDisplay = document.getElementById('speedValue');
+
+            const R1 = 3900;
+            const C = 4.7e-9;
+            
+            let timeOffset = 0;         
+            let leftEdgePhase = 0;      
+            let totalTimeMs = 120;
+            let flowRate = 0.25;
+            let lastFrameTime = performance.now();
+
+            const p = new Uint8Array(512);
+            for(let i=0; i<512; i++) p[i] = Math.floor(Math.random() * 256);
+
+            function smoothNoise(x) {
+                let xi = Math.floor(x) & 255;
+                let xf = x - Math.floor(x);
+                let u = xf * xf * (3.0 - 2.0 * xf);
+                let a = p[xi];
+                let b = p[(xi + 1) & 255];
+                let res = (a * (1.0 - u) + b * u) / 255.0; 
+                return res * 2.0 - 1.0;
+            }
+
+            const minTimeMs = 0.5;
+            const maxTimeMs = 100000;
+            const minLog = Math.log(minTimeMs);
+            const maxLog = Math.log(maxTimeMs);
+            const logScale = (maxLog - minLog) / 1000;
+
+            function updateZoom() {
+                const sliderVal = parseInt(zoomSlider.value, 10);
+                totalTimeMs = Math.exp(minLog + sliderVal * logScale);
+                if (totalTimeMs < 1000) {
+                    zoomValueDisplay.textContent = totalTimeMs.toFixed(1) + " ms";
+                } else {
+                    zoomValueDisplay.textContent = (totalTimeMs / 1000).toFixed(2) + " s";
+                }
+            }
+
+            function updateSpeed() {
+                flowRate = speedSlider.value / 100;
+                speedValueDisplay.textContent = flowRate.toFixed(2) + "x";
+            }
+
+            zoomSlider.addEventListener('input', updateZoom);
+            speedSlider.addEventListener('input', updateSpeed);
+            updateZoom(); 
+            updateSpeed();
+
+            function computeAnalogVal(t) {
+                const s1 = 0.50 * Math.sin(t * (Math.PI * 2) / 80);
+                const s2 = 0.35 * Math.sin(t * (Math.PI * 2) / 137);
+                const baseSignal = s1 + s2;
+                const fastNoise = smoothNoise(t / 50);
+                const midNoise = smoothNoise(t / 300);
+                const slowNoise = smoothNoise(t / 4000);
+                let modulated = baseSignal * (0.6 + 0.5 * midNoise) + (fastNoise * 0.15) + (slowNoise * 0.4);
+                return Math.max(-1, Math.min(1, modulated));
+            }
+
+            function drawWaveform(timeToAdvance) {
+                ctx.clearRect(0, 0, width, height);
+                ctx.fillStyle = '#888';
+                ctx.font = '14px sans-serif';
+                ctx.fillText("Changing Resistance", 20, 30);
+                ctx.fillText("555 Output", 20, 270);
+
+                const analogPoints = [];
+                const squarePoints = [];
+
+                const t_left = timeOffset;
+                const analogVal_left = computeAnalogVal(t_left);
+                const R_leaf_left = 775000 - 725000 * analogVal_left; 
+                const t_high_left = 0.693 * (R1 + R_leaf_left) * C * 1000;
+                const t_low_left = 0.693 * R_leaf_left * C * 1000;
+                const period_left = t_high_left + t_low_left;
+
+                leftEdgePhase += timeToAdvance / period_left;
+                leftEdgePhase %= 1.0;
+
+                let currentPhase = leftEdgePhase;
+                let lastState = -1;
+                const dt_pixel = totalTimeMs / width;
+
+                for(let x = 0; x < width; x++) {
+                    const t = timeOffset + (x / width) * totalTimeMs; 
+                    const analogVal = computeAnalogVal(t); 
+                    const R_leaf = 775000 - 725000 * analogVal; 
+                    
+                    const yAnalog = 130 - (analogVal * 70);
+                    analogPoints.push({x: x, y: yAnalog});
+                    
+                    const t_high = 0.693 * (R1 + R_leaf) * C * 1000;
+                    const t_low = 0.693 * R_leaf * C * 1000;
+                    const period = t_high + t_low;
+                    
+                    const dutyCycleThreshold = t_high / period;
+                    const state = (currentPhase % 1.0) < dutyCycleThreshold ? 1 : 0;
+                    
+                    const ySquare = state === 1 ? 300 : 440;
+                    
+                    if (x > 0 && state !== lastState && lastState !== -1) {
+                        squarePoints.push({x: x, y: lastState === 1 ? 300 : 440});
+                    }
+                    squarePoints.push({x: x, y: ySquare});
+                    lastState = state;
+                    currentPhase += (dt_pixel / period);
+                }
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#9adffd';
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = 'rgba(154, 223, 253, 0.4)';
+                ctx.lineWidth = 3;
+                ctx.moveTo(analogPoints[0].x, analogPoints[0].y);
+                for (let i = 1; i < analogPoints.length; i++) {
+                    ctx.lineTo(analogPoints[i].x, analogPoints[i].y);
+                }
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#2ecc71';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = 'rgba(46, 204, 113, 0.4)';
+                ctx.lineWidth = 1.5;
+                ctx.moveTo(squarePoints[0].x, squarePoints[0].y);
+                for (let i = 1; i < squarePoints.length; i++) {
+                    ctx.lineTo(squarePoints[i].x, squarePoints[i].y);
+                }
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0;
+            }
+
+            function animate(currentTime) {
+                const deltaTime = currentTime - lastFrameTime;
+                lastFrameTime = currentTime;
+                const cappedDelta = Math.min(deltaTime, 50); 
+                const timeToAdvance = (cappedDelta / 1000) * totalTimeMs * flowRate;
+                timeOffset += timeToAdvance;
+
+                drawWaveform(timeToAdvance);
+                requestAnimationFrame(animate);
+            }
+
+            requestAnimationFrame((time) => {
+                lastFrameTime = time;
+                animate(time);
+            });
+        }
+
+        // ----------------------------------------------------
+        // Bio Reaction Dashboard Script
+        // ----------------------------------------------------
+        {
+            const fullBioData = [];
+            for (let i = 0; i < 200; i++) {
+                let val = 9.5 + Math.sin(i * 0.1) * 1.0; 
+                if (i >= 80 && i <= 120) {
+                    val += (Math.random() - 0.5) * 5; 
+                } else {
+                    val += (Math.random() - 0.5) * 1.2; 
+                }
+                fullBioData.push(Math.max(4.0, Math.min(13.0, val)));
+            }
+
+            const canvas = document.getElementById('vizCanvas');
+            const ctx = canvas.getContext('2d');
+            const container = document.getElementById('canvasContainer');
+            
+            const windowStartSlider = document.getElementById('windowStart');
+            const blockSizeSlider = document.getElementById('blockSize');
+            const thresholdSlider = document.getElementById('threshold');
+            
+            const windowStartDisplay = document.getElementById('windowStartVal');
+            const blockSizeDisplay = document.getElementById('blockSizeVal');
+            const thresholdDisplay = document.getElementById('thresholdVal');
+
+            let currentWindowStart = parseInt(windowStartSlider.value);
+            let currentBlockSize = parseInt(blockSizeSlider.value);
+            let currentThreshold = parseFloat(thresholdSlider.value);
+
+            function updateData() {
+                const maxStart = Math.max(0, fullBioData.length - currentBlockSize);
+                if (currentWindowStart > maxStart) {
+                    currentWindowStart = maxStart;
+                    windowStartSlider.value = currentWindowStart;
+                    windowStartDisplay.textContent = currentWindowStart;
+                }
+                windowStartSlider.max = maxStart;
+            }
+
+            function calculateStats(arr) {
+                const n = arr.length;
+                if (n === 0) return { mean: 0, stdev: 0, max: 0, min: 0 };
+                const sum = arr.reduce((a, b) => a + b, 0);
+                const mean = sum / n;
+                const sumSq = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+                const stdev = n > 1 ? Math.sqrt(sumSq / (n - 1)) : 0;
+                const max = Math.max(...arr);
+                const min = Math.min(...arr);
+                return { mean, stdev, max, min };
+            }
+
+            function render() {
+                const rect = container.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                ctx.scale(dpr, dpr);
+                
+                const width = rect.width;
+                const height = rect.height;
+                ctx.clearRect(0, 0, width, height);
+
+                const padding = { top: 70, bottom: 30, left: 30, right: 30 };
+                const chartWidth = width - padding.left - padding.right;
+                const chartHeight = height - padding.top - padding.bottom;
+                
+                const viewStart = Math.max(0, currentWindowStart - currentBlockSize);
+                const viewEnd = Math.min(fullBioData.length - 1, currentWindowStart + (currentBlockSize * 2) - 1);
+                const numVisiblePoints = viewEnd - viewStart + 1;
+                const xStep = chartWidth / Math.max(1, (numVisiblePoints - 1));
+                
+                const visibleData = fullBioData.slice(viewStart, viewEnd + 1);
+                let visibleMin = Math.min(...visibleData);
+                let visibleMax = Math.max(...visibleData);
+                let yRange = visibleMax - visibleMin;
+                
+                if (yRange < 1.5) {
+                    const mid = (visibleMax + visibleMin) / 2;
+                    visibleMin = mid - 0.75;
+                    visibleMax = mid + 0.75;
+                    yRange = 1.5;
+                }
+                
+                const yMin = visibleMin - (yRange * 0.15);
+                const yMax = visibleMax + (yRange * 0.15);
+                const finalYRange = yMax - yMin;
+
+                const getX = (globalIndex) => padding.left + ((globalIndex - viewStart) * xStep);
+                const getY = (val) => padding.top + chartHeight - ((val - yMin) / finalYRange) * chartHeight;
+
+                ctx.strokeStyle = '#444'; 
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let i = viewStart; i <= viewEnd; i++) {
+                    if (i === viewStart) ctx.moveTo(getX(i), getY(fullBioData[i]));
+                    else ctx.lineTo(getX(i), getY(fullBioData[i]));
+                }
+                ctx.stroke();
+
+                const activeData = fullBioData.slice(currentWindowStart, currentWindowStart + currentBlockSize);
+                const stats = calculateStats(activeData);
+                const isFlagged = stats.stdev > currentThreshold;
+
+                const startX = getX(currentWindowStart);
+                const endX = getX(currentWindowStart + currentBlockSize - 1);
+                const windowWidth = endX - startX;
+
+                if (isFlagged) {
+                    ctx.fillStyle = 'rgba(211, 47, 47, 0.15)'; 
+                    ctx.fillRect(startX, padding.top - 20, windowWidth, chartHeight + 40);
+
+                    const globalMaxIdx = currentWindowStart + activeData.indexOf(stats.max);
+                    const globalMinIdx = currentWindowStart + activeData.indexOf(stats.min);
+
+                    ctx.strokeStyle = '#d32f2f';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(getX(globalMaxIdx), getY(stats.max));
+                    ctx.lineTo(getX(globalMaxIdx), getY(stats.min));
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.setLineDash([4, 4]);
+                    ctx.moveTo(getX(globalMinIdx), getY(stats.min));
+                    ctx.lineTo(getX(globalMaxIdx), getY(stats.min));
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    ctx.fillStyle = '#d32f2f';
+                    ctx.beginPath(); ctx.arc(getX(globalMaxIdx), getY(stats.max), 6, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(getX(globalMinIdx), getY(stats.min), 6, 0, Math.PI * 2); ctx.fill();
+
+                    ctx.fillStyle = '#ef5350';
+                    ctx.font = '12px sans-serif';
+                    ctx.textAlign = (globalMaxIdx - viewStart) > (numVisiblePoints / 2) ? 'right' : 'left';
+                    const textOffset = (globalMaxIdx - viewStart) > (numVisiblePoints / 2) ? -10 : 10;
+                    ctx.fillText(`Δ = ${(stats.max - stats.min).toFixed(2)}`, getX(globalMaxIdx) + textOffset, (getY(stats.max) + getY(stats.min)) / 2);
+                } else {
+                    ctx.fillStyle = 'rgba(154, 223, 253, 0.05)'; 
+                    ctx.fillRect(startX, padding.top - 20, windowWidth, chartHeight + 40);
+                }
+
+                ctx.strokeStyle = '#9adffd';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(startX, padding.top - 20);
+                ctx.lineTo(startX, height - padding.bottom + 20);
+                ctx.moveTo(endX, padding.top - 20);
+                ctx.lineTo(endX, height - padding.bottom + 20);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.strokeStyle = '#9adffd'; 
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = currentWindowStart; i < currentWindowStart + currentBlockSize; i++) {
+                    if (i === currentWindowStart) ctx.moveTo(getX(i), getY(fullBioData[i]));
+                    else ctx.lineTo(getX(i), getY(fullBioData[i]));
+                }
+                ctx.stroke();
+
+                ctx.fillStyle = '#1e1e1e';
+                ctx.strokeStyle = '#9adffd';
+                ctx.lineWidth = 2;
+                for (let i = currentWindowStart; i < currentWindowStart + currentBlockSize; i++) {
+                    ctx.beginPath();
+                    ctx.arc(getX(i), getY(fullBioData[i]), 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+
+                const textY = 25;
+                ctx.textAlign = 'left';
+                ctx.fillStyle = isFlagged ? '#ef5350' : '#aaa';
+                ctx.font = '13px monospace';
+                ctx.fillText(`μ: ${stats.mean.toFixed(2)}`, padding.left, textY);
+                
+                ctx.textAlign = 'center';
+                ctx.font = isFlagged ? 'bold 14px monospace' : '13px monospace';
+                ctx.fillText(`σ: ${stats.stdev.toFixed(2)}`, width / 2, textY);
+                
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#888';
+                ctx.font = '13px monospace';
+                ctx.fillText(`Max: ${stats.max.toFixed(1)} | Min: ${stats.min.toFixed(1)}`, width - padding.right, textY);
+
+                ctx.fillStyle = '#666';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText(`IDX ${viewStart}`, padding.left, height - 10);
+                
+                ctx.fillStyle = '#9adffd';
+                ctx.textAlign = 'left';
+                ctx.fillText(`START: ${currentWindowStart}`, Math.max(padding.left + 50, startX), height - 10);
+                
+                ctx.textAlign = 'right';
+                ctx.fillText(`END: ${currentWindowStart + currentBlockSize - 1}`, Math.min(width - padding.right - 50, endX), height - 10);
+                
+                ctx.fillStyle = '#666';
+                ctx.textAlign = 'right';
+                ctx.fillText(`IDX ${viewEnd}`, width - padding.right, height - 10);
+            }
+
+            windowStartSlider.addEventListener('input', (e) => {
+                currentWindowStart = parseInt(e.target.value);
+                windowStartDisplay.textContent = currentWindowStart;
+                updateData();
+                render();
+            });
+
+            blockSizeSlider.addEventListener('input', (e) => {
+                currentBlockSize = parseInt(e.target.value);
+                blockSizeDisplay.textContent = currentBlockSize;
+                updateData();
+                render();
+            });
+
+            thresholdSlider.addEventListener('input', (e) => {
+                currentThreshold = parseFloat(e.target.value);
+                thresholdDisplay.textContent = currentThreshold.toFixed(1);
+                render();
+            });
+
+            window.addEventListener('resize', render);
+            updateData();
+            window.addEventListener('load', render);
+        }
+    </script>
 </body>
 </html>
