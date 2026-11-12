@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio Reaction Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #00bfa5;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 2px;
+            border: 1px solid #222;
+        }
+        input[type=range]::-moz-range-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #00bfa5;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 2px;
+            border: 1px solid #222;
+        }
+        
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            padding: 0 2px;
+            vertical-align: middle;
+            text-align: center;
+            font-size: 0.85em;
+        }
+        .fraction span:first-child {
+            border-bottom: 1px solid #d1d5db; 
+            padding-bottom: 1px;
+        }
+        .fraction span:last-child {
+            padding-top: 1px;
+        }
+    </style>
+</head>
+<body class="bg-[#121212] text-gray-200 font-sans h-screen p-4 lg:p-6 box-border overflow-x-hidden flex flex-col">
+
+    <div class="flex flex-col lg:flex-row gap-6 w-full h-full max-w-screen-2xl mx-auto">
+        
+        <div class="w-full lg:w-[30%] bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] p-6 lg:p-8 flex flex-col shadow-lg flex-shrink-0 overflow-y-auto">
+            <h2 class="text-sm font-bold text-gray-500 mb-8 tracking-widest uppercase border-b border-[#333] pb-2">Visual Formula</h2>
+            
+            <div class="space-y-10 flex-1">
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">AVERAGE (μ)</h3>
+                    <div class="text-xl font-mono text-gray-200 flex items-center">
+                        μ = <div class="fraction mx-2 text-gray-400"><span>1</span><span>n</span></div> <span class="text-2xl mr-2">∑</span> x<sub>i</sub>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">STANDARD DEVIATION (σ)</h3>
+                    <div class="text-xl font-mono text-gray-200 flex items-center">
+                        σ = √<span class="border-t border-gray-400 pt-1 ml-1 flex items-center"><div class="fraction mx-2 text-gray-400"><span>1</span><span>n-1</span></div> <span class="text-2xl mr-2">∑</span> (x<sub>i</sub> - μ)²</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">MAGNITUDE (Δ)</h3>
+                    <div class="text-xl font-mono text-gray-200">
+                        Δ = Max - Min
+                    </div>
+                </div>
+
+                <div class="mt-auto pt-6 border-t border-[#333]">
+                    <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-widest">DETECTION GATE</h3>
+                    <div class="text-lg font-mono text-gray-200 bg-[#252525] p-4 rounded-lg border border-[#333]">
+                        IF σ > T <span class="text-red-400">→</span> EVENT FLAGGED
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full lg:w-[70%] flex flex-col gap-6 h-[600px] lg:h-full">
+            
+            <div class="bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] p-5 shadow-lg flex flex-col md:flex-row gap-6 items-center flex-shrink-0">
+                
+                <div class="w-full flex-1">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="windowStart" class="text-xs font-semibold text-gray-400 tracking-widest uppercase">Window Start</label>
+                        <span id="windowStartVal" class="font-mono text-[#00bfa5] text-sm">0</span>
+                    </div>
+                    <input type="range" id="windowStart" min="0" max="160" value="0" step="1">
+                </div>
+
+                <div class="w-full flex-1">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="blockSize" class="text-xs font-semibold text-gray-400 tracking-widest uppercase">Block Size</label>
+                        <span id="blockSizeVal" class="font-mono text-[#00bfa5] text-sm">40</span>
+                    </div>
+                    <input type="range" id="blockSize" min="10" max="100" value="40" step="1">
+                </div>
+
+                <div class="w-full flex-1">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="threshold" class="text-xs font-semibold text-gray-400 tracking-widest uppercase">Threshold (T)</label>
+                        <span id="thresholdVal" class="font-mono text-[#00bfa5] text-sm">1.5</span>
+                    </div>
+                    <input type="range" id="threshold" min="0.1" max="3.0" value="1.5" step="0.1">
+                </div>
+            </div>
+
+            <div class="bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] shadow-lg flex-1 overflow-hidden relative" id="canvasContainer">
+                <canvas id="vizCanvas" class="block w-full h-full absolute inset-0"></canvas>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        const fullBioData = [];
+        for (let i = 0; i < 200; i++) {
+            let val = 9.5 + Math.sin(i * 0.1) * 1.0; 
+            if (i >= 80 && i <= 120) {
+                val += (Math.random() - 0.5) * 5; 
+            } else {
+                val += (Math.random() - 0.5) * 1.2; 
+            }
+            fullBioData.push(Math.max(4.0, Math.min(13.0, val)));
+        }
+
+        const canvas = document.getElementById('vizCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvasContainer');
+        
+        const windowStartSlider = document.getElementById('windowStart');
+        const blockSizeSlider = document.getElementById('blockSize');
+        const thresholdSlider = document.getElementById('threshold');
+        
+        const windowStartDisplay = document.getElementById('windowStartVal');
+        const blockSizeDisplay = document.getElementById('blockSizeVal');
+        const thresholdDisplay = document.getElementById('thresholdVal');
+
+        let currentWindowStart = parseInt(windowStartSlider.value);
+        let currentBlockSize = parseInt(blockSizeSlider.value);
+        let currentThreshold = parseFloat(thresholdSlider.value);
+
+        function updateData() {
+            const maxStart = Math.max(0, fullBioData.length - currentBlockSize);
+            if (currentWindowStart > maxStart) {
+                currentWindowStart = maxStart;
+                windowStartSlider.value = currentWindowStart;
+                windowStartDisplay.textContent = currentWindowStart;
+            }
+            windowStartSlider.max = maxStart;
+        }
+
+        function calculateStats(arr) {
+            const n = arr.length;
+            if (n === 0) return { mean: 0, stdev: 0, max: 0, min: 0 };
+            
+            const sum = arr.reduce((a, b) => a + b, 0);
+            const mean = sum / n;
+            
+            const sumSq = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+            const stdev = n > 1 ? Math.sqrt(sumSq / (n - 1)) : 0;
+            
+            const max = Math.max(...arr);
+            const min = Math.min(...arr);
+            
+            return { mean, stdev, max, min };
+        }
+
+        function render() {
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            const width = rect.width;
+            const height = rect.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const padding = { top: 90, bottom: 40, left: 30, right: 30 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+            
+            // X-AXIS DYNAMIC ZOOM: Define the viewport around the active window + padding (context)
+            const viewStart = Math.max(0, currentWindowStart - currentBlockSize);
+            const viewEnd = Math.min(fullBioData.length - 1, currentWindowStart + (currentBlockSize * 2) - 1);
+            
+            const numVisiblePoints = viewEnd - viewStart + 1;
+            const xStep = chartWidth / Math.max(1, (numVisiblePoints - 1));
+            
+            // Y-AXIS DYNAMIC ZOOM: Auto-range based on the data visible in the current viewport
+            const visibleData = fullBioData.slice(viewStart, viewEnd + 1);
+            let visibleMin = Math.min(...visibleData);
+            let visibleMax = Math.max(...visibleData);
+            let yRange = visibleMax - visibleMin;
+            
+            // Prevent infinite zoom on flatlines by enforcing a minimum Y-range of 1.5
+            if (yRange < 1.5) {
+                const mid = (visibleMax + visibleMin) / 2;
+                visibleMin = mid - 0.75;
+                visibleMax = mid + 0.75;
+                yRange = 1.5;
+            }
+            
+            // Add 15% visual padding to the top and bottom of the Y-axis
+            const yMin = visibleMin - (yRange * 0.15);
+            const yMax = visibleMax + (yRange * 0.15);
+            const finalYRange = yMax - yMin;
+
+            // Updated mapping functions relative to viewport
+            const getX = (globalIndex) => padding.left + ((globalIndex - viewStart) * xStep);
+            const getY = (val) => padding.top + chartHeight - ((val - yMin) / finalYRange) * chartHeight;
+
+            // 1. Draw Global Dataset Context (Faint Background within Viewport)
+            ctx.strokeStyle = '#3a3a3a'; 
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = viewStart; i <= viewEnd; i++) {
+                if (i === viewStart) ctx.moveTo(getX(i), getY(fullBioData[i]));
+                else ctx.lineTo(getX(i), getY(fullBioData[i]));
+            }
+            ctx.stroke();
+
+            // 2. Isolate Active Window & Calculate Stats
+            const activeData = fullBioData.slice(currentWindowStart, currentWindowStart + currentBlockSize);
+            const stats = calculateStats(activeData);
+            const isFlagged = stats.stdev > currentThreshold;
+
+            const startX = getX(currentWindowStart);
+            const endX = getX(currentWindowStart + currentBlockSize - 1);
+            const windowWidth = endX - startX;
+
+            // 3. Draw Active Window Fill & Detection Flag
+            if (isFlagged) {
+                ctx.fillStyle = 'rgba(211, 47, 47, 0.15)'; 
+                ctx.fillRect(startX, padding.top - 20, windowWidth, chartHeight + 40);
+
+                const globalMaxIdx = currentWindowStart + activeData.indexOf(stats.max);
+                const globalMinIdx = currentWindowStart + activeData.indexOf(stats.min);
+
+                ctx.strokeStyle = '#d32f2f';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(getX(globalMaxIdx), getY(stats.max));
+                ctx.lineTo(getX(globalMaxIdx), getY(stats.min));
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.moveTo(getX(globalMinIdx), getY(stats.min));
+                ctx.lineTo(getX(globalMaxIdx), getY(stats.min));
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#d32f2f';
+                ctx.beginPath(); ctx.arc(getX(globalMaxIdx), getY(stats.max), 6, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(getX(globalMinIdx), getY(stats.min), 6, 0, Math.PI * 2); ctx.fill();
+
+                ctx.fillStyle = '#ef5350';
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = (globalMaxIdx - viewStart) > (numVisiblePoints / 2) ? 'right' : 'left';
+                const textOffset = (globalMaxIdx - viewStart) > (numVisiblePoints / 2) ? -12 : 12;
+                ctx.fillText(`Δ = ${(stats.max - stats.min).toFixed(2)}`, getX(globalMaxIdx) + textOffset, (getY(stats.max) + getY(stats.min)) / 2);
+            } else {
+                ctx.fillStyle = 'rgba(0, 191, 165, 0.05)'; 
+                ctx.fillRect(startX, padding.top - 20, windowWidth, chartHeight + 40);
+            }
+
+            // 4. Draw Window Boundaries
+            ctx.strokeStyle = '#00bfa5';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(startX, padding.top - 20);
+            ctx.lineTo(startX, height - padding.bottom + 20);
+            ctx.moveTo(endX, padding.top - 20);
+            ctx.lineTo(endX, height - padding.bottom + 20);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 5. Draw Active Window Data Trace (Thicker for zoom emphasis)
+            ctx.strokeStyle = '#00bfa5'; 
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (let i = currentWindowStart; i < currentWindowStart + currentBlockSize; i++) {
+                if (i === currentWindowStart) ctx.moveTo(getX(i), getY(fullBioData[i]));
+                else ctx.lineTo(getX(i), getY(fullBioData[i]));
+            }
+            ctx.stroke();
+
+            ctx.fillStyle = '#1e1e1e';
+            ctx.strokeStyle = '#00bfa5';
+            ctx.lineWidth = 2;
+            for (let i = currentWindowStart; i < currentWindowStart + currentBlockSize; i++) {
+                ctx.beginPath();
+                ctx.arc(getX(i), getY(fullBioData[i]), 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // 6. Draw Top Stats Text
+            const textY = 25;
+            ctx.textAlign = 'left';
+            ctx.fillStyle = isFlagged ? '#ef5350' : '#888';
+            ctx.font = '14px monospace';
+            ctx.fillText(`μ (Mean): ${stats.mean.toFixed(2)}`, padding.left, textY);
+            
+            ctx.textAlign = 'center';
+            ctx.font = isFlagged ? 'bold 16px monospace' : '14px monospace';
+            ctx.fillText(`σ (StDev): ${stats.stdev.toFixed(2)}`, width / 2, textY);
+            
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#666';
+            ctx.font = '14px monospace';
+            ctx.fillText(`Max: ${stats.max.toFixed(1)} | Min: ${stats.min.toFixed(1)}`, width - padding.right, textY);
+
+            // 7. Draw X-Axis Range Indicators
+            ctx.fillStyle = '#555';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`IDX ${viewStart}`, padding.left, height - 10);
+            
+            ctx.fillStyle = '#00bfa5';
+            ctx.textAlign = 'left';
+            ctx.fillText(`START: ${currentWindowStart}`, Math.max(padding.left + 50, startX), height - 10);
+            
+            ctx.textAlign = 'right';
+            ctx.fillText(`END: ${currentWindowStart + currentBlockSize - 1}`, Math.min(width - padding.right - 50, endX), height - 10);
+            
+            ctx.fillStyle = '#555';
+            ctx.textAlign = 'right';
+            ctx.fillText(`IDX ${viewEnd}`, width - padding.right, height - 10);
+        }
+
+        windowStartSlider.addEventListener('input', (e) => {
+            currentWindowStart = parseInt(e.target.value);
+            windowStartDisplay.textContent = currentWindowStart;
+            updateData();
+            render();
+        });
+
+        blockSizeSlider.addEventListener('input', (e) => {
+            currentBlockSize = parseInt(e.target.value);
+            blockSizeDisplay.textContent = currentBlockSize;
+            updateData();
+            render();
+        });
+
+        thresholdSlider.addEventListener('input', (e) => {
+            currentThreshold = parseFloat(e.target.value);
+            thresholdDisplay.textContent = currentThreshold.toFixed(1);
+            render();
+        });
+
+        window.addEventListener('resize', render);
+
+        updateData();
+        window.addEventListener('load', render);
+
+    </script>
+</body>
+</html>
