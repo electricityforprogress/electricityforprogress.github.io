@@ -1,15 +1,140 @@
-<html>  
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collective Futures</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #eeeeee;
+            overflow: hidden; /* Hide main scrollbar to use the container's snap scroll */
+        }
 
-<div>Collective Futures</div>
+        /* Snap scrolling container */
+        .presentation-container {
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+        }
 
+        /* Individual slide container */
+        .slide {
+            height: 100vh;
+            width: 100vw;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            position: relative;
+        }
 
-  
-  
-<iframe src="https://docs.google.com/presentation/d/e/2PACX-1vQ4F38RAjTUTzoQ7EB9b9_EcCjqGojCb5LogJswyoajAjKutyEiaUxl2W-ateJDET7H8EadYaLwBSg-/pubembed?start=false&loop=false&delayms=3000" frameborder="0" width="960" height="569" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+        /* Description formatting */
+        .intro-content {
+            max-width: 800px;
+            padding: 40px;
+            text-align: center;
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
 
+        .intro-content h1 {
+            color: #00bfa5;
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
 
+        .intro-content h2 {
+            color: #aaaaaa;
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            font-weight: 400;
+        }
 
+        .intro-content p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #cccccc;
+            text-align: left;
+        }
 
+        /* Iframe reset and scaling */
+        iframe {
+            border: none;
+            width: 100%;
+            height: 100%;
+            max-width: 1200px;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+        
+        .g-slides-iframe {
+            max-width: 960px;
+            max-height: 569px;
+        }
 
+        /* Scroll indicator */
+        .scroll-down {
+            position: absolute;
+            bottom: 20px;
+            font-size: 12px;
+            color: #888;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: pulse 2s infinite;
+        }
 
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="presentation-container">
+        
+        <!-- Slide 1: Description -->
+        <section class="slide">
+            <div class="intro-content">
+                <h1>Collective Futures</h1>
+                <h2>Perturbations Workshop & Performance</h2>
+                <p>
+                    On October 25, 2026, at the Asian Arts Initiative, Sam Cusumano and Raúl Romero presented "Perturbations" as part of the Collective Futures Parallel Play Symposium[cite: 3.2, 3.3]. The session explored the intersection of human perception and the invisible changes happening in organic systems like plants. By extracting complex information from living biological systems, the exhibition featured data analysis algorithms, visualization methods for plant music, and physical perturbations that allowed live plants to actuate and play a modified physical drum kit[cite: 3.3].
+                </p>
+            </div>
+            <div class="scroll-down">Scroll Down ↓</div>
+        </section>
+
+        <!-- Slide 2: 555 Visualization -->
+        <section class="slide">
+            <iframe src="555Visualization.html" title="555 Timer Visualization"></iframe>
+        </section>
+
+        <!-- Slide 3: Bio Reaction Analysis -->
+        <section class="slide">
+            <iframe src="bio_reaction_analysis.html" title="Bio Reaction Analysis Dashboard"></iframe>
+        </section>
+
+        <!-- Slide 4: Google Slides Embed -->
+        <section class="slide">
+            <iframe class="g-slides-iframe" src="https://docs.google.com/presentation/d/e/2PACX-1vQ4F38RAjTUTzoQ7EB9b9_EcCjqGojCb5LogJswyoajAjKutyEiaUxl2W-ateJDET7H8EadYaLwBSg-/pubembed?start=false&loop=false&delayms=3000" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+        </section>
+
+    </div>
+
+</body>
 </html>
