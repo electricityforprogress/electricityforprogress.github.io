@@ -3,38 +3,32 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bioQuad - 4-Channel Biodata Sonification & ESP32 Synth</title>
-    <meta name="description" content="Real-time 4-channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, additive CC threshold expander, and ESP32 USB firmware flasher." />
-    <meta property="og:title" content="bioQuad - 4-Channel Biodata Sonification & ESP32 Synth" />
-    <meta property="og:description" content="Real-time 4-channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, additive CC threshold expander, and ESP32 USB firmware flasher." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" href="./css/bioquad-icon.svg" type="image/svg+xml">
-    <link rel="manifest" href="./manifest.json">
-    <link rel="stylesheet" href="./css/styles.css?v=12">
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <title>bioQuad Stream - 4-Channel Biodata Sonification & Data Streamer</title>
+    <meta name="description" content="4-Channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, and universal time-series data file streaming engine." />
+    <link rel="icon" href="/css/bioquad-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
 </head>
 <body>
 
 <div class="toolbar">
     <div class="brand-group">
-        <img src="./css/bioquad-icon.svg" style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,0.5);" alt="e4p bioQuad">
+        <img src="/css/bioquad-icon.svg" style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,0.5);" alt="e4p bioQuad">
         <span class="bio-brand" style="font-size: 1.25em;">bioQuad</span>
     </div>
 
     <div class="control-group right-controls" style="gap: 6px;">
-        <button id="btn-ble" onclick="connectBLE()" style="width: 58px; padding: 4px 0; text-align: center; justify-content: center; font-size: 8px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;"><span id="ble-label">CONNECT</span><span id="ble-status" class="status-offline" style="margin-left: 2px;">●</span></button>
+        <button id="btn-ble" onclick="connectBLE()" style="cursor: pointer; padding: 4px 8px; font-size: 10px; height: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap;"><span id="ble-label">CONNECT</span><span id="ble-status" class="status-offline" style="margin-left: 2px;">●</span></button>
         
-        <!-- MIDI DROPDOWN WITH RESTORED INPUT -->
         <div class="dropdown-widget">
             <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="padding: 4px 8px; font-size: 10px;">MIDI</button>
             <div class="dropdown-content midi-panel" style="max-width: 90vw; box-sizing: border-box;" onclick="event.stopPropagation();">
-			    <label>INPUT</label>
-				<select id="midi-in-select" style="width: 100%; box-sizing: border-box; margin-bottom: 6px;">
-					<option value="none" selected>None</option>
-					<option value="all">All Inputs</option>
-				</select>
+                <label>INPUT</label>
+                <select id="midi-in-select" style="width: 100%; box-sizing: border-box; margin-bottom: 6px;">
+                    <option value="none" selected>None</option>
+                    <option value="all">All Inputs</option>
+                </select>
                 <label>CLOCK</label>
                 <select id="midi-clock-dir" style="width: 100%; box-sizing: border-box; margin-bottom: 6px;" onchange="window.midiClockMode = this.value; syncUI();">
                     <option value="out">OUT</option>
@@ -54,7 +48,11 @@
             </div>
         </div>
 
-        <!-- PRESETS DROPDOWN -->
+        <button id="toggle-portal-btn" onclick="window.toggleDataPortalUI && window.toggleDataPortalUI()" style="cursor: pointer; padding: 4px 8px; font-size: 10px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; height: 26px;">
+            <span id="file-portal-indicator" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #661111; box-shadow: none; transition: all 0.2s;"></span>
+            <span id="file-portal-text">File</span>
+        </button>
+
         <div class="dropdown-widget">
             <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="padding: 4px 8px; font-size: 10px;">PRESETS</button>
             <div class="dropdown-content preset-panel" style="min-width: 240px; padding: 12px; gap: 6px; right: 0; left: auto;" onclick="event.stopPropagation();">
@@ -75,7 +73,6 @@
             </div>
         </div>
 
-        <!-- TEMPO & MIXER CONTROLS -->
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; background: #0a0d12; padding: 4px 8px; border: 1px solid var(--border); border-radius: 20px;">
             <div style="display: flex; align-items: center; gap: 5px; padding-right: 8px; border-right: 1px solid var(--border);">
                 <div class="led" id="top-bpm-led" style="margin:0; width:8px; height:8px; background:#222; box-shadow:none;"></div>
@@ -94,15 +91,12 @@
             </div>
         </div>
 
-<button id="btn-download-firmware" onclick="downloadFirmwareZip()" style="border-color: var(--green); color: var(--green); padding: 4px 8px; font-size: 10px; white-space: nowrap;">FIRMWARE</button>
-
+        <button id="btn-download-firmware" onclick="downloadFirmwareZip()" style="border-color: var(--green); color: var(--green); padding: 4px 8px; font-size: 10px; white-space: nowrap;">FIRMWARE</button>
     </div>
 </div>
 
-<!-- SYNTH INSPECTOR -->
 <div class="synth-inspector ui-hidden" id="synth-inspector">
     <div class="synth-tabs">
-        <!-- TAB 1 -->
         <div class="synth-tab active" onclick="selectTab(0)">
             <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-0"></div>CH 1</div>
             <div class="dropdown-widget">
@@ -119,8 +113,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- TAB 2 -->
         <div class="synth-tab" onclick="selectTab(1)">
             <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-1"></div>CH 2</div>
             <div class="dropdown-widget">
@@ -137,8 +129,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- TAB 3 -->
         <div class="synth-tab" onclick="selectTab(2)">
             <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-2"></div>CH 3</div>
             <div class="dropdown-widget">
@@ -155,8 +145,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- TAB 4 -->
         <div class="synth-tab" onclick="selectTab(3)">
             <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-3"></div>CH 4</div>
             <div class="dropdown-widget">
@@ -175,10 +163,7 @@
         </div>
     </div>
 
-    <!-- SYNTHESIZER MODULES -->
     <div class="synth-controls">
-        
-        <!-- MODULE 1: SCALE & DENSITY -->
         <div class="synth-module scale-module">
             <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <div class="scale-title">SCALE</div>
@@ -253,7 +238,6 @@
             </div>
         </div>
 
-        <!-- MODULE 2: VOICE -->
         <div class="synth-module voice-module">
             <div class="module-header"><div class="voice-title">VOICE</div></div>
             <div class="control-row">
@@ -262,13 +246,13 @@
                         <select id="ui-wave" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
                             <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Tri</option><option value="sine">Sine</option><option value="noise">Noise</option><option value="drums">Drums</option>
                         </select>
-						<select id="ui-steal" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateActiveSynth('stealMode', this.value)">
-							<option value="oldest">Old</option>
-							<option value="lowest">Lo</option>
-							<option value="highest">Hi</option>
-							<option value="env">Env</option>
-							<option value="none">Off</option>
-						</select>
+                        <select id="ui-steal" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateActiveSynth('stealMode', this.value)">
+                            <option value="oldest">Old</option>
+                            <option value="lowest">Lo</option>
+                            <option value="highest">Hi</option>
+                            <option value="env">Env</option>
+                            <option value="none">Off</option>
+                        </select>
                         <div class="pill-toggle" id="legato-wrapper" style="width: 65%; height: 14px; margin-top: 2px;">
                             <input type="checkbox" id="ui-legato" onchange="updateActiveSynth('legato', this.checked ? 1 : 0)">
                             <label for="ui-legato" style="line-height: 14px; font-size: 8px;">LEGATO</label>
@@ -301,7 +285,6 @@
             </div>
         </div>
 
-        <!-- MODULE 3: MODULATION -->
         <div class="synth-module mod-module">
             <div class="module-header">
                 <div class="mod-title">MODULATION</div>
@@ -312,7 +295,6 @@
                         <label><input type="radio" name="activeLfo" value="ampLfo" checked onchange="switchModView('lfo', this.value); switchModView('env', 'ampEnv');"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span>AMP</span></label>
                     </div>
                     
-                    <!-- NEW ENV TIME TOGGLE -->
                     <div class="pill-toggle" style="width: 50px; height: 14px;">
                         <input type="radio" id="env-time-norm" name="envTimeMode" value="norm" checked onchange="window.updateEnvTimeMode(this.value)">
                         <label for="env-time-norm" style="line-height: 14px; font-size: 8px;">NRM</label>
@@ -362,7 +344,6 @@
             </div>
         </div>
 
-        <!-- MODULE 4: FILTER & EFFECTS -->
         <div class="synth-module fx-module">
             <div class="module-header">
                 <div class="fx-title"><span style="color: var(--green);">FILTER</span></div>
@@ -391,7 +372,6 @@
                     <div class="control-label">SEND</div>
                 </div>
                 
-                <!-- DRV Controls -->
                 <div class="col-wrap fx-dynamic-knob fx-params fx-drv-params">
                     <div class="control-area"><div class="knob-track" data-param="drvGrit" data-group="fx" data-min="0" data-max="100" data-val="10"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
                     <div class="control-label">GRIT</div>
@@ -405,7 +385,6 @@
                     <div class="control-label">LVL</div>
                 </div>
 
-                <!-- DLY Controls -->
                 <div class="col-wrap fx-dynamic-knob fx-params fx-dly-params" style="display: none;">
                     <div class="control-area"><div class="knob-track" data-param="time" data-group="globalFx.dly" data-min="0.01" data-max="10.0" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
                     <div class="control-label">TIME</div>
@@ -419,7 +398,6 @@
                     <div class="control-label">>REV</div>
                 </div>
                 
-                <!-- REV Controls -->
                 <div class="col-wrap fx-dynamic-knob fx-params fx-rev-params" style="display: none;">
                     <div class="control-area"><div class="knob-track" data-param="size" data-group="globalFx.rev" data-min="0.1" data-max="8.0" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
                     <div class="control-label">SIZE</div>
@@ -437,22 +415,18 @@
     </div>
 </div>
 
-<!-- 4-CHANNEL VISUALIZER DASHBOARD -->
 <div id="dashboard"></div>
 
-
-<div id="root" style="display: none;"></div>
-
 <!-- Core Engine Scripts -->
-<script src="./js/globals.js?v=13"></script>
-<script src="./js/audioEngine.js?v=12"></script>
-<script src="./js/uiController.js?v=13"></script>
-<script src="./js/visualizer.js?v=12"></script>
-<script src="./js/bleMidi.js?v=12"></script>
-<script src="./js/main.js?v=13"></script>
+<script src="/js/globals.js"></script>
+<script src="/js/audioEngine.js"></script>
+<script src="/js/uiController.js"></script>
+<script src="/js/visualizer.js"></script>
+<script src="/js/bleMidi.js"></script>
+<script src="/js/dataStreamer.js"></script>
+<script src="/js/main.js"></script>
 
 <script>
-    // Offline PWA Service Worker
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js').then(reg => {
@@ -463,7 +437,6 @@
         });
     }
 
-    // Auto-close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.dropdown-widget')) {
             document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
