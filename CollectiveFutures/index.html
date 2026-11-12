@@ -3,12 +3,69 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bioQuad Stream - 4-Channel Biodata Sonification & Data Streamer</title>
-    <meta name="description" content="4-Channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, and universal time-series data file streaming engine." />
+    <title>bioQuad 4-Channel Biodata Sonification</title>
+    <meta name="description" content="4-Channel biodata sonification polyphonic modular synthesizer" />
     <link rel="icon" href="./css/bioquad-icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./css/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
+    
+    <style>
+    /* Scoped styles for the vanilla file portal & transport */
+    #data-portal {
+        background: #0d1117;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        color: var(--text);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    }
+    .portal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        background: #161b22;
+        border-bottom: 1px solid var(--border);
+        border-radius: 6px 6px 0 0;
+    }
+    .portal-header h3 {
+        margin: 0;
+        color: var(--cyan);
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .portal-close { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; }
+    .portal-close:hover { color: #fff; }
+    .portal-body { padding: 15px; }
+    .portal-section { background: #161b22; border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 15px; }
+    .portal-section-title { font-size: 11px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    .portal-btn { background: #21262d; color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+    .portal-btn:hover { background: #30363d; }
+    .portal-btn-primary { background: rgba(0, 240, 255, 0.1); border-color: var(--cyan); color: var(--cyan); }
+    .portal-btn-primary:hover { background: var(--cyan); color: #000; }
+    .portal-btn-danger { color: var(--red); border-color: rgba(255, 0, 85, 0.4); }
+    .portal-btn-danger:hover { background: var(--red); color: #fff; }
+    .portal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .ch-box { background: #0d1117; border: 1px solid var(--border); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .portal-select { width: 100%; background: #0d1117; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px; font-size: 11px; outline: none; }
+    .portal-select:focus { border-color: var(--cyan); }
+    .sample-list { display: flex; flex-direction: column; gap: 8px; }
+    .sample-item { display: flex; justify-content: space-between; align-items: center; background: #0d1117; border: 1px solid var(--border); padding: 8px 12px; border-radius: 4px; }
+    .sample-item:hover { border-color: var(--text-muted); }
+    .sample-name { font-weight: bold; font-size: 12px; color: #fff; }
+    .sample-desc { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+    .master-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: rgba(0,0,0,0.4); border: 1px solid #21262d; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; width: 100%; max-width: 1600px; box-sizing: border-box; }
+    .transport-group { display: flex; align-items: center; gap: 5px; }
+    .transport-slider { flex-grow: 1; min-width: 150px; }
+    .transport-readout { font-size: 10px; color: var(--text-muted); font-family: monospace; font-weight: bold; min-width: 100px; text-align: right; }
+    
+    .ch-status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; width: 100%; max-width: 1600px; box-sizing: border-box; }
+    .ch-status-pill { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.5); border: 1px solid #21262d; padding: 6px 10px; border-radius: 4px; font-size: 10px; }
+    </style>
 </head>
 <body>
 
@@ -47,11 +104,6 @@
                 </div>
             </div>
         </div>
-
-        <button id="toggle-portal-btn" onclick="window.toggleDataPortalUI && window.toggleDataPortalUI()" style="cursor: pointer; padding: 4px 8px; font-size: 10px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; height: 26px;">
-            <span id="file-portal-indicator" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #661111; box-shadow: none; transition: all 0.2s;"></span>
-            <span id="file-portal-text">File</span>
-        </button>
 
         <div class="dropdown-widget">
             <button onclick="this.parentElement.classList.toggle('show'); event.stopPropagation();" style="padding: 4px 8px; font-size: 10px;">PRESETS</button>
@@ -92,6 +144,65 @@
         </div>
 
         <button id="btn-download-firmware" onclick="downloadFirmwareZip()" style="border-color: var(--green); color: var(--green); padding: 4px 8px; font-size: 10px; white-space: nowrap;">FIRMWARE</button>
+    </div>
+</div>
+
+<!-- TRANSPORT BAR & RECORDER -->
+<div class="master-transport">
+    <div class="transport-group" style="padding-right: 10px; border-right: 1px solid var(--border);">
+        <button id="btn-rec" class="portal-btn" style="border-color: rgba(255, 0, 85, 0.6); color: var(--red); display: flex; align-items: center; gap: 4px;">
+            <div style="width:6px; height:6px; background:currentColor; border-radius:50%;"></div> REC
+        </button>
+        <div id="rec-pts" style="background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: monospace; color: var(--text-muted);">0 pts</div>
+    </div>
+    <div class="transport-group">
+        <button id="btn-step-back" class="portal-btn" style="padding: 6px;">⏮</button>
+        <button id="btn-play-pause" class="portal-btn portal-btn-primary">▶ PLAY</button>
+        <button id="btn-step-fwd" class="portal-btn" style="padding: 6px;">⏭</button>
+        <button id="btn-stop" class="portal-btn" style="padding: 6px; color: var(--text-muted);">⏹</button>
+        <button id="btn-loop" class="portal-btn" style="padding: 6px; color: var(--green); border-color: rgba(57,255,20,0.4);">🔁</button>
+    </div>
+    <input type="range" id="scrubber" class="pro-slider transport-slider" min="0" max="100" value="0">
+    <div id="scrubber-readout" class="transport-readout">00:00 / 00:00</div>
+    <div class="transport-group" style="background: rgba(0,0,0,0.5); padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px;">
+        <span style="font-size:9px; color:var(--text-muted); font-weight:bold;">SPD</span>
+        <input type="range" id="speed-slider" class="pro-slider" style="width: 60px;" min="0.1" max="5.0" step="0.1" value="1.0">
+        <span id="speed-readout" style="font-size:10px; color:var(--cyan); font-weight:bold; font-family:monospace; min-width:25px;">1.0x</span>
+    </div>
+    <button id="btn-toggle-portal" class="portal-btn portal-btn-primary" style="margin-left: auto; display: flex; align-items: center; gap: 6px;">
+        📂 LOAD
+    </button>
+</div>
+
+<!-- CHANNEL STATUS GRID -->
+<div class="ch-status-grid">
+    <div class="ch-status-pill" style="border-left: 3px solid #ff3333;">
+        <div><span style="color:#ff3333; font-weight:bold;">CH 1</span> <span id="stat-lbl-0" style="color:var(--text-muted); margin-left:4px;">Empty</span></div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <span id="stat-val-0" style="color:var(--cyan); font-weight:bold; font-family:monospace;">--</span>
+            <button class="portal-close" style="font-size:10px;" onclick="window.dataStreamer && window.dataStreamer.clearChannel(0)">✕</button>
+        </div>
+    </div>
+    <div class="ch-status-pill" style="border-left: 3px solid #39ff14;">
+        <div><span style="color:#39ff14; font-weight:bold;">CH 2</span> <span id="stat-lbl-1" style="color:var(--text-muted); margin-left:4px;">Empty</span></div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <span id="stat-val-1" style="color:var(--cyan); font-weight:bold; font-family:monospace;">--</span>
+            <button class="portal-close" style="font-size:10px;" onclick="window.dataStreamer && window.dataStreamer.clearChannel(1)">✕</button>
+        </div>
+    </div>
+    <div class="ch-status-pill" style="border-left: 3px solid #33ccff;">
+        <div><span style="color:#33ccff; font-weight:bold;">CH 3</span> <span id="stat-lbl-2" style="color:var(--text-muted); margin-left:4px;">Empty</span></div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <span id="stat-val-2" style="color:var(--cyan); font-weight:bold; font-family:monospace;">--</span>
+            <button class="portal-close" style="font-size:10px;" onclick="window.dataStreamer && window.dataStreamer.clearChannel(2)">✕</button>
+        </div>
+    </div>
+    <div class="ch-status-pill" style="border-left: 3px solid #b84dff;">
+        <div><span style="color:#b84dff; font-weight:bold;">CH 4</span> <span id="stat-lbl-3" style="color:var(--text-muted); margin-left:4px;">Empty</span></div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <span id="stat-val-3" style="color:var(--cyan); font-weight:bold; font-family:monospace;">--</span>
+            <button class="portal-close" style="font-size:10px;" onclick="window.dataStreamer && window.dataStreamer.clearChannel(3)">✕</button>
+        </div>
     </div>
 </div>
 
@@ -415,24 +526,133 @@
     </div>
 </div>
 
-<div id="data-portal" class="synth-inspector ui-hidden" style="margin-top: 15px; padding: 15px;">
-    <div class="module-header"><div class="fx-title"><span style="color: var(--cyan);">DATA FILES</span></div></div>
-    
-    <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-        <input type="file" id="csv-file-input" accept=".csv,.txt,.json" style="color: var(--text); font-family: monospace; background: #111; padding: 5px; border: 1px solid var(--border); border-radius: 4px;">
-        <button onclick="loadCustomDataFile()" style="border-color: var(--cyan); color: var(--cyan);">LOAD FILE</button>
-        
-        <div style="width: 1px; height: 30px; background: var(--border);"></div>
-        
-        <button onclick="window.dataStreamer && window.dataStreamer.play()" style="border-color: var(--green); color: var(--green);">▶ PLAY</button>
-        <button onclick="window.dataStreamer && window.dataStreamer.pause()" style="border-color: var(--orange); color: var(--orange);">⏸ PAUSE</button>
-        <button onclick="window.dataStreamer && window.dataStreamer.stop()" style="border-color: var(--red); color: var(--red);">⏹ STOP</button>
+<div id="dashboard"></div>
+
+<!-- FILE PORTAL OVERLAY MODAL -->
+<div id="data-portal" class="ui-hidden">
+    <div class="portal-header">
+        <h3>📂 File Portal & Data Mapping</h3>
+        <button class="portal-close" onclick="document.getElementById('data-portal').classList.add('ui-hidden')">✕</button>
     </div>
     
-    <div id="file-portal-status" style="margin-top: 15px; font-size: 11px; color: var(--text-muted); font-family: monospace;">No file loaded.</div>
+    <div class="portal-body">
+        <div class="portal-section" id="drop-zone" style="text-align: center; border: 2px dashed var(--border); cursor: pointer; padding: 30px;">
+            <input type="file" id="master-file-input" class="ui-hidden" accept=".csv,.tsv,.txt,.json">
+            <div style="color: var(--cyan); font-size: 24px; margin-bottom: 10px;">📥</div>
+            <div style="font-size: 13px; font-weight: bold; color: #fff;">Click to select or drop a data file here</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Supports CSV, TSV, JSON, TXT</div>
+            <div id="parse-error" style="color: var(--red); font-size: 11px; font-weight: bold; margin-top: 10px; display: none;"></div>
+        </div>
+
+        <div class="portal-section">
+            <div class="portal-section-title">Test Datasets</div>
+            <div class="sample-list">
+                <div class="sample-item">
+                    <div>
+                        <div class="sample-name">NASA ISS Telemetry <span style="background:#21262d; color:var(--cyan); padding:2px 6px; border-radius:3px; font-size:9px; margin-left:6px; border:1px solid var(--border);">Multi-Column</span></div>
+                        <div class="sample-desc">Solar array volts, cabin pressure, coolant temp, gyro drift</div>
+                    </div>
+                    <button class="portal-btn portal-btn-primary" onclick="loadSample('/datasets/nasa_telemetry_iss.csv', 'NASA ISS Telemetry')">▶ Load</button>
+                </div>
+                <div class="sample-item">
+                    <div>
+                        <div class="sample-name">Deep Forest Mycelium <span style="background:#21262d; color:var(--cyan); padding:2px 6px; border-radius:3px; font-size:9px; margin-left:6px; border:1px solid var(--border);">Multi-Series</span></div>
+                        <div class="sample-desc">Oak canopy, fern spore, mycelium network, moss</div>
+                    </div>
+                    <button class="portal-btn portal-btn-primary" onclick="loadSample('/datasets/deep_forest_mycelium.csv', 'Deep Forest Mycelium')">▶ Load</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="portal-section ui-hidden" id="mapping-section" style="border-color: rgba(0,240,255,0.4); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    Loaded: <span id="map-filename" style="color: #fff; font-weight: bold;">--</span> 
+                    <span style="margin: 0 8px;">·</span> <span id="map-rows" style="color: var(--cyan); font-weight: bold;">0</span> rows
+                </div>
+                <label style="font-size: 11px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="map-auto-win" checked> Auto Window Size
+                </label>
+            </div>
+
+            <div class="portal-section-title" style="color: #fff;">1. Data Structure</div>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="portal-btn" id="mode-multi-col" onclick="setMappingMode('multi_value_cols')" style="flex:1;">Multiple Columns (Multi-metric)</button>
+                <button class="portal-btn" id="mode-multi-id" onclick="setMappingMode('multi_sensor_id')" style="flex:1;">Sensor ID / Series (EKG/Bio)</button>
+                <button class="portal-btn" id="mode-single" onclick="setMappingMode('single_channel')" style="flex:1;">Single Stream (1 Channel)</button>
+            </div>
+
+            <div id="panel-multi-col" class="ui-hidden" style="margin-bottom: 20px;">
+                <div class="portal-section-title">Assign Columns to Channels</div>
+                <div class="portal-grid">
+                    <div class="ch-box" style="border-top: 2px solid #ff3333;">
+                        <span style="font-size: 10px; font-weight: bold; color: #ff3333;">Channel 1</span>
+                        <select id="col-sel-0" class="portal-select"><option value="">-- Ignore --</option></select>
+                    </div>
+                    <div class="ch-box" style="border-top: 2px solid #39ff14;">
+                        <span style="font-size: 10px; font-weight: bold; color: #39ff14;">Channel 2</span>
+                        <select id="col-sel-1" class="portal-select"><option value="">-- Ignore --</option></select>
+                    </div>
+                    <div class="ch-box" style="border-top: 2px solid #33ccff;">
+                        <span style="font-size: 10px; font-weight: bold; color: #33ccff;">Channel 3</span>
+                        <select id="col-sel-2" class="portal-select"><option value="">-- Ignore --</option></select>
+                    </div>
+                    <div class="ch-box" style="border-top: 2px solid #b84dff;">
+                        <span style="font-size: 10px; font-weight: bold; color: #b84dff;">Channel 4</span>
+                        <select id="col-sel-3" class="portal-select"><option value="">-- Ignore --</option></select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="panel-multi-id" class="ui-hidden" style="margin-bottom: 20px;">
+                <div class="portal-section-title">Map Series to Channels</div>
+                <div class="portal-grid" id="series-map-grid">
+                    <div style="font-size: 11px; color: var(--text-muted); font-style: italic;">Select the Series / Sensor ID Column below to map series.</div>
+                </div>
+            </div>
+
+            <div id="panel-single" class="ui-hidden" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                <span class="portal-section-title" style="margin:0;">Target Channel:</span>
+                <select id="single-ch-target" class="portal-select" style="width: 150px;">
+                    <option value="0" style="color:#ff3333;">Channel 1</option>
+                    <option value="1" style="color:#39ff14;">Channel 2</option>
+                    <option value="2" style="color:#33ccff;">Channel 3</option>
+                    <option value="3" style="color:#b84dff;">Channel 4</option>
+                </select>
+            </div>
+
+            <div class="portal-section-title" style="color: #fff; margin-top: 10px;">2. General Mapping</div>
+            <div class="portal-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 20px;">
+                <div class="ch-box" id="map-box-id">
+                    <span style="font-size: 10px; font-weight: bold; color: var(--text-muted);">Series / ID Column</span>
+                    <select id="map-id-col" class="portal-select" style="color: var(--cyan);"><option value="">None</option></select>
+                </div>
+                <div class="ch-box" id="map-box-val">
+                    <span style="font-size: 10px; font-weight: bold; color: var(--text-muted);">Value Column</span>
+                    <select id="map-val-col" class="portal-select" style="color: var(--green);"></select>
+                </div>
+                <div class="ch-box">
+                    <span style="font-size: 10px; font-weight: bold; color: var(--text-muted);">Timestamp Column</span>
+                    <select id="map-time-col" class="portal-select" style="color: var(--purple);"><option value="">Fixed Cadence Rate</option></select>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="portal-btn portal-btn-primary" onclick="applyMappingToStreamer()" style="font-size: 12px; padding: 8px 16px; box-shadow: 0 4px 10px rgba(0,240,255,0.2);">▶ LOAD INTO PLAYER</button>
+            </div>
+        </div>
+
+        <div class="portal-section" style="margin-bottom: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div class="portal-section-title" style="margin:0;">Saved Takes</div>
+                <button class="portal-btn portal-btn-danger" style="font-size: 9px; padding: 4px 8px;" onclick="clearAllTakes()">✕ CLEAR ALL</button>
+            </div>
+            <div class="sample-list" id="takes-list">
+                <div style="text-align: center; color: var(--text-muted); font-size: 11px; padding: 20px;">No saved data yet. Click REC to record biodata.</div>
+            </div>
+        </div>
+    </div>
 </div>
-    
-<div id="dashboard"></div>
 
 <!-- Core Engine Scripts -->
 <script src="./js/globals.js"></script>
@@ -442,6 +662,361 @@
 <script src="./js/bleMidi.js"></script>
 <script src="./js/dataStreamer.js"></script>
 <script src="./js/main.js"></script>
+
+<!-- VANILLA FILE PORTAL & TRANSPORT LOGIC -->
+<script>
+let currentMappingMode = 'multi_sensor_id';
+let sensorMappingObj = {};
+
+document.getElementById('btn-toggle-portal').addEventListener('click', () => {
+    document.getElementById('data-portal').classList.toggle('ui-hidden');
+});
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('master-file-input');
+const parseErrorEl = document.getElementById('parse-error');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--cyan)'; dropZone.style.background = 'rgba(0,240,255,0.05)'; });
+dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--border)'; dropZone.style.background = 'transparent'; });
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--border)'; dropZone.style.background = 'transparent';
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) processFile(e.target.files[0]);
+});
+
+async function loadSample(url, name) {
+    try {
+        parseErrorEl.style.display = 'none';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Could not load ${name}`);
+        const text = await res.text();
+        const ds = window.dataStreamer;
+        if (!ds) throw new Error('Data streamer engine missing');
+        
+        const fileName = url.split('/').pop() || 'dataset.csv';
+        ds.parseFileContent(text, fileName);
+        populateMappingUI();
+    } catch(e) {
+        parseErrorEl.innerText = e.message;
+        parseErrorEl.style.display = 'block';
+    }
+}
+
+function processFile(file) {
+    const reader = new FileReader();
+    parseErrorEl.style.display = 'none';
+    reader.onload = (e) => {
+        try {
+            const text = e.target.result;
+            const ds = window.dataStreamer;
+            ds.parseFileContent(text, file.name);
+            populateMappingUI();
+        } catch (err) {
+            parseErrorEl.innerText = err.message;
+            parseErrorEl.style.display = 'block';
+        }
+    };
+    reader.readAsText(file);
+}
+
+function populateMappingUI() {
+    const ds = window.dataStreamer;
+    if (!ds || !ds.loadedFile) return;
+    
+    document.getElementById('mapping-section').classList.remove('ui-hidden');
+    document.getElementById('map-filename').innerText = ds.loadedFile.name;
+    document.getElementById('map-rows').innerText = ds.loadedFile.rows.length.toLocaleString();
+    
+    const cols = ds.loadedFile.columns;
+    const guesses = ds.loadedFile.guesses;
+    
+    const populateSelect = (id, options, selectedVal) => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = id.includes('time') ? '<option value="">Fixed Cadence Rate</option>' : (id.includes('id') ? '<option value="">None</option>' : '');
+        options.forEach(c => {
+            let opt = document.createElement('option');
+            opt.value = c; opt.innerText = c;
+            sel.appendChild(opt);
+        });
+        if (selectedVal) sel.value = selectedVal;
+    };
+
+    populateSelect('map-id-col', cols, guesses.identifierCol);
+    populateSelect('map-val-col', cols, guesses.primaryValueCol);
+    populateSelect('map-time-col', cols, guesses.timestampCol);
+    
+    for (let i=0; i<4; i++) {
+        populateSelect(`col-sel-${i}`, cols, guesses.detectedValueCols[i] || '');
+        let opt = document.createElement('option');
+        opt.value = ''; opt.innerText = '-- Ignore --';
+        document.getElementById(`col-sel-${i}`).prepend(opt);
+        if (!guesses.detectedValueCols[i]) document.getElementById(`col-sel-${i}`).value = '';
+    }
+
+    if (guesses.identifierCol && guesses.sensorList.length >= 2) {
+        setMappingMode('multi_sensor_id');
+        buildSeriesGrid(guesses.sensorList);
+    } else if (guesses.detectedValueCols.length >= 2) {
+        setMappingMode('multi_value_cols');
+    } else {
+        setMappingMode('single_channel');
+    }
+}
+
+function buildSeriesGrid(sensors) {
+    const grid = document.getElementById('series-map-grid');
+    grid.innerHTML = '';
+    sensorMappingObj = {};
+    
+    sensors.slice(0, 4).forEach((sensor, idx) => {
+        sensorMappingObj[sensor] = idx;
+        const box = document.createElement('div');
+        box.className = 'ch-box';
+        box.innerHTML = `
+            <span style="font-size: 10px; font-weight: bold; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${sensor}">${sensor}</span>
+            <select class="portal-select" onchange="sensorMappingObj['${sensor.replace(/'/g, "\\'")}']=parseInt(this.value)">
+                <option value="0" ${idx===0?'selected':''} style="color:#ff3333;">Channel 1</option>
+                <option value="1" ${idx===1?'selected':''} style="color:#39ff14;">Channel 2</option>
+                <option value="2" ${idx===2?'selected':''} style="color:#33ccff;">Channel 3</option>
+                <option value="3" ${idx===3?'selected':''} style="color:#b84dff;">Channel 4</option>
+            </select>
+        `;
+        grid.appendChild(box);
+    });
+}
+
+function setMappingMode(mode) {
+    currentMappingMode = mode;
+    
+    document.getElementById('mode-multi-col').className = mode === 'multi_value_cols' ? 'portal-btn portal-btn-primary' : 'portal-btn';
+    document.getElementById('mode-multi-id').className = mode === 'multi_sensor_id' ? 'portal-btn portal-btn-primary' : 'portal-btn';
+    document.getElementById('mode-single').className = mode === 'single_channel' ? 'portal-btn portal-btn-primary' : 'portal-btn';
+    
+    document.getElementById('panel-multi-col').classList.toggle('ui-hidden', mode !== 'multi_value_cols');
+    document.getElementById('panel-multi-id').classList.toggle('ui-hidden', mode !== 'multi_sensor_id');
+    document.getElementById('panel-single').classList.toggle('ui-hidden', mode !== 'single_channel');
+    
+    document.getElementById('map-box-id').style.display = mode === 'multi_sensor_id' ? 'flex' : 'none';
+    document.getElementById('map-box-val').style.display = mode === 'multi_value_cols' ? 'none' : 'flex';
+}
+
+function applyMappingToStreamer() {
+    const ds = window.dataStreamer;
+    if (!ds || !ds.loadedFile) return;
+
+    let colMap = {};
+    if (currentMappingMode === 'multi_value_cols') {
+        for(let i=0; i<4; i++) {
+            let val = document.getElementById(`col-sel-${i}`).value;
+            if (val) colMap[val] = i;
+        }
+    }
+
+    try {
+        ds.applyMappingConfig({
+            mode: currentMappingMode,
+            targetChannel: parseInt(document.getElementById('single-ch-target').value),
+            sensorToChannelMap: sensorMappingObj,
+            columnToChannelMap: colMap,
+            valueCol: document.getElementById('map-val-col').value,
+            identifierCol: document.getElementById('map-id-col').value,
+            timestampCol: document.getElementById('map-time-col').value || undefined,
+            autoApplyWindow: document.getElementById('map-auto-win').checked,
+            cadenceRps: 30
+        });
+        
+        document.getElementById('data-portal').classList.add('ui-hidden');
+        ds.play();
+    } catch (e) {
+        alert("Error applying mapping: " + e.message);
+    }
+}
+
+const ds = window.dataStreamer;
+const rec = window.biodataRecorder;
+
+document.getElementById('btn-play-pause').addEventListener('click', () => {
+    if (!ds) return;
+    if (ds.isPlaying) ds.pause(); else ds.play();
+});
+document.getElementById('btn-stop').addEventListener('click', () => { if(ds) ds.stop(); });
+document.getElementById('btn-step-back').addEventListener('click', () => { if(ds) ds.step(false); });
+document.getElementById('btn-step-fwd').addEventListener('click', () => { if(ds) ds.step(true); });
+document.getElementById('btn-loop').addEventListener('click', () => { 
+    if(ds) {
+        ds.toggleLoop();
+        document.getElementById('btn-loop').style.borderColor = ds.isLooping ? 'rgba(57,255,20,0.4)' : 'var(--border)';
+        document.getElementById('btn-loop').style.color = ds.isLooping ? 'var(--green)' : 'var(--text-muted)';
+    }
+});
+document.getElementById('scrubber').addEventListener('input', (e) => { if(ds) ds.seek(parseInt(e.target.value)); });
+document.getElementById('speed-slider').addEventListener('input', (e) => { 
+    if(ds) ds.setPlaybackRate(parseFloat(e.target.value)); 
+    document.getElementById('speed-readout').innerText = parseFloat(e.target.value).toFixed(1) + 'x';
+});
+
+document.getElementById('btn-rec').addEventListener('click', () => {
+    if (!rec) return;
+    if (rec.isRecording) rec.stop(); else rec.start();
+});
+
+window.addEventListener('bioquad_stream_update', (e) => {
+    const s = e.detail.state;
+    
+    const playBtn = document.getElementById('btn-play-pause');
+    if (playBtn) {
+        playBtn.innerHTML = s.isPlaying ? '⏸ PAUSE' : '▶ PLAY';
+        playBtn.className = s.isPlaying ? 'portal-btn portal-btn-danger' : 'portal-btn portal-btn-primary';
+    }
+    
+    const scrub = document.getElementById('scrubber');
+    if (scrub) {
+        scrub.max = Math.max(1, s.totalRecords - 1);
+        scrub.value = s.currentIndex;
+    }
+    
+    const formatMs = (ms) => {
+        if (!ms || !isFinite(ms)) return '00:00';
+        let totalSec = Math.floor(ms / 1000);
+        return `${String(Math.floor(totalSec / 60)).padStart(2, '0')}:${String(totalSec % 60).padStart(2, '0')}`;
+    };
+    
+    const rd = document.getElementById('scrubber-readout');
+    if (rd) rd.innerText = `${formatMs(s.playbackElapsedMs)} / ${formatMs(s.totalDurationMs)}`;
+
+    for(let i=0; i<4; i++) {
+        let feed = s.activeChannels[i];
+        let lbl = document.getElementById(`stat-lbl-${i}`);
+        let val = document.getElementById(`stat-val-${i}`);
+        if (feed && feed.active) {
+            if(lbl) lbl.innerText = feed.label.length > 15 ? feed.label.substring(0,12)+'...' : feed.label;
+            if(val) val.innerText = feed.currentVal !== null ? feed.currentVal.toFixed(1) + ' µS' : '--';
+        } else {
+            if(lbl) lbl.innerText = 'Empty';
+            if(val) val.innerText = '--';
+        }
+    }
+});
+
+window.addEventListener('bioquad_recorder_update', (e) => {
+    const s = e.detail.state;
+    const btn = document.getElementById('btn-rec');
+    if (btn) {
+        if (s.isRecording) {
+            btn.innerHTML = `<div style="width:6px; height:6px; background:#fff; border-radius:1px;"></div> STOP`;
+            btn.style.background = 'var(--red)'; btn.style.color = '#fff';
+            btn.style.boxShadow = '0 0 10px rgba(255,0,85,0.6)';
+        } else {
+            btn.innerHTML = `<div style="width:6px; height:6px; background:currentColor; border-radius:50%;"></div> REC`;
+            btn.style.background = 'transparent'; btn.style.color = 'var(--red)';
+            btn.style.boxShadow = 'none';
+        }
+    }
+    const pts = document.getElementById('rec-pts');
+    if (pts) {
+        pts.innerText = (s.totalPointsRecorded || s.recordCount || 0).toLocaleString() + ' pts';
+        pts.style.color = s.isRecording ? 'var(--red)' : 'var(--text-muted)';
+    }
+});
+
+async function refreshTakes() {
+    if (!window.bioquadStorage) return;
+    const takes = await window.bioquadStorage.getAllTakes();
+    const list = document.getElementById('takes-list');
+    list.innerHTML = '';
+    
+    if (takes.length === 0) {
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 11px; padding: 20px;">No saved data yet. Click REC to record biodata.</div>`;
+        return;
+    }
+    
+    takes.forEach(t => {
+        const el = document.createElement('div');
+        el.className = 'sample-item';
+        el.innerHTML = `
+            <div>
+                <div class="sample-name">${t.name} <span style="font-weight:normal; font-size:9px; color:var(--text-muted); margin-left:6px;">${t.date}</span></div>
+                <div class="sample-desc">${t.durationFormatted || '00:00'} · ${(t.totalPointsRecorded || t.sampleCount || 0).toLocaleString()} pts</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <button class="portal-btn portal-btn-primary" style="padding:4px 8px;" onclick='playTake("${t.id}")'>▶ Play</button>
+                <button class="portal-btn" style="padding:4px 8px;" onclick='exportCsv("${t.id}")'>CSV</button>
+                <button class="portal-btn" style="padding:4px 8px;" onclick='exportMidi("${t.id}")'>MIDI</button>
+                <button class="portal-btn portal-btn-danger" style="padding:4px 8px;" onclick='deleteTake("${t.id}")'>✕</button>
+            </div>
+        `;
+        list.appendChild(el);
+    });
+}
+window.addEventListener('bioquad_takes_updated', refreshTakes);
+
+async function playTake(id) {
+    const takes = await window.bioquadStorage.getAllTakes();
+    const take = takes.find(t => t.id === id);
+    if (take && window.dataStreamer) {
+        window.dataStreamer.loadTake(take);
+        document.getElementById('data-portal').classList.add('ui-hidden');
+        window.dataStreamer.play();
+    }
+}
+async function exportCsv(id) {
+    const takes = await window.bioquadStorage.getAllTakes();
+    const take = takes.find(t => t.id === id);
+    if (!take) return;
+    
+    const headers = ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity'];
+    const lines = [headers.join(',')];
+    take.records.forEach((r) => {
+      lines.push([
+        r.timestamp || '',
+        r.sensor_id || `CH_${r.channel || 1}_Sensor`,
+        r.conductance_uS !== undefined ? r.conductance_uS : (r.value || 50),
+        r.channel || 1,
+        r.ticks || '',
+        r.note || r.note_event || '',
+        r.velocity || ''
+      ].join(','));
+    });
+    
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${take.name || 'bioQuad'}.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+async function exportMidi(id) {
+    const takes = await window.bioquadStorage.getAllTakes();
+    const take = takes.find(t => t.id === id);
+    if (take && window.biodataRecorder && typeof window.biodataRecorder.generateMidiBlob === 'function') {
+        const blob = window.biodataRecorder.generateMidiBlob(take.midiNotes || [], null, 'bioQuad');
+        if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `${take.name || 'bioQuad'}.mid`;
+            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        }
+    }
+}
+async function deleteTake(id) {
+    if(confirm('Delete this take?')) {
+        await window.bioquadStorage.deleteTake(id);
+        refreshTakes();
+    }
+}
+async function clearAllTakes() {
+    if(confirm('Clear ALL takes?')) {
+        await window.bioquadStorage.clearAllTakes();
+        refreshTakes();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => setTimeout(refreshTakes, 500));
+</script>
 
 <script>
     if ('serviceWorker' in navigator) {
@@ -453,65 +1028,7 @@
             });
         });
     }
-
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.dropdown-widget')) {
-            document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
-        }
-    });
 </script>
 
-<script>
-    // Toggles the File UI card and updates the little red/green indicator light
-    window.toggleDataPortalUI = function() {
-        const portal = document.getElementById('data-portal');
-        if (portal) {
-            portal.classList.toggle('ui-hidden');
-            const ind = document.getElementById('file-portal-indicator');
-            if (ind) ind.style.background = portal.classList.contains('ui-hidden') ? '#661111' : 'var(--green)';
-        }
-    };
-
-    // Reads the file and pipes it into your dataStreamer engine
-    window.loadCustomDataFile = function() {
-        const input = document.getElementById('csv-file-input');
-        const status = document.getElementById('file-portal-status');
-        
-        if (!input.files || input.files.length === 0) {
-            status.innerText = "Please select a file first.";
-            return;
-        }
-        
-        const file = input.files[0];
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            try {
-                status.innerText = "Parsing file...";
-                
-                // 1. Parse the raw text
-                window.dataStreamer.parseFileContent(e.target.result, file.name);
-                
-                // 2. Map the columns using the engine's auto-guessing AI
-                window.dataStreamer.applyMappingConfig({
-                    mode: 'multi_sensor_id',
-                    identifierCol: window.dataStreamer.loadedFile.guesses.identifierCol,
-                    valueCol: window.dataStreamer.loadedFile.guesses.primaryValueCol,
-                    timestampCol: window.dataStreamer.loadedFile.guesses.timestampCol,
-                    cadenceRps: 30
-                });
-                
-                status.style.color = "var(--green)";
-                status.innerText = `Success! Loaded ${file.name} | ${window.dataStreamer.totalRecords} records ready to play.`;
-            } catch (err) {
-                status.style.color = "var(--red)";
-                status.innerText = "Error: " + err.message;
-            }
-        };
-        
-        reader.readAsText(file);
-    };
-</script>
-    
 </body>
 </html>
