@@ -461,5 +461,57 @@
     });
 </script>
 
+<script>
+    // Toggles the File UI card and updates the little red/green indicator light
+    window.toggleDataPortalUI = function() {
+        const portal = document.getElementById('data-portal');
+        if (portal) {
+            portal.classList.toggle('ui-hidden');
+            const ind = document.getElementById('file-portal-indicator');
+            if (ind) ind.style.background = portal.classList.contains('ui-hidden') ? '#661111' : 'var(--green)';
+        }
+    };
+
+    // Reads the file and pipes it into your dataStreamer engine
+    window.loadCustomDataFile = function() {
+        const input = document.getElementById('csv-file-input');
+        const status = document.getElementById('file-portal-status');
+        
+        if (!input.files || input.files.length === 0) {
+            status.innerText = "Please select a file first.";
+            return;
+        }
+        
+        const file = input.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                status.innerText = "Parsing file...";
+                
+                // 1. Parse the raw text
+                window.dataStreamer.parseFileContent(e.target.result, file.name);
+                
+                // 2. Map the columns using the engine's auto-guessing AI
+                window.dataStreamer.applyMappingConfig({
+                    mode: 'multi_sensor_id',
+                    identifierCol: window.dataStreamer.loadedFile.guesses.identifierCol,
+                    valueCol: window.dataStreamer.loadedFile.guesses.primaryValueCol,
+                    timestampCol: window.dataStreamer.loadedFile.guesses.timestampCol,
+                    cadenceRps: 30
+                });
+                
+                status.style.color = "var(--green)";
+                status.innerText = `Success! Loaded ${file.name} | ${window.dataStreamer.totalRecords} records ready to play.`;
+            } catch (err) {
+                status.style.color = "var(--red)";
+                status.innerText = "Error: " + err.message;
+            }
+        };
+        
+        reader.readAsText(file);
+    };
+</script>
+    
 </body>
 </html>
