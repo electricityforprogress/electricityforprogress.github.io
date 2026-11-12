@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>bioQuad Stream - 4-Channel Biodata Sonification & Data Streamer</title>
     <meta name="description" content="4-Channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, and universal time-series data file streaming engine." />
-    <link rel="icon" href="/css/bioquad-icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="icon" href="./css/bioquad-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./css/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
 </head>
@@ -14,7 +14,7 @@
 
 <div class="toolbar">
     <div class="brand-group">
-        <img src="/css/bioquad-icon.svg" style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,0.5);" alt="e4p bioQuad">
+        <img src="./css/bioquad-icon.svg" style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,0.5);" alt="e4p bioQuad">
         <span class="bio-brand" style="font-size: 1.25em;">bioQuad</span>
     </div>
 
@@ -418,18 +418,18 @@
 <div id="dashboard"></div>
 
 <!-- Core Engine Scripts -->
-<script src="/js/globals.js"></script>
-<script src="/js/audioEngine.js"></script>
-<script src="/js/uiController.js"></script>
-<script src="/js/visualizer.js"></script>
-<script src="/js/bleMidi.js"></script>
-<script src="/js/dataStreamer.js"></script>
-<script src="/js/main.js"></script>
+<script src="./js/globals.js"></script>
+<script src="./js/audioEngine.js"></script>
+<script src="./js/uiController.js"></script>
+<script src="./js/visualizer.js"></script>
+<script src="./js/bleMidi.js"></script>
+<script src="./js/dataStreamer.js"></script>
+<script src="./js/main.js"></script>
 
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').then(reg => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
                 console.log('ServiceWorker registered');
             }).catch(err => {
                 console.log('ServiceWorker error:', err);
