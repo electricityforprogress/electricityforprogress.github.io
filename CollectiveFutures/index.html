@@ -415,6 +415,23 @@
     </div>
 </div>
 
+<div id="data-portal" class="synth-inspector ui-hidden" style="margin-top: 15px; padding: 15px;">
+    <div class="module-header"><div class="fx-title"><span style="color: var(--cyan);">DATA FILES</span></div></div>
+    
+    <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="csv-file-input" accept=".csv,.txt,.json" style="color: var(--text); font-family: monospace; background: #111; padding: 5px; border: 1px solid var(--border); border-radius: 4px;">
+        <button onclick="loadCustomDataFile()" style="border-color: var(--cyan); color: var(--cyan);">LOAD FILE</button>
+        
+        <div style="width: 1px; height: 30px; background: var(--border);"></div>
+        
+        <button onclick="window.dataStreamer && window.dataStreamer.play()" style="border-color: var(--green); color: var(--green);">▶ PLAY</button>
+        <button onclick="window.dataStreamer && window.dataStreamer.pause()" style="border-color: var(--orange); color: var(--orange);">⏸ PAUSE</button>
+        <button onclick="window.dataStreamer && window.dataStreamer.stop()" style="border-color: var(--red); color: var(--red);">⏹ STOP</button>
+    </div>
+    
+    <div id="file-portal-status" style="margin-top: 15px; font-size: 11px; color: var(--text-muted); font-family: monospace;">No file loaded.</div>
+</div>
+    
 <div id="dashboard"></div>
 
 <!-- Core Engine Scripts -->
