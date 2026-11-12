@@ -288,4 +288,248 @@ input[name="activeFx"][value="rev"]:checked ~ span { color: var(--yellow); text-
     background: #161b22;
 }
 
+/* --- DATA STREAM TRANSPORT DECK (PURE VANILLA) --- */
+.stream-deck-container {
+    width: 100%;
+    max-width: 1600px;
+    box-sizing: border-box;
+    background: #11161d;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 15px;
+    font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+    font-size: 11px;
+    user-select: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.stream-deck-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: rgba(0,0,0,0.45);
+    padding: 8px 10px;
+    border: 1px solid #21262d;
+    border-radius: 4px;
+}
+.stream-btn {
+    background: #161b22;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+.stream-btn:hover {
+    border-color: var(--cyan);
+    color: #fff;
+}
+.stream-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: var(--border);
+}
+.stream-btn.rec-btn {
+    background: #220d11;
+    color: #ff5577;
+    border-color: #881122;
+}
+.stream-btn.rec-btn.recording {
+    background: #ff0033;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255, 0, 51, 0.7);
+    animation: recPulse 1s infinite alternate;
+}
+@keyframes recPulse {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0.85; transform: scale(0.98); }
+}
+.stream-btn.play-btn {
+    background: var(--cyan);
+    color: #000;
+    border-color: var(--cyan);
+}
+.stream-btn.play-btn.playing {
+    background: var(--red);
+    color: #fff;
+    border-color: var(--red);
+    box-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
+}
+.stream-btn.active-loop {
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(57, 255, 20, 0.3);
+}
+
+.stream-scrubber-wrap {
+    flex: 1;
+    min-width: 180px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.stream-scrubber-slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #21262d;
+    outline: none;
+    cursor: pointer;
+}
+.stream-scrubber-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--cyan);
+}
+
+.stream-channel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    border-top: 1px solid rgba(48, 54, 61, 0.5);
+    padding-top: 8px;
+}
+.stream-channel-card {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid #21262d;
+    border-radius: 4px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+/* --- FILE PORTAL MODAL (PURE VANILLA) --- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+.modal-dialog {
+    width: 100%;
+    max-width: 900px;
+    max-height: 90vh;
+    background: #161b22;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+}
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #0d1117;
+    border-bottom: 1px solid var(--border);
+}
+.modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.portal-card {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.portal-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.portal-dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    background: rgba(0,0,0,0.3);
+    transition: all 0.2s ease;
+}
+.portal-dropzone:hover, .portal-dropzone.dragover {
+    border-color: var(--cyan);
+    background: rgba(0, 240, 255, 0.05);
+}
+.portal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    background: rgba(0,0,0,0.4);
+}
+.portal-table th, .portal-table td {
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid #21262d;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.portal-table th {
+    background: #1f2937;
+    color: var(--text);
+    font-weight: 700;
+}
+.portal-table td {
+    color: var(--text-muted);
+}
+
+.offline-banner {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 3000;
+    background: #ff8c00;
+    color: #000;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+
 
