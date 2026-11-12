@@ -516,12 +516,15 @@ function renderLoop() {
                     targetMax = center + 1.0; 
                 }
                 
-                if (ch.bounds.max <= 10 && targetMax > 100) { 
+                let maxDiff = Math.abs(targetMax - ch.bounds.max);
+                let isDramaticallyOff = maxDiff > (Math.abs(ch.bounds.max) * 0.75 + 5);
+                if (ch.boundsNeedSnap || (ch.bounds.max <= 10 && targetMax > 40) || isDramaticallyOff) { 
                     ch.bounds.min = targetMin; 
                     ch.bounds.max = targetMax; 
+                    ch.boundsNeedSnap = false;
                 } else { 
-                    ch.bounds.min = (ch.bounds.min * 0.95) + (targetMin * 0.05); 
-                    ch.bounds.max = (ch.bounds.max * 0.95) + (targetMax * 0.05); 
+                    ch.bounds.min = (ch.bounds.min * 0.93) + (targetMin * 0.07); 
+                    ch.bounds.max = (ch.bounds.max * 0.93) + (targetMax * 0.07); 
                 }
                 
                 let range = ch.bounds.max - ch.bounds.min;
@@ -620,7 +623,7 @@ function renderLoop() {
             rCtx.clearRect(0, 0, rw, rh); rCtx.strokeStyle = '#30363d'; rCtx.lineWidth = 1;
             for(let j=0; j<12; j++) { rCtx.beginPath(); rCtx.moveTo(0, j*(rh/12)); rCtx.lineTo(rw, j*(rh/12)); rCtx.stroke(); }
                          
-            let validHist = ch.history ? ch.history.filter(h => h.avg > 0.2) : [];
+            let validHist = ch.history ? ch.history.filter(h => h && isFinite(h.avg) && h.avg > 0.01) : [];
             if (validHist.length > 1) {
                 let hMin = 1000000, hMax = 0;
                 validHist.forEach(h => { if (h.min < hMin) hMin = h.min; if (h.max > hMax) hMax = h.max; });

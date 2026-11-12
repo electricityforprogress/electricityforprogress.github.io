@@ -88,21 +88,19 @@ function handleIncomingMidi(event) {
     // Note On
     if (status === 0x90 && d2 > 0) {
         let p = window.synthChannels[synthCh].params;
+        let minN = p.minNote || 0;
+        let maxN = p.maxNote || 127;
         
-        // 1. Strict Note Range Filter (Drops MIDI notes outside your sliders)
-        if (d1 < p.minNote || d1 > p.maxNote) return; 
-        
-        // 2. Strict Scale Filter (Drops out-of-key MIDI notes)
-        if (p.scaleType !== 'chromatic') {
-            let noteClass = d1 % 12;
-            if (p.activeScaleBits && !p.activeScaleBits[noteClass]) {
-                return; 
-            }
+        // Quantize incoming MIDI note through the channel's scale so notes sound in key
+        let targetNote = d1;
+        if (typeof window.scaleNote === 'function') {
+            targetNote = window.scaleNote(d1, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN);
+        } else {
+            targetNote = Math.max(minN, Math.min(maxN, d1));
         }
 
-        let playTime = window.audioCtx.currentTime + 0.015;
         let durMs = 500; 
-        window.processBiodata({ type: 'note', ch: synthCh, n: d1, v: d2, d: durMs });
+        window.processBiodata({ type: 'note', ch: synthCh, n: targetNote, v: d2, d: durMs });
     }
     // Control Change (CC)
     else if (status === 0xB0) {
@@ -217,22 +215,69 @@ window.sendMidiCC = function(channel, ccNumber, val) {
 }
 
 // --- WEB BLUETOOTH CONNECTION ---
+window.showBlePermissionModal = function(msg) {
+    window.dispatchEvent(new CustomEvent('bioquad_ble_error', { 
+        detail: { 
+            message: msg || "Web Bluetooth is disallowed by the browser iframe's permissions policy.",
+            isPermissionsPolicy: true
+        } 
+    }));
+};
+
 window.connectBLE = async function() {
     const btn = document.getElementById('btn-ble');
     const label = document.getElementById('ble-label');
     const statusDot = document.getElementById('ble-status');
     
+    // 1. If active and connected, clicking cleanly disconnects
     if (window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected) {
-        window.activeBleDevice.gatt.disconnect(); 
+        try { window.activeBleDevice.gatt.disconnect(); } catch(e){}
+        window.activeBleDevice = null;
+        window.bleTxCharacteristic = null;
+        window.bleIsConnecting = false;
+        if (label) label.innerText = 'CONNECT';
+        if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
         return; 
     }
+
+    if (window.bleIsConnecting) {
+        console.warn("BLE connection already in progress. Please wait...");
+        return;
+    }
+    window.bleIsConnecting = true;
+
+    // 2. Check if Web Bluetooth API is supported
+    if (!navigator.bluetooth || !navigator.bluetooth.requestDevice) {
+        window.bleIsConnecting = false;
+        window.showBlePermissionModal("Web Bluetooth is not supported in this browser. Please use Google Chrome, Microsoft Edge, or a Web Bluetooth-enabled browser on desktop/Android.");
+        if (label) label.innerText = 'NO BLE';
+        setTimeout(() => { if (label) label.innerText = 'CONNECT'; }, 3000);
+        return;
+    }
+
+    // 3. Check Permissions Policy if available
+    if (typeof document !== 'undefined') {
+        const docWithPolicy = document;
+        const isPolicyBlocked = (
+            (docWithPolicy.permissionsPolicy && typeof docWithPolicy.permissionsPolicy.allowsFeature === 'function' && !docWithPolicy.permissionsPolicy.allowsFeature('bluetooth')) ||
+            (docWithPolicy.featurePolicy && typeof docWithPolicy.featurePolicy.allowsFeature === 'function' && !docWithPolicy.featurePolicy.allowsFeature('bluetooth'))
+        );
+        if (isPolicyBlocked) {
+            window.bleIsConnecting = false;
+            window.showBlePermissionModal("Web Bluetooth access is disallowed inside this embedded preview iframe by the browser permissions policy. To connect your hardware device via Bluetooth, launch this app in a standalone tab, or use the File Portal to stream or playback recorded plant biodata.");
+            if (label) label.innerText = 'BLOCKED';
+            if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
+            setTimeout(() => { if (label) label.innerText = 'CONNECT'; }, 3000);
+            return;
+        }
+    }
+
     try {
         if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
             await window.audioCtx.resume();
         }
         if (typeof ensureSynths === 'function') ensureSynths();  
                 
-        if (!navigator.bluetooth) throw new Error("Web Bluetooth is not available.");
         if (label) label.innerText = 'SCAN';
                  
         let device = null;
@@ -249,9 +294,20 @@ window.connectBLE = async function() {
                 ] 
              });
         } catch (filterErr) {
-            if (filterErr.name === 'NotFoundError' || filterErr.message.includes('User cancelled')) {
-                throw filterErr;
+            if (filterErr.name === 'SecurityError' || (filterErr.message && filterErr.message.toLowerCase().includes('permissions policy'))) {
+                window.bleIsConnecting = false;
+                window.showBlePermissionModal("Web Bluetooth access is disallowed inside this embedded preview iframe by the browser permissions policy. To connect your hardware device via Bluetooth, launch this app in a standalone tab, or use the File Portal.");
+                if (label) label.innerText = 'BLOCKED';
+                if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
+                setTimeout(() => { if (label) label.innerText = 'CONNECT'; }, 3000);
+                return;
             }
+            if (filterErr.name === 'NotFoundError' || (filterErr.message && filterErr.message.includes('User cancelled')) || filterErr.name === 'AbortError') {
+                window.bleIsConnecting = false;
+                if (label) label.innerText = 'CONNECT';
+                return;
+            }
+            // Fallback: acceptAllDevices
             device = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
                 optionalServices: [
@@ -260,52 +316,136 @@ window.connectBLE = async function() {
                 ]
             });
         }
+
+        if (!device) {
+            window.bleIsConnecting = false;
+            if (label) label.innerText = 'CONNECT';
+            return;
+        }
         
         window.activeBleDevice = device;
-                 
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
-                 
-        window.bleTxCharacteristic = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
-        const rxChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+        if (label) label.innerText = 'LINKING';
+        if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = '#ffaa00'; }
+
+        // Helper timeout promise
+        const withTimeout = (promise, ms, desc) => {
+            let timer;
+            const timeout = new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new Error(desc || `Timeout after ${ms}ms`)), ms);
+            });
+            return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+        };
+
+        // 4. Connect to GATT server (with 10-second timeout)
+        let server = null;
+        if (device.gatt && device.gatt.connected) {
+            server = device.gatt;
+        } else {
+            server = await withTimeout(
+                device.gatt.connect(),
+                10000,
+                "GATT connection timed out. If previously connected, reset/power-cycle your bioQuad device."
+            );
+        }
+
+        // 5. Discover Service (try Nordic UART first, then fallback to BLE MIDI)
+        let service = null;
+        let rxChar = null;
+        let isBleMidiMode = false;
+
+        try {
+            service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+            window.bleTxCharacteristic = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
+            rxChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+        } catch (uartErr) {
+            console.warn("Nordic UART service not found, trying BLE MIDI service:", uartErr);
+            try {
+                service = await server.getPrimaryService("03b80e5a-ede8-4b33-a751-6ce34ec4c700");
+                rxChar = await service.getCharacteristic("7772e5db-3868-4112-a1a9-f2669d106bf3");
+                window.bleTxCharacteristic = rxChar;
+                isBleMidiMode = true;
+            } catch (midiErr) {
+                throw new Error("Connected to device, but neither Nordic UART nor BLE MIDI service was found.");
+            }
+        }
                  
         device.addEventListener('gattserverdisconnected', () => { 
             if (label) label.innerText = 'CONNECT';
             if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
             window.activeBleDevice = null;
             window.bleTxCharacteristic = null;
+            window.bleIsConnecting = false;
         });
                  
         await rxChar.startNotifications();
+
+        // 6. Handle characteristic notifications
         rxChar.addEventListener('characteristicvaluechanged', (e) => {
-            if (typeof window.bleBuffer === 'undefined') window.bleBuffer = '';
-            window.bleBuffer += new TextDecoder().decode(e.target.value);
-            let lines = window.bleBuffer.split('\n'); 
-            window.bleBuffer = lines.pop(); 
-            for (let line of lines) { 
-                if (line.trim().startsWith('{')) { 
-                    try { window.processBiodata(JSON.parse(line)); } catch(err){} 
-                } 
+            if (isBleMidiMode) {
+                // Parse standard BLE MIDI stream
+                const dv = e.target.value;
+                if (!dv || dv.byteLength < 3) return;
+                let idx = 1; // skip header byte
+                while (idx < dv.byteLength) {
+                    let b = dv.getUint8(idx++);
+                    if (b & 0x80) { // timestamp low or status
+                        let status = b;
+                        let ch = (status & 0x0F) % 4;
+                        let d1 = idx < dv.byteLength ? dv.getUint8(idx++) : 60;
+                        let d2 = idx < dv.byteLength ? dv.getUint8(idx++) : 0;
+                        let msgType = status & 0xF0;
+                        if (msgType === 0x90 && d2 > 0) {
+                            window.processBiodata({ ch: ch, type: 'note', n: d1, v: d2, d: 200 });
+                        } else if (msgType === 0xB0) {
+                            if (typeof window.sendMidiCC === 'function') window.sendMidiCC(ch, d1, d2);
+                        }
+                    }
+                }
+            } else {
+                // Parse Nordic UART JSON stream
+                if (typeof window.bleBuffer === 'undefined') window.bleBuffer = '';
+                window.bleBuffer += new TextDecoder().decode(e.target.value);
+                let lines = window.bleBuffer.split('\n'); 
+                window.bleBuffer = lines.pop(); 
+                for (let line of lines) { 
+                    let trimmed = line.trim();
+                    if (trimmed.startsWith('{')) { 
+                        try { window.processBiodata(JSON.parse(trimmed)); } catch(err){} 
+                    } 
+                }
             }
         });
         
         if (label) label.innerText = 'CLOSE';
         if (statusDot) { statusDot.className = 'status-online'; statusDot.style.color = 'var(--green)'; }
+        window.bleIsConnecting = false;
                  
-        // Hardware-first handshake request
+        // Hardware-first handshake request for bioQuad firmware
         setTimeout(() => { 
-            window.bleTxQueue.push("SYNC\n");
-            window.processBleQueue();
+            if (window.bleTxCharacteristic && !isBleMidiMode) {
+                window.bleTxQueue.push("SYNC\n");
+                window.processBleQueue();
+            }
         }, 1000);
         
     } catch (error) { 
-        console.error("BLE Connect Error:", error);
-        if (label) label.innerText = 'FAILED';
-        if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
+        window.bleIsConnecting = false;
+        console.warn("BLE Connect result:", error.message || error);
+        
+        if (error.name === 'SecurityError' || (error.message && error.message.toLowerCase().includes('permissions policy'))) {
+            window.showBlePermissionModal("Web Bluetooth access is disallowed inside this embedded preview iframe by the browser permissions policy. To connect hardware BLE devices directly, launch this app in a standalone tab, or use the File Portal.");
+            if (label) label.innerText = 'BLOCKED';
+        } else if (error.name === 'NotFoundError' || (error.message && error.message.includes('User cancelled')) || error.name === 'AbortError') {
+            if (label) label.innerText = 'CONNECT';
+        } else {
+            if (label) label.innerText = 'RETRY';
+            if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
+        }
         
         setTimeout(() => { 
-             if (!window.activeBleDevice || !window.activeBleDevice.gatt.connected) { 
+             if (!window.activeBleDevice || !window.activeBleDevice.gatt || !window.activeBleDevice.gatt.connected) { 
                  if (label) label.innerText = 'CONNECT'; 
+                 if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
              } 
          }, 3000);
     }
@@ -317,6 +457,15 @@ window.processBiodata = function(payload) {
     let chIdx = payload.ch;
     let ch = window.chData[chIdx];
     if (!ch) return;
+
+    // Record live biodata if recorder is active and not currently playing back a stream
+    if (window.biodataRecorder && window.biodataRecorder.isRecording && !window.biodataRecorder.isPaused && (!window.dataStreamer || !window.dataStreamer.isPlaying)) {
+        if (payload.type === 'note') {
+            window.biodataRecorder.recordNote(chIdx, payload.n, payload.v, payload.d);
+        } else if (payload.type === 'raw' && Array.isArray(payload.p)) {
+            window.biodataRecorder.recordRaw(chIdx, payload.p);
+        }
+    }
 
     if (payload.type === 'note') {
         let playTime = window.audioCtx.currentTime + 0.015;
