@@ -27,22 +27,134 @@
 (function(window) {
     'use strict';
 
-    // --- 1. PERSISTENT TAKE & SESSION STORAGE ENGINE (INDEXEDDB) ---
+    // --- 0. ZERO-DEPENDENCY OFFLINE CRC32 ZIP ARCHIVE BUILDER ---
+    const CRC32_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let k = 0; k < 8; k++) {
+                c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            }
+            table[i] = c >>> 0;
+        }
+        return table;
+    })();
+
+    function crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) {
+            crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    /**
+     * Packages multiple files cleanly into an uncompressed Store-mode .zip Blob.
+     * Works 100% offline with zero external libraries.
+     * @param {Array<{name: string, data: Uint8Array|ArrayBuffer}>} entries
+     * @returns {Blob}
+     */
+    function buildZipBlob(entries) {
+        const encoder = new TextEncoder();
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+
+        const now = new Date();
+        const dosTime = ((now.getHours() & 0x1F) << 11) | ((now.getMinutes() & 0x3F) << 5) | ((now.getSeconds() >> 1) & 0x1F);
+        const dosDate = (((Math.max(1980, now.getFullYear()) - 1980) & 0x7F) << 9) | (((now.getMonth() + 1) & 0x0F) << 5) | (now.getDate() & 0x1F);
+
+        entries.forEach((entry) => {
+            const nameBytes = encoder.encode(entry.name);
+            const dataBytes = entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry.data);
+            const sum = crc32(dataBytes);
+            const len = dataBytes.length;
+
+            // Local file header (30 bytes + filename)
+            const localHdr = new Uint8Array(30 + nameBytes.length);
+            const lv = new DataView(localHdr.buffer);
+            lv.setUint32(0, 0x04034B50, true); // Local file header signature
+            lv.setUint16(4, 20, true);         // Version needed (2.0)
+            lv.setUint16(6, 0x0800, true);     // UTF-8 filename flag
+            lv.setUint16(8, 0, true);          // Compression method: 0 (Store)
+            lv.setUint16(10, dosTime, true);
+            lv.setUint16(12, dosDate, true);
+            lv.setUint32(14, sum, true);
+            lv.setUint32(18, len, true);
+            lv.setUint32(22, len, true);
+            lv.setUint16(26, nameBytes.length, true);
+            lv.setUint16(28, 0, true);         // Extra field length
+            localHdr.set(nameBytes, 30);
+
+            localParts.push(localHdr, dataBytes);
+
+            // Central directory file header (46 bytes + filename)
+            const centralHdr = new Uint8Array(46 + nameBytes.length);
+            const cv = new DataView(centralHdr.buffer);
+            cv.setUint32(0, 0x02014B50, true); // Central dir signature
+            cv.setUint16(4, 20, true);         // Version made by
+            cv.setUint16(6, 20, true);         // Version needed
+            cv.setUint16(8, 0x0800, true);     // UTF-8 flag
+            cv.setUint16(10, 0, true);         // Store
+            cv.setUint16(12, dosTime, true);
+            cv.setUint16(14, dosDate, true);
+            cv.setUint32(16, sum, true);
+            cv.setUint32(20, len, true);
+            cv.setUint32(24, len, true);
+            cv.setUint16(28, nameBytes.length, true);
+            cv.setUint16(30, 0, true);
+            cv.setUint16(32, 0, true);
+            cv.setUint16(34, 0, true);
+            cv.setUint16(36, 0, true);
+            cv.setUint32(38, 0, true);
+            cv.setUint32(42, offset, true);    // Relative offset of local header
+            centralHdr.set(nameBytes, 46);
+
+            centralParts.push(centralHdr);
+            offset += localHdr.length + len;
+        });
+
+        let centralSize = 0;
+        centralParts.forEach(p => { centralSize += p.length; });
+
+        // End of central directory record (22 bytes)
+        const eocd = new Uint8Array(22);
+        const ev = new DataView(eocd.buffer);
+        ev.setUint32(0, 0x06054B50, true);
+        ev.setUint16(4, 0, true);
+        ev.setUint16(6, 0, true);
+        ev.setUint16(8, entries.length, true);
+        ev.setUint16(10, entries.length, true);
+        ev.setUint32(12, centralSize, true);
+        ev.setUint32(16, offset, true);
+        ev.setUint16(20, 0, true);
+
+        return new Blob([...localParts, ...centralParts, eocd], { type: 'application/zip' });
+    }
+
+    // --- 1. PERSISTENT CHUNKED TAKE & SESSION STORAGE ENGINE (INDEXEDDB v2) ---
     class BioquadStorage {
         constructor() {
             this.dbName = 'bioquad_db';
+            this.dbVersion = 2;
             this.storeName = 'takes';
+            this.chunkStoreName = 'take_chunks';
+            this.defaultChunkSize = 5000;
             this.db = null;
         }
 
         async getDb() {
             if (this.db) return this.db;
             return new Promise((resolve, reject) => {
-                const req = indexedDB.open(this.dbName, 1);
+                const req = indexedDB.open(this.dbName, this.dbVersion);
                 req.onupgradeneeded = (e) => {
                     const db = e.target.result;
                     if (!db.objectStoreNames.contains(this.storeName)) {
                         db.createObjectStore(this.storeName, { keyPath: 'id' });
+                    }
+                    if (!db.objectStoreNames.contains(this.chunkStoreName)) {
+                        const chunkStore = db.createObjectStore(this.chunkStoreName, { keyPath: 'chunkKey' });
+                        chunkStore.createIndex('by_take', 'takeId', { unique: false });
                     }
                 };
                 req.onsuccess = (e) => {
@@ -53,34 +165,314 @@
             });
         }
 
-        async saveTake(take) {
+        async saveTakeMeta(meta) {
             const db = await this.getDb();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(this.storeName, 'readwrite');
                 const store = tx.objectStore(this.storeName);
-                store.put(take);
-                tx.oncomplete = () => resolve(take);
+                store.put(meta);
+                tx.oncomplete = () => resolve(meta);
                 tx.onerror = (e) => reject(e.target.error);
             });
         }
 
-        async getAllTakes() {
+        async saveChunk(takeId, chunkIndex, records, midiNotes = []) {
+            const db = await this.getDb();
+            const chunkKey = `${takeId}_${String(chunkIndex).padStart(6, '0')}`;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(this.chunkStoreName, 'readwrite');
+                const store = tx.objectStore(this.chunkStoreName);
+                store.put({
+                    chunkKey,
+                    takeId,
+                    chunkIndex,
+                    records: records || [],
+                    midiNotes: midiNotes || []
+                });
+                tx.oncomplete = () => resolve(chunkKey);
+                tx.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async saveTake(take) {
+            // If take has large inline records, automatically split into chunks so IndexedDB never stores giant monoliths
+            const recs = Array.isArray(take.records) ? take.records : [];
+            const notes = Array.isArray(take.midiNotes) ? take.midiNotes : [];
+
+            if (recs.length === 0 && take.schemaVersion === 2) {
+                return this.saveTakeMeta(take);
+            }
+
+            const chunkSize = this.defaultChunkSize;
+            const totalChunks = Math.max(1, Math.ceil(recs.length / chunkSize));
+
+            for (let i = 0; i < totalChunks; i++) {
+                const sliceRecs = recs.slice(i * chunkSize, (i + 1) * chunkSize);
+                const sliceNotes = i === 0 ? notes : [];
+                await this.saveChunk(take.id, i, sliceRecs, sliceNotes);
+            }
+
+            const meta = {
+                id: take.id,
+                name: take.name,
+                date: take.date,
+                timestamp: take.timestamp,
+                durationMs: take.durationMs,
+                durationFormatted: take.durationFormatted,
+                sampleCount: take.sampleCount || recs.length,
+                totalPointsRecorded: take.totalPointsRecorded || recs.length,
+                chunkCount: totalChunks,
+                schemaVersion: 2,
+                preset: take.preset || null
+            };
+            return this.saveTakeMeta(meta);
+        }
+
+        async getTakeMeta(id) {
             const db = await this.getDb();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(this.storeName, 'readonly');
                 const store = tx.objectStore(this.storeName);
-                const req = store.getAll();
-                req.onsuccess = () => {
-                    const results = req.result || [];
-                    results.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                    resolve(results);
+                const req = store.get(id);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        /**
+         * Reads ONLY lightweight metadata using a cursor so opening the File Portal
+         * never loads 500,000-row record arrays into JS heap RAM at once.
+         */
+        async getAllTakeMetadata() {
+            const db = await this.getDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(this.storeName, 'readonly');
+                const store = tx.objectStore(this.storeName);
+                const req = store.openCursor();
+                const results = [];
+
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        const v = cursor.value;
+                        results.push({
+                            id: v.id,
+                            name: v.name,
+                            date: v.date,
+                            timestamp: v.timestamp,
+                            durationMs: v.durationMs || 0,
+                            durationFormatted: v.durationFormatted || '00:00.0',
+                            sampleCount: v.sampleCount || (Array.isArray(v.records) ? v.records.length : 0),
+                            totalPointsRecorded: v.totalPointsRecorded || v.sampleCount || (Array.isArray(v.records) ? v.records.length : 0),
+                            chunkCount: v.chunkCount || 0,
+                            schemaVersion: v.schemaVersion || 1,
+                            isRecordingActive: !!v.isRecordingActive,
+                            hasPreset: !!v.preset
+                        });
+                        cursor.continue();
+                    } else {
+                        results.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                        resolve(results);
+                    }
                 };
                 req.onerror = (e) => reject(e.target.error);
             });
         }
 
+        // Alias kept for external callers; returns lightweight metadata list!
+        async getAllTakes() {
+            return this.getAllTakeMetadata();
+        }
+
+        /**
+         * Iterates chunks of a single take sequentially without loading all takes into RAM.
+         * Supports both v2 chunked takes and legacy v1 monolithic takes seamlessly.
+         */
+        async iterateTakeChunks(takeId, onChunk) {
+            const takeMeta = await this.getTakeMeta(takeId);
+            if (!takeMeta) throw new Error('Recording not found in storage');
+
+            // Legacy v1 take fallback: records stored inline inside takes store
+            if (Array.isArray(takeMeta.records) && takeMeta.records.length > 0 && (!takeMeta.chunkCount || takeMeta.schemaVersion !== 2)) {
+                const chunkSize = this.defaultChunkSize;
+                const total = takeMeta.records.length;
+                const numSlices = Math.ceil(total / chunkSize);
+                for (let i = 0; i < numSlices; i++) {
+                    const recSlice = takeMeta.records.slice(i * chunkSize, (i + 1) * chunkSize);
+                    const noteSlice = i === 0 ? (takeMeta.midiNotes || []) : [];
+                    await onChunk({
+                        chunkIndex: i,
+                        totalChunks: numSlices,
+                        records: recSlice,
+                        midiNotes: noteSlice
+                    }, takeMeta);
+                }
+                return takeMeta;
+            }
+
+            // v2 chunked storage via key range scan on chunkKey (`${takeId}_000000` .. `${takeId}_\uffff`)
+            const db = await this.getDb();
+            const chunks = await new Promise((resolve, reject) => {
+                const tx = db.transaction(this.chunkStoreName, 'readonly');
+                const store = tx.objectStore(this.chunkStoreName);
+                const idx = store.index('by_take');
+                const req = idx.getAll(IDBKeyRange.only(takeId));
+                req.onsuccess = () => {
+                    const list = req.result || [];
+                    list.sort((a, b) => a.chunkIndex - b.chunkIndex);
+                    resolve(list);
+                };
+                req.onerror = (e) => reject(e.target.error);
+            });
+
+            if (chunks.length === 0) {
+                return takeMeta;
+            }
+
+            for (let i = 0; i < chunks.length; i++) {
+                await onChunk({
+                    chunkIndex: chunks[i].chunkIndex,
+                    totalChunks: chunks.length,
+                    records: chunks[i].records || [],
+                    midiNotes: chunks[i].midiNotes || []
+                }, takeMeta);
+            }
+
+            return takeMeta;
+        }
+
+        /**
+         * Builds a memory-safe CSV Blob chunk-by-chunk for takes of any size (including 500k+ records).
+         */
+        async exportTakeCsvBlob(takeId, onProgress) {
+            const headers = 'timestamp_iso,sensor_id,conductance_uS,channel,raw_ticks,note_event,velocity\n';
+            const blobParts = [headers];
+            let recordCount = 0;
+
+            const takeMeta = await this.iterateTakeChunks(takeId, async (chunk) => {
+                const recs = chunk.records || [];
+                const lines = new Array(recs.length);
+                for (let i = 0; i < recs.length; i++) {
+                    const r = recs[i];
+                    const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
+                    const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
+                    const condVal = r.conductance_uS !== undefined ? r.conductance_uS : (r.value !== undefined ? r.value : 50);
+                    lines[i] = `${r.timestamp || ''},${r.sensor_id || ('CH_' + (r.channel || 1) + '_Sensor')},${condVal},${r.channel || 1},${r.ticks || ''},${noteVal},${velVal}`;
+                }
+                if (lines.length > 0) {
+                    blobParts.push(lines.join('\n') + '\n');
+                    recordCount += lines.length;
+                }
+                if (typeof onProgress === 'function') {
+                    onProgress(chunk.chunkIndex + 1, chunk.totalChunks, recordCount);
+                }
+            });
+
+            const safeName = (takeMeta.name || 'bioQuad').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const blob = new Blob(blobParts, { type: 'text/csv;charset=utf-8' });
+            return {
+                blob,
+                filename: `${safeName}.csv`,
+                recordCount,
+                byteSize: blob.size,
+                takeMeta
+            };
+        }
+
+        /**
+         * Extracts all MIDI notes across chunks and bundles active channels (CH 1..4) into a single offline .zip Blob.
+         */
+        async exportTakeMidiZipBlob(takeId, onProgress) {
+            const allNotes = [];
+            let firstRecTime = null;
+            let processedPoints = 0;
+
+            const takeMeta = await this.iterateTakeChunks(takeId, async (chunk) => {
+                const recs = chunk.records || [];
+                if (firstRecTime === null && recs.length > 0) {
+                    firstRecTime = recs[0].timestamp_ms || (recs[0].timestamp ? new Date(recs[0].timestamp).getTime() : 0);
+                }
+
+                if (Array.isArray(chunk.midiNotes) && chunk.midiNotes.length > 0) {
+                    for (let i = 0; i < chunk.midiNotes.length; i++) {
+                        allNotes.push(chunk.midiNotes[i]);
+                    }
+                } else if (recs.length > 0) {
+                    const baseTime = firstRecTime || 0;
+                    for (let i = 0; i < recs.length; i++) {
+                        const r = recs[i];
+                        if (r.note !== null && r.note !== undefined && r.note !== '' && !isNaN(parseInt(r.note))) {
+                            const rMs = r.timestamp_ms || (r.timestamp ? new Date(r.timestamp).getTime() : baseTime);
+                            allNotes.push({
+                                timeMs: Math.max(0, rMs - baseTime),
+                                channel: Math.max(0, Math.min(3, (r.channel || 1) - 1)),
+                                pitch: parseInt(r.note),
+                                velocity: r.velocity || 80,
+                                durationMs: r.duration || 260
+                            });
+                        }
+                    }
+                }
+                processedPoints += recs.length;
+                if (typeof onProgress === 'function') {
+                    onProgress(chunk.chunkIndex + 1, chunk.totalChunks, processedPoints);
+                }
+            });
+
+            const rec = window.biodataRecorder;
+            const safeName = (takeMeta.name || 'bioQuad').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const takeBpm = takeMeta.preset?.master?.bpm || window.masterBPM || 120;
+            const activeChannels = [0, 1, 2, 3].filter(ch => allNotes.some(n => n.channel === ch));
+
+            const zipEntries = [];
+            if (activeChannels.length > 0) {
+                activeChannels.forEach((ch) => {
+                    const bytes = rec.generateMidiBytes(allNotes, ch, `CH ${ch + 1}`, takeBpm);
+                    if (bytes) {
+                        zipEntries.push({
+                            name: `${safeName}_ch${ch + 1}.mid`,
+                            data: bytes
+                        });
+                    }
+                });
+            }
+
+            if (zipEntries.length === 0) {
+                throw new Error('This recording has no MIDI note events to export');
+            }
+
+            const zipBlob = buildZipBlob(zipEntries);
+            return {
+                blob: zipBlob,
+                filename: `${safeName}_midi.zip`,
+                fileCount: zipEntries.length,
+                channelList: activeChannels.map(ch => `CH ${ch + 1}`),
+                noteCount: allNotes.length,
+                byteSize: zipBlob.size,
+                takeMeta
+            };
+        }
+
         async deleteTake(id) {
             const db = await this.getDb();
+            // 1. Delete all chunks belonging to this takeId
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(this.chunkStoreName, 'readwrite');
+                const store = tx.objectStore(this.chunkStoreName);
+                const idx = store.index('by_take');
+                const req = idx.openCursor(IDBKeyRange.only(id));
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        cursor.delete();
+                        cursor.continue();
+                    }
+                };
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = (e) => reject(e.target.error);
+            });
+
+            // 2. Delete take metadata
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(this.storeName, 'readwrite');
                 const store = tx.objectStore(this.storeName);
@@ -92,10 +484,15 @@
 
         async clearAllTakes() {
             const db = await this.getDb();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(this.chunkStoreName, 'readwrite');
+                tx.objectStore(this.chunkStoreName).clear();
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = (e) => reject(e.target.error);
+            });
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(this.storeName, 'readwrite');
-                const store = tx.objectStore(this.storeName);
-                store.clear();
+                tx.objectStore(this.storeName).clear();
                 tx.oncomplete = () => resolve(true);
                 tx.onerror = (e) => reject(e.target.error);
             });
@@ -1079,58 +1476,231 @@
             }
         }
 
-        loadTake(take) {
-            if (!take || !Array.isArray(take.records) || take.records.length === 0) {
-                throw new Error('Take contains no records');
-            }
+        restorePresetSnapshot(preset) {
+            if (!preset || !Array.isArray(preset.channels)) return;
+            try {
+                const chDataPreset = preset.channels;
+                for (let i = 0; i < 4; i++) {
+                    if (chDataPreset[i] && window.synthChannels && window.synthChannels[i]) {
+                        window.synthChannels[i].params = JSON.parse(JSON.stringify(chDataPreset[i]));
+                        window.synthChannels[i].applyParams();
 
-            // Restore full saved synth preset / channel parameters if present in take
-            if (take.preset && Array.isArray(take.preset.channels)) {
-                try {
-                    const chDataPreset = take.preset.channels;
-                    for (let i = 0; i < 4; i++) {
-                        if (chDataPreset[i] && window.synthChannels && window.synthChannels[i]) {
-                            window.synthChannels[i].params = JSON.parse(JSON.stringify(chDataPreset[i]));
-                            window.synthChannels[i].applyParams();
-                            
-                            // Sync UI elements to restored take parameters
-                            const miniT = document.getElementById(`ch-mini-thresh-${i}`);
-                            const miniV = document.getElementById(`ch-val-thresh-${i}`);
-                            const maxBtn = document.getElementById(`ch-max-btn-${i}`);
-                            const maxScale = window.synthChannels[i].params.threshMax || 5.0;
-                            if (miniT) {
-                                miniT.max = maxScale.toString();
-                                miniT.value = window.synthChannels[i].params.threshold;
-                            }
-                            if (miniV) miniV.innerText = parseFloat(window.synthChannels[i].params.threshold).toFixed(2) + 'x';
-                            if (maxBtn) maxBtn.innerText = `${maxScale.toFixed(2)}x`;
-
-                            const miniW = document.getElementById(`ch-window-${i}`);
-                            const miniWV = document.getElementById(`ch-val-window-${i}`);
-                            if (miniW) miniW.value = window.synthChannels[i].params.sampleSize;
-                            if (miniWV) miniWV.innerText = window.synthChannels[i].params.sampleSize;
+                        const miniT = document.getElementById(`ch-mini-thresh-${i}`);
+                        const miniV = document.getElementById(`ch-val-thresh-${i}`);
+                        const maxBtn = document.getElementById(`ch-max-btn-${i}`);
+                        const maxScale = window.synthChannels[i].params.threshMax || 5.0;
+                        if (miniT) {
+                            miniT.max = maxScale.toString();
+                            miniT.value = window.synthChannels[i].params.threshold;
                         }
+                        if (miniV) miniV.innerText = parseFloat(window.synthChannels[i].params.threshold).toFixed(2) + 'x';
+                        if (maxBtn) maxBtn.innerText = `${maxScale.toFixed(2)}x`;
 
-                        if (take.preset.viz && take.preset.viz[i] && window.chData && window.chData[i]) {
-                            window.chData[i].config = JSON.parse(JSON.stringify(take.preset.viz[i]));
-                        }
+                        const miniW = document.getElementById(`ch-window-${i}`);
+                        const miniWV = document.getElementById(`ch-val-window-${i}`);
+                        if (miniW) miniW.value = window.synthChannels[i].params.sampleSize;
+                        if (miniWV) miniWV.innerText = window.synthChannels[i].params.sampleSize;
                     }
 
-                    if (typeof window.syncUI === 'function') window.syncUI();
-                } catch(presetErr) {
-                    console.warn('Could not restore take preset snapshot:', presetErr);
+                    if (preset.viz && preset.viz[i] && window.chData && window.chData[i]) {
+                        window.chData[i].config = JSON.parse(JSON.stringify(preset.viz[i]));
+                    }
+                }
+                if (typeof window.syncUI === 'function') window.syncUI();
+            } catch (presetErr) {
+                console.warn('Could not restore take preset snapshot:', presetErr);
+            }
+        }
+
+        /**
+         * Fast, memory-safe chunked take loader for both v2 chunked takes (500k+ records) and legacy v1 takes.
+         */
+        async loadTakeById(takeId) {
+            if (!window.bioquadStorage) throw new Error('Storage engine not available');
+            this.stop();
+
+            const partitioned = [[], [], [], []];
+            const collectedMidiNotes = [];
+            let firstRecTime = null;
+            let takeMeta = null;
+
+            takeMeta = await window.bioquadStorage.iterateTakeChunks(takeId, async (chunk) => {
+                const recs = chunk.records || [];
+                if (firstRecTime === null && recs.length > 0) {
+                    firstRecTime = recs[0].timestamp_ms || (recs[0].timestamp ? new Date(recs[0].timestamp).getTime() : 0);
+                }
+
+                for (let i = 0; i < recs.length; i++) {
+                    const r = recs[i];
+                    const ch = Math.max(0, Math.min(3, (r.channel || 1) - 1));
+                    const val = parseFloat(r.conductance_uS !== undefined ? r.conductance_uS : (r.value || 50));
+                    if (!isNaN(val) && isFinite(val)) {
+                        const rawT = r.timestamp_ms || (r.timestamp ? Date.parse(r.timestamp) : null);
+                        const noteRaw = (r.note !== null && r.note !== undefined && r.note !== '') ? parseInt(r.note) : (r.note_event ? parseInt(r.note_event) : null);
+                        const velRaw = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? parseInt(r.velocity) : null;
+                        partitioned[ch].push({
+                            value: val,
+                            rawTime: r.timestamp || r.timestamp_ms || null,
+                            parsedMs: (rawT !== null && isFinite(rawT)) ? rawT : undefined,
+                            id: r.sensor_id || `CH_${ch + 1}_Sensor`,
+                            note: !isNaN(noteRaw) ? noteRaw : null,
+                            velocity: !isNaN(velRaw) ? velRaw : null,
+                            duration: r.duration || null,
+                            ticks: r.ticks || null,
+                            index: partitioned[ch].length
+                        });
+                    }
+                }
+
+                if (Array.isArray(chunk.midiNotes) && chunk.midiNotes.length > 0) {
+                    for (let j = 0; j < chunk.midiNotes.length; j++) {
+                        collectedMidiNotes.push(chunk.midiNotes[j]);
+                    }
+                }
+            });
+
+            if (takeMeta && takeMeta.preset) {
+                this.restorePresetSnapshot(takeMeta.preset);
+            }
+
+            // O(N + M) sorted two-pointer note backfill when midiNotes need attaching to channel feeds
+            if (collectedMidiNotes.length > 0 && firstRecTime !== null) {
+                const cursors = [0, 0, 0, 0];
+                collectedMidiNotes.sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
+                for (let i = 0; i < collectedMidiNotes.length; i++) {
+                    const m = collectedMidiNotes[i];
+                    const ch = Math.max(0, Math.min(3, m.channel !== undefined ? m.channel : 0));
+                    const arr = partitioned[ch];
+                    if (!arr || arr.length === 0) continue;
+
+                    const targetAbsMs = firstRecTime + (m.timeMs || 0);
+                    let idx = cursors[ch];
+                    while (idx < arr.length - 1 && (arr[idx + 1].parsedMs || 0) <= targetAbsMs) {
+                        idx++;
+                    }
+                    cursors[ch] = idx;
+
+                    // Pick closer of idx or idx+1 within 500ms tolerance
+                    let bestIdx = idx;
+                    const diffCurr = Math.abs((arr[idx].parsedMs || 0) - targetAbsMs);
+                    if (idx + 1 < arr.length) {
+                        const diffNext = Math.abs((arr[idx + 1].parsedMs || 0) - targetAbsMs);
+                        if (diffNext < diffCurr) bestIdx = idx + 1;
+                    }
+                    if (Math.abs((arr[bestIdx].parsedMs || 0) - targetAbsMs) < 500 && arr[bestIdx].note === null) {
+                        arr[bestIdx].note = m.pitch;
+                        arr[bestIdx].velocity = m.velocity || 80;
+                        arr[bestIdx].duration = m.durationMs || 260;
+                    }
                 }
             }
 
-            // Backfill notes from take.midiNotes if records lack note fields (e.g. takes recorded in earlier sessions)
-            if (Array.isArray(take.midiNotes) && take.midiNotes.length > 0 && Array.isArray(take.records) && take.records.length > 0) {
+            const fname = `${takeMeta?.name || 'take'}.csv`;
+            let minTimeMs = Infinity;
+            let validTimeCount = 0;
+
+            for (let ch = 0; ch < 4; ch++) {
+                const arr = partitioned[ch];
+                for (let i = 0; i < arr.length; i++) {
+                    if (arr[i].parsedMs !== undefined) {
+                        if (arr[i].parsedMs < minTimeMs) minTimeMs = arr[i].parsedMs;
+                        validTimeCount++;
+                    }
+                }
+            }
+
+            const hasRealTimestamps = validTimeCount >= 2 && minTimeMs !== Infinity;
+            this.hasRealTimestamps = hasRealTimestamps;
+            let maxDurationMs = 0;
+
+            for (let ch = 0; ch < 4; ch++) {
+                const arr = partitioned[ch];
+                if (arr.length === 0) {
+                    this.channelFeeds[ch] = { data: [], index: 0, label: 'Unassigned', sourceFile: '' };
+                    continue;
+                }
+
+                let lastTMs = 0;
+                for (let i = 0; i < arr.length; i++) {
+                    const pt = arr[i];
+                    if (hasRealTimestamps && pt.parsedMs !== undefined) {
+                        let tOffset = Math.max(0, pt.parsedMs - minTimeMs);
+                        if (tOffset < lastTMs) tOffset = lastTMs;
+                        pt.tMs = tOffset;
+                        lastTMs = tOffset;
+                    } else {
+                        const tOffset = (i / 30) * 1000;
+                        pt.tMs = tOffset;
+                        lastTMs = tOffset;
+                    }
+                    if (pt.tMs > maxDurationMs) maxDurationMs = pt.tMs;
+                }
+
+                const hasNotes = arr.some(pt => pt.note !== null);
+                this.channelFeeds[ch] = {
+                    data: arr,
+                    index: 0,
+                    label: `CH ${ch + 1} Recorded`,
+                    sourceFile: fname,
+                    hasRecordedNotes: hasNotes
+                };
+
+                const chVisual = window.chData ? window.chData[ch] : null;
+                if (chVisual) {
+                    let dMin = Infinity, dMax = -Infinity;
+                    for (let k = 0; k < arr.length; k++) {
+                        if (arr[k].value < dMin) dMin = arr[k].value;
+                        if (arr[k].value > dMax) dMax = arr[k].value;
+                    }
+                    if (isFinite(dMin) && isFinite(dMax) && dMax > dMin) {
+                        chVisual.bounds = { min: dMin, max: dMax };
+                        chVisual.boundsNeedSnap = true;
+                    }
+                    chVisual.waveBuffer = [];
+                    chVisual.vizBuffer = [];
+                    chVisual.history = [];
+                    chVisual.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
+                    const preWarm = Math.min(25, arr.length);
+                    for (let p = 0; p < preWarm; p++) {
+                        const rVal = arr[p].value;
+                        chVisual.waveBuffer.push({ r: rVal, ticks: Math.round(10000000 / (rVal || 1)), evt: 0 });
+                        chVisual.vizBuffer.push(rVal);
+                    }
+                }
+            }
+
+            const lengths = this.channelFeeds.map(f => f.data.length).filter(len => len > 0);
+            this.totalRecords = lengths.length > 0 ? Math.max(...lengths) : 0;
+            this.currentIndex = 0;
+            this.playbackElapsedMs = 0;
+            this.totalDurationMs = maxDurationMs > 0 ? maxDurationMs : ((this.totalRecords / 30) * 1000);
+
+            if (typeof window.syncUI === 'function') window.syncUI();
+            this.emitChange('mapping_applied');
+            return takeMeta;
+        }
+
+        // Compatibility wrapper for direct in-memory take objects
+        loadTake(take) {
+            if (!take) throw new Error('Invalid take');
+            if (take.id && (!Array.isArray(take.records) || take.records.length === 0)) {
+                return this.loadTakeById(take.id);
+            }
+            if (!Array.isArray(take.records) || take.records.length === 0) {
+                throw new Error('Take contains no records');
+            }
+            if (take.preset) this.restorePresetSnapshot(take.preset);
+
+            // Fast linear backfill if needed
+            if (Array.isArray(take.midiNotes) && take.midiNotes.length > 0) {
                 const firstRecTime = take.records[0].timestamp_ms || (take.records[0].timestamp ? new Date(take.records[0].timestamp).getTime() : 0);
                 take.midiNotes.forEach(m => {
                     const noteAbsTime = firstRecTime + (m.timeMs || 0);
                     const ch = (m.channel !== undefined ? m.channel : 0) + 1;
                     let closest = null;
                     let minDiff = Infinity;
-                    take.records.forEach(r => {
+                    for (let i = 0; i < take.records.length; i++) {
+                        const r = take.records[i];
                         if (r.channel === ch) {
                             const rTime = r.timestamp_ms || (r.timestamp ? new Date(r.timestamp).getTime() : 0);
                             const diff = Math.abs(rTime - noteAbsTime);
@@ -1139,7 +1709,7 @@
                                 closest = r;
                             }
                         }
-                    });
+                    }
                     if (closest && minDiff < 500 && (!closest.note || closest.note === '')) {
                         closest.note = m.pitch;
                         closest.velocity = m.velocity || 80;
@@ -1150,7 +1720,6 @@
 
             const headers = ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity'];
             const lines = [headers.join(',')];
-
             take.records.forEach(r => {
                 const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
                 const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
@@ -1175,29 +1744,46 @@
                 valueCol: 'conductance_uS',
                 timestampCol: 'timestamp_iso',
                 cadenceRps: 30,
-                autoApplyWindow: !take.preset // Keep restored windows if preset exists
+                autoApplyWindow: !take.preset
             });
 
             return parsed;
         }
     }
 
-    // --- 2. BIODATA RECORDER ENGINE ---
+    // --- 2. UNLIMITED CHUNK-STREAMING BIODATA RECORDER ENGINE ---
     class BiodataRecorderEngine {
         constructor() {
             this.isRecording = false;
             this.isPaused = false;
             this.sessionName = 'take';
+            this.activeTakeId = null;
             this.startTimeMs = 0;
             this.pauseTimeAccumulatedMs = 0;
             this.pauseStartMs = 0;
             this.records = [];
+            this.recordedMidiNotes = [];
             this.totalPointsRecorded = 0;
+            this.nextChunkIndex = 0;
+            this.chunkSize = 5000;
+            this.flushQueue = Promise.resolve();
             this.timerInterval = null;
             this.listeners = new Set();
-            this.maxRecords = 50000;
             this.latestChannelValues = [0, 0, 0, 0];
             this.lastPacketTimeByCh = [0, 0, 0, 0];
+
+            // Crash / app-suspend protection on iOS iPadOS WebViews (Blueify)
+            if (typeof window !== 'undefined') {
+                const emergencyFlush = () => {
+                    if (this.isRecording) {
+                        this.flushCurrentBuffers(false);
+                    }
+                };
+                window.addEventListener('pagehide', emergencyFlush);
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') emergencyFlush();
+                });
+            }
         }
 
         subscribe(callback) {
@@ -1213,25 +1799,28 @@
             window.dispatchEvent(new CustomEvent('bioquad_recorder_update', { detail: { type: eventType, state } }));
         }
 
-        getState() {
-            let elapsedMs = 0;
-            if (this.isRecording) {
-                if (this.isPaused) {
-                    elapsedMs = this.pauseStartMs - this.startTimeMs - this.pauseTimeAccumulatedMs;
-                } else {
-                    elapsedMs = Date.now() - this.startTimeMs - this.pauseTimeAccumulatedMs;
-                }
+        getElapsedMs() {
+            if (!this.isRecording) return 0;
+            if (this.isPaused) {
+                return Math.max(0, this.pauseStartMs - this.startTimeMs - this.pauseTimeAccumulatedMs);
             }
+            return Math.max(0, Date.now() - this.startTimeMs - this.pauseTimeAccumulatedMs);
+        }
 
+        getState() {
+            const elapsedMs = this.getElapsedMs();
+            const totalPts = this.totalPointsRecorded || this.records.length;
             return {
                 isRecording: this.isRecording,
                 isPaused: this.isPaused,
                 sessionName: this.sessionName,
-                recordCount: this.records.length,
-                totalPointsRecorded: this.totalPointsRecorded || this.records.length,
-                elapsedMs: Math.max(0, elapsedMs),
+                activeTakeId: this.activeTakeId,
+                recordCount: totalPts,
+                totalPointsRecorded: totalPts,
+                chunkCount: this.nextChunkIndex,
+                elapsedMs,
                 elapsedFormatted: this.formatElapsed(elapsedMs),
-                hasData: this.records.length > 0
+                hasData: totalPts > 0
             };
         }
 
@@ -1259,17 +1848,38 @@
                 this.sessionName = defaultDateName;
             }
 
-            // Capture complete session preset snapshot (thresholds, windows, synth parameters)
+            this.activeTakeId = `take_${Date.now()}`;
             this.sessionPreset = this.captureCurrentPreset();
-            this.recordedMidiNotes = []; // Stores MIDI notes for companion .mid file export
-
+            this.recordedMidiNotes = [];
             this.records = [];
             this.totalPointsRecorded = 0;
+            this.nextChunkIndex = 0;
+            this.flushQueue = Promise.resolve();
+
             this.isRecording = true;
             this.isPaused = false;
             this.startTimeMs = Date.now();
             this.pauseTimeAccumulatedMs = 0;
             this.lastPacketTimeByCh = [0, 0, 0, 0];
+
+            // Persist initial take metadata immediately so even crash recovery has the header
+            const initialMeta = {
+                id: this.activeTakeId,
+                name: this.sessionName,
+                date: new Date().toLocaleString(),
+                timestamp: Date.now(),
+                durationMs: 0,
+                durationFormatted: '00:00.0',
+                sampleCount: 0,
+                totalPointsRecorded: 0,
+                chunkCount: 0,
+                schemaVersion: 2,
+                isRecordingActive: true,
+                preset: this.sessionPreset
+            };
+            this.flushQueue = this.flushQueue
+                .then(() => window.bioquadStorage?.saveTakeMeta(initialMeta))
+                .catch(err => console.warn('Initial take metadata save failed:', err));
 
             if (this.timerInterval) clearInterval(this.timerInterval);
             this.timerInterval = setInterval(() => {
@@ -1279,6 +1889,52 @@
             }, 100);
 
             this.emitChange('start');
+        }
+
+        flushCurrentBuffers(isFinal = false) {
+            if (!this.activeTakeId || !window.bioquadStorage) return Promise.resolve();
+
+            const recBatch = this.records;
+            const noteBatch = this.recordedMidiNotes;
+            const hasBatchData = recBatch.length > 0 || noteBatch.length > 0;
+
+            if (hasBatchData) {
+                this.records = [];
+                this.recordedMidiNotes = [];
+            }
+
+            const chunkIdx = hasBatchData ? this.nextChunkIndex++ : this.nextChunkIndex;
+            const totalPts = this.totalPointsRecorded;
+            const elapsedMs = this.getElapsedMs();
+            const takeId = this.activeTakeId;
+
+            const metaSnapshot = {
+                id: takeId,
+                name: this.sessionName,
+                date: new Date().toLocaleString(),
+                timestamp: this.startTimeMs || Date.now(),
+                durationMs: elapsedMs,
+                durationFormatted: this.formatElapsed(elapsedMs),
+                sampleCount: totalPts,
+                totalPointsRecorded: totalPts,
+                chunkCount: this.nextChunkIndex,
+                schemaVersion: 2,
+                isRecordingActive: !isFinal,
+                preset: this.sessionPreset || this.captureCurrentPreset()
+            };
+
+            this.flushQueue = this.flushQueue.then(async () => {
+                if (hasBatchData) {
+                    await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch);
+                }
+                if (totalPts > 0 || isFinal) {
+                    await window.bioquadStorage.saveTakeMeta(metaSnapshot);
+                }
+            }).catch(err => {
+                console.warn('IndexedDB chunk flush error:', err);
+            });
+
+            return this.flushQueue;
         }
 
         captureCurrentPreset() {
@@ -1308,6 +1964,7 @@
             if (!this.isRecording || this.isPaused) return;
             this.isPaused = true;
             this.pauseStartMs = Date.now();
+            this.flushCurrentBuffers(false);
             this.emitChange('pause');
         }
 
@@ -1320,6 +1977,7 @@
 
         async stop(autoArm = true) {
             if (!this.isRecording) return;
+            const elapsedMs = this.getElapsedMs();
             this.isRecording = false;
             this.isPaused = false;
             if (this.timerInterval) {
@@ -1327,38 +1985,57 @@
                 this.timerInterval = null;
             }
 
-            const elapsedMs = Math.max(0, Date.now() - this.startTimeMs - this.pauseTimeAccumulatedMs);
+            const takeId = this.activeTakeId;
+            const totalPts = this.totalPointsRecorded;
 
-            if (this.records.length > 0) {
-                const takeObj = {
-                    id: `take_${Date.now()}`,
+            if (totalPts > 0 || this.records.length > 0 || this.recordedMidiNotes.length > 0) {
+                // Capture duration before isRecording became false
+                const recBatch = this.records;
+                const noteBatch = this.recordedMidiNotes;
+                this.records = [];
+                this.recordedMidiNotes = [];
+
+                const hasBatch = recBatch.length > 0 || noteBatch.length > 0;
+                const chunkIdx = hasBatch ? this.nextChunkIndex++ : this.nextChunkIndex;
+
+                const finalMeta = {
+                    id: takeId,
                     name: this.sessionName,
                     date: new Date().toLocaleString(),
                     timestamp: Date.now(),
                     durationMs: elapsedMs,
                     durationFormatted: this.formatElapsed(elapsedMs),
-                    sampleCount: this.records.length,
-                    totalPointsRecorded: this.totalPointsRecorded || this.records.length,
-                    preset: this.sessionPreset || this.captureCurrentPreset(),
-                    midiNotes: [...(this.recordedMidiNotes || [])],
-                    records: [...this.records]
+                    sampleCount: totalPts,
+                    totalPointsRecorded: totalPts,
+                    chunkCount: this.nextChunkIndex,
+                    schemaVersion: 2,
+                    isRecordingActive: false,
+                    preset: this.sessionPreset || this.captureCurrentPreset()
                 };
 
                 try {
-                    await window.bioquadStorage.saveTake(takeObj);
-                    window.dispatchEvent(new CustomEvent('bioquad_takes_updated', { detail: takeObj }));
+                    await this.flushQueue;
+                    if (hasBatch) {
+                        await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch);
+                    }
+                    await window.bioquadStorage.saveTakeMeta(finalMeta);
+                    window.dispatchEvent(new CustomEvent('bioquad_takes_updated', { detail: finalMeta }));
                 } catch(e) {
-                    console.warn('Could not auto-save take to IndexedDB:', e);
+                    console.warn('Could not finalize streamed take in IndexedDB:', e);
                 }
+
+                if (autoArm && window.dataStreamer) {
+                    try {
+                        await window.dataStreamer.loadTakeById(takeId);
+                    } catch(e) {
+                        console.warn("Auto-arm player notice:", e);
+                    }
+                }
+            } else if (takeId && window.bioquadStorage) {
+                // Clean up empty take metadata if 0 points were recorded
+                try { await window.bioquadStorage.deleteTake(takeId); } catch(e) {}
             }
 
-            if (autoArm && this.records.length > 0) {
-                try {
-                    this.loadRecordingIntoStreamer();
-                } catch(e) {
-                    console.warn("Auto-arm player notice:", e);
-                }
-            }
             this.emitChange('stop');
         }
 
@@ -1367,6 +2044,7 @@
             this.records = [];
             this.recordedMidiNotes = [];
             this.totalPointsRecorded = 0;
+            this.nextChunkIndex = 0;
             this.emitChange('clear');
         }
 
@@ -1382,7 +2060,7 @@
             this.lastPacketTimeByCh[chIdx] = now;
             const intervalMs = Math.max(10, Math.min(200, now - lastTime));
 
-            // Record pure raw biological pulse data with microsecond-calibrated conductance
+            // Push points into the active chunk buffer (no 50k cap, no Array.shift)
             for (let i = 0; i < count; i++) {
                 const rawTicks = ticksArray[i];
                 let rVal = rawTicks > 0 ? (CALIBRATION_FACTOR / rawTicks) : 0;
@@ -1390,10 +2068,6 @@
                 this.latestChannelValues[chIdx] = rVal;
 
                 this.totalPointsRecorded = (this.totalPointsRecorded || 0) + 1;
-
-                if (this.records.length >= this.maxRecords) {
-                    this.records.shift();
-                }
 
                 const tickTimeMs = count > 1 
                     ? Math.round(lastTime + ((i + 1) / count) * intervalMs)
@@ -1410,6 +2084,11 @@
                     velocity: null,
                     duration: null
                 });
+            }
+
+            // Stream chunk to IndexedDB seamlessly whenever buffer reaches chunkSize
+            if (this.records.length >= this.chunkSize) {
+                this.flushCurrentBuffers(false);
             }
         }
 
@@ -1428,7 +2107,7 @@
                 durationMs: duration || 260
             });
 
-            // Tag note onto the active data stream for this channel
+            // Tag note onto the active chunk buffer for this channel
             let tagged = false;
             for (let i = this.records.length - 1; i >= 0 && i >= this.records.length - 50; i--) {
                 const rec = this.records[i];
@@ -1441,7 +2120,6 @@
                 }
             }
 
-            // If no recent raw tick record was found for this channel (e.g. standard BLE MIDI mode), insert a discrete record
             if (!tagged) {
                 const sensorId = `CH_${chIdx + 1}_Sensor`;
                 const rVal = this.latestChannelValues[chIdx] || 50;
@@ -1458,6 +2136,9 @@
                     duration: duration || 260
                 });
                 this.totalPointsRecorded = (this.totalPointsRecorded || 0) + 1;
+                if (this.records.length >= this.chunkSize) {
+                    this.flushCurrentBuffers(false);
+                }
             }
         }
 
@@ -1485,8 +2166,8 @@
             return lines.join('\n');
         }
 
-        // Build standard Type 0 Standard MIDI File (.mid) with optional channel filtering and track name
-        generateMidiBlob(midiNotes = null, targetChannel = null, trackName = '') {
+        // Build standard Type 0 Standard MIDI File Uint8Array for direct or ZIP export
+        generateMidiBytes(midiNotes = null, targetChannel = null, trackName = '', bpmOverride = null) {
             let notes = midiNotes || this.recordedMidiNotes || [];
             if (targetChannel !== null && targetChannel !== undefined) {
                 notes = notes.filter(n => n.channel === targetChannel);
@@ -1494,10 +2175,9 @@
             if (notes.length === 0) return null;
 
             const ticksPerQuarter = 480;
-            const bpm = (window.masterBPM && !isNaN(window.masterBPM)) ? window.masterBPM : 120;
+            const bpm = (bpmOverride && !isNaN(bpmOverride)) ? bpmOverride : ((window.masterBPM && !isNaN(window.masterBPM)) ? window.masterBPM : 120);
             const msPerTick = (60000 / bpm) / ticksPerQuarter;
 
-            // Sort note on/off events by tick
             const events = [];
             notes.forEach(n => {
                 const startTick = Math.max(0, Math.round(n.timeMs / msPerTick));
@@ -1510,7 +2190,6 @@
 
             events.sort((a, b) => a.tick - b.tick || a.type - b.type);
 
-            // Variable-length quantity encoder
             function writeVarLen(val) {
                 const bytes = [];
                 let buffer = val & 0x7F;
@@ -1529,11 +2208,9 @@
             const trackBytes = [];
             let lastTick = 0;
 
-            // Set Tempo Meta Event (500,000 microseconds per quarter for 120 BPM)
             const mpqn = Math.round(60000000 / bpm);
             trackBytes.push(0x00, 0xFF, 0x51, 0x03, (mpqn >> 16) & 0xFF, (mpqn >> 8) & 0xFF, mpqn & 0xFF);
 
-            // Track Name Meta Event (useful in Ableton Live and other DAWs)
             if (trackName) {
                 const nameBytes = Array.from(new TextEncoder().encode(trackName));
                 trackBytes.push(0x00, 0xFF, 0x03, ...writeVarLen(nameBytes.length), ...nameBytes);
@@ -1548,65 +2225,52 @@
                 trackBytes.push(ev.vel & 0x7F);
             });
 
-            // End of track meta event
             trackBytes.push(0x00, 0xFF, 0x2F, 0x00);
 
-            // MIDI Header: 'MThd' (4 bytes), length 6, format 0, 1 track, ticksPerQuarter
             const header = [
-                0x4D, 0x54, 0x68, 0x64, // 'MThd'
-                0x00, 0x00, 0x00, 0x06, // length 6
-                0x00, 0x00,             // format 0 (single track)
-                0x00, 0x01,             // 1 track
+                0x4D, 0x54, 0x68, 0x64,
+                0x00, 0x00, 0x00, 0x06,
+                0x00, 0x00,
+                0x00, 0x01,
                 (ticksPerQuarter >> 8) & 0xFF, ticksPerQuarter & 0xFF
             ];
 
-            // Track Header: 'MTrk' (4 bytes), length (4 bytes)
             const trackLen = trackBytes.length;
             const trackHeader = [
-                0x4D, 0x54, 0x72, 0x6B, // 'MTrk'
+                0x4D, 0x54, 0x72, 0x6B,
                 (trackLen >> 24) & 0xFF,
                 (trackLen >> 16) & 0xFF,
                 (trackLen >> 8) & 0xFF,
                 trackLen & 0xFF
             ];
 
-            const fullBytes = new Uint8Array([...header, ...trackHeader, ...trackBytes]);
-            return new Blob([fullBytes], { type: 'audio/midi' });
+            return new Uint8Array([...header, ...trackHeader, ...trackBytes]);
         }
 
-        downloadRecordingFile(format = 'standard') {
+        generateMidiBlob(midiNotes = null, targetChannel = null, trackName = '', bpmOverride = null) {
+            const bytes = this.generateMidiBytes(midiNotes, targetChannel, trackName, bpmOverride);
+            return bytes ? new Blob([bytes], { type: 'audio/midi' }) : null;
+        }
+
+        async downloadRecordingFile(format = 'standard') {
+            if (this.activeTakeId && window.bioquadStorage) {
+                return window.bioquadStorage.exportTakeCsvBlob(this.activeTakeId);
+            }
             const ext = format === 'tsv' ? 'tsv' : 'csv';
             const content = this.generateCsv(format);
-            if (!content) return;
-
+            if (!content) return null;
             const blob = new Blob([content], { type: format === 'tsv' ? 'text/tab-separated-values' : 'text/csv' });
             this.triggerDownloadBlob(blob, `${this.sessionName}.${ext}`);
             return `${this.sessionName}.${ext}`;
         }
 
-        downloadMidiFile() {
-            const allNotes = this.recordedMidiNotes || [];
-            const baseName = this.sessionName || 'bioQuad';
-            const activeChannels = [0, 1, 2, 3].filter(ch => allNotes.some(n => n.channel === ch));
-
-            if (activeChannels.length === 0) {
-                const blob = this.generateMidiBlob(allNotes, null, 'bioQuad');
-                if (blob) {
-                    this.triggerDownloadBlob(blob, `${baseName}.mid`);
-                    return `${baseName}.mid`;
-                }
-                return;
+        async downloadMidiFile() {
+            if (this.activeTakeId && window.bioquadStorage) {
+                const res = await window.bioquadStorage.exportTakeMidiZipBlob(this.activeTakeId);
+                this.triggerDownloadBlob(res.blob, res.filename);
+                return res.filename;
             }
-
-            activeChannels.forEach((ch, idx) => {
-                setTimeout(() => {
-                    const blob = this.generateMidiBlob(allNotes, ch, `CH ${ch + 1}`);
-                    if (blob) {
-                        this.triggerDownloadBlob(blob, `${baseName}_ch${ch + 1}.mid`);
-                    }
-                }, idx * 120);
-            });
-            return `${baseName}_ch*.mid`;
+            return null;
         }
 
         triggerDownloadBlob(blob, fname) {
@@ -1617,31 +2281,18 @@
             document.body.appendChild(a);
             a.click();
             a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
         }
 
-        loadRecordingIntoStreamer() {
-            const content = this.generateCsv('standard');
-            if (!content) return;
-
-            if (!window.dataStreamer) return;
-            const fname = `${this.sessionName}.csv`;
-            const parsed = window.dataStreamer.parseFileContent(content, fname);
-            
-            window.dataStreamer.applyMappingConfig({
-                mode: 'multi_sensor_id',
-                identifierCol: 'sensor_id',
-                valueCol: 'conductance_uS',
-                timestampCol: 'timestamp_iso',
-                cadenceRps: 30,
-                autoApplyWindow: false
-            });
-
-            return parsed;
+        async loadRecordingIntoStreamer() {
+            if (this.activeTakeId && window.dataStreamer) {
+                return window.dataStreamer.loadTakeById(this.activeTakeId);
+            }
         }
     }
 
-    // Export singletons on window
+    // Export utilities & singletons on window
+    window.buildZipBlob = buildZipBlob;
     window.BioquadStorage = BioquadStorage;
     window.bioquadStorage = new BioquadStorage();
     window.DataStreamer = DataStreamerEngine;

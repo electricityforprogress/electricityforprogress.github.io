@@ -44,6 +44,11 @@
   // Local UI State
   let isBoxVisible = localStorage.getItem('bioquad_portal_box_visible') !== 'false';
   let isPortalModalOpen = false;
+  let isExportModalOpen = false;
+  let currentExportObjectUrl = null;
+  let currentExportBlob = null;
+  let currentExportFile = null;
+  let currentExportFilename = '';
   let parsedPreview = null;
   let mappingMode = 'multi_sensor_id';
   let targetSingleChannel = 0;
@@ -66,6 +71,20 @@
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes < 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function isIOSorBlueify() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isBluefy = /Bluefy|WebBLE/i.test(ua);
+    return isIOS || isBluefy;
   }
 
   // --- 1. VISIBILITY & TOOLBAR SYNC ---
@@ -152,6 +171,66 @@
   }
 
   window.closePortalModal = closePortalModal;
+
+  function revokeExportResources() {
+    if (currentExportObjectUrl) {
+      try { URL.revokeObjectURL(currentExportObjectUrl); } catch (e) {}
+      currentExportObjectUrl = null;
+    }
+    currentExportBlob = null;
+    currentExportFile = null;
+    currentExportFilename = '';
+    const dlLink = $('btn-export-download');
+    if (dlLink) {
+      dlLink.removeAttribute('href');
+      dlLink.style.display = 'none';
+    }
+  }
+
+  function setExportStatus(kind, badgeText, statusText) {
+    const badge = $('export-status-badge');
+    const textEl = $('export-status-text');
+    if (badge) {
+      badge.className = `export-status-badge is-${kind}`;
+      badge.textContent = badgeText;
+    }
+    if (textEl) {
+      textEl.textContent = statusText;
+    }
+  }
+
+  function openExportModal(initialName, formatLabel) {
+    revokeExportResources();
+    isExportModalOpen = true;
+    const modal = $('export-file-modal');
+    if (modal) modal.style.display = 'flex';
+
+    if ($('export-meta-filename')) $('export-meta-filename').textContent = initialName || '--';
+    if ($('export-meta-format')) $('export-meta-format').textContent = formatLabel || '--';
+    if ($('export-meta-count')) $('export-meta-count').textContent = '...';
+    if ($('export-meta-size')) $('export-meta-size').textContent = '...';
+
+    const shareBtn = $('btn-export-share');
+    const dlLink = $('btn-export-download');
+    const copyBtn = $('btn-export-copy');
+    const feedback = $('export-feedback-text');
+    const iosHint = $('export-ios-hint');
+
+    if (shareBtn) { shareBtn.style.display = 'none'; shareBtn.disabled = true; }
+    if (dlLink) { dlLink.style.display = 'none'; }
+    if (copyBtn) { copyBtn.style.display = 'none'; }
+    if (feedback) { feedback.style.display = 'none'; feedback.textContent = ''; }
+    if (iosHint) { iosHint.style.display = isIOSorBlueify() ? 'block' : 'none'; }
+
+    setExportStatus('working', 'PREPARING', 'Reading chunks from storage...');
+  }
+
+  window.closeExportModal = function () {
+    isExportModalOpen = false;
+    const modal = $('export-file-modal');
+    if (modal) modal.style.display = 'none';
+    revokeExportResources();
+  };
 
   // --- 3. TRANSPORT DECK RENDERING & SYNC ---
   function updateTransportDeck() {
@@ -407,20 +486,20 @@
         const pts = (take.totalPointsRecorded || take.sampleCount || 0).toLocaleString();
         const dur = take.durationFormatted || '00:00.0';
         html += `
-          <div style="background: #161b22; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
+          <div class="saved-take-card">
             <div>
               <div style="font-weight: 700; font-size: 11px; color: #fff;">${take.name}</div>
-              <div style="font-size: 10px; color: #8b949e; display: flex; gap: 8px; margin-top: 2px;">
+              <div class="tabular-nums" style="font-size: 10px; color: #8b949e; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px;">
                 <span>${take.date}</span>
                 <span style="color: var(--green); font-weight: 700;">⏱ ${dur}</span>
                 <span style="color: var(--cyan); font-weight: 700;">${pts} pts</span>
               </div>
             </div>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <button class="stream-btn play-btn" onclick="window.playSavedTake('${take.id}')" style="padding: 3px 10px; font-size: 10px;">▶ Play</button>
-              <button class="stream-btn" onclick="window.exportTakeCsv('${take.id}')" style="padding: 3px 8px; font-size: 10px;">CSV</button>
-              <button class="stream-btn" onclick="window.exportTakeMidi('${take.id}')" style="padding: 3px 8px; font-size: 10px; color: var(--cyan); border-color: rgba(0,240,255,0.4);" title="Export separate MIDI files for each channel">MIDI</button>
-              <button class="stream-btn" onclick="window.deleteSavedTake('${take.id}')" style="padding: 3px 6px; font-size: 10px; color: #ff5577; border-color: rgba(255,85,119,0.4);" title="Delete take">✕</button>
+            <div class="saved-take-actions">
+              <button class="stream-btn play-btn" onclick="window.playSavedTake('${take.id}')">▶ Play</button>
+              <button class="stream-btn" onclick="window.exportTakeCsv('${take.id}')">CSV</button>
+              <button class="stream-btn" onclick="window.exportTakeMidi('${take.id}')" style="color: var(--cyan); border-color: rgba(0,240,255,0.4);" title="Export all channels as a single MIDI ZIP bundle">MIDI</button>
+              <button class="stream-btn" onclick="window.deleteSavedTake('${take.id}')" style="color: #ff5577; border-color: rgba(255,85,119,0.4); min-width: 40px;" title="Delete take">✕</button>
             </div>
           </div>
         `;
@@ -433,12 +512,13 @@
 
   window.playSavedTake = async function (takeId) {
     if (!window.bioquadStorage || !window.dataStreamer) return;
-    const takes = await window.bioquadStorage.getAllTakes();
-    const take = takes.find(t => t.id === takeId);
-    if (take) {
-      window.dataStreamer.loadTake(take);
+    try {
+      hidePortalError();
+      await window.dataStreamer.loadTakeById(takeId);
       closePortalModal();
       window.dataStreamer.play();
+    } catch (err) {
+      showPortalError(err.message || 'Could not load saved recording');
     }
   };
 
@@ -456,92 +536,119 @@
     }
   };
 
+  function finalizePreparedExport({ blob, filename, formatLabel, contentsText, allowClipboard }) {
+    currentExportBlob = blob;
+    currentExportFilename = filename;
+    currentExportObjectUrl = URL.createObjectURL(blob);
+
+    if (typeof File !== 'undefined') {
+      try {
+        currentExportFile = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+      } catch (e) {
+        currentExportFile = null;
+      }
+    } else {
+      currentExportFile = null;
+    }
+
+    if ($('export-meta-filename')) $('export-meta-filename').textContent = filename;
+    if ($('export-meta-format')) $('export-meta-format').textContent = formatLabel;
+    if ($('export-meta-count')) $('export-meta-count').textContent = contentsText;
+    if ($('export-meta-size')) $('export-meta-size').textContent = formatBytes(blob.size);
+
+    const shareBtn = $('btn-export-share');
+    let canUseShareSheet = false;
+    if (shareBtn && currentExportFile && typeof navigator.share === 'function') {
+      if (typeof navigator.canShare === 'function') {
+        try {
+          canUseShareSheet = navigator.canShare({ files: [currentExportFile] });
+        } catch (e) {
+          canUseShareSheet = false;
+        }
+      } else {
+        canUseShareSheet = true;
+      }
+    }
+
+    if (shareBtn) {
+      shareBtn.style.display = canUseShareSheet ? 'inline-flex' : 'none';
+      shareBtn.disabled = !canUseShareSheet;
+    }
+
+    const dlLink = $('btn-export-download');
+    if (dlLink) {
+      dlLink.href = currentExportObjectUrl;
+      dlLink.download = filename;
+      dlLink.style.display = 'inline-flex';
+    }
+
+    const copyBtn = $('btn-export-copy');
+    if (copyBtn) {
+      const canCopy = allowClipboard && blob.size <= 2 * 1024 * 1024 && navigator.clipboard && typeof navigator.clipboard.writeText === 'function';
+      copyBtn.style.display = canCopy ? 'inline-flex' : 'none';
+    }
+
+    setExportStatus('ready', 'READY', isIOSorBlueify()
+      ? 'File is ready. Tap Share / Save to Files to save on iPad.'
+      : 'File is ready. Download started or use actions below.');
+
+    // Auto-trigger standard anchor download on desktop browsers (iOS/Blueify uses Share Sheet / link tap)
+    if (!isIOSorBlueify()) {
+      const autoA = document.createElement('a');
+      autoA.href = currentExportObjectUrl;
+      autoA.download = filename;
+      autoA.style.display = 'none';
+      document.body.appendChild(autoA);
+      autoA.click();
+      autoA.remove();
+    }
+  }
+
   window.exportTakeCsv = async function (takeId) {
     if (!window.bioquadStorage) return;
-    const takes = await window.bioquadStorage.getAllTakes();
-    const take = takes.find(t => t.id === takeId);
-    if (!take || !Array.isArray(take.records)) return;
+    openExportModal('preparing.csv', 'CSV (Biodata Stream)');
 
-    const headers = ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity'];
-    const lines = [headers.join(',')];
-    take.records.forEach((r) => {
-      lines.push([
-        r.timestamp || '',
-        r.sensor_id || `CH_${r.channel || 1}_Sensor`,
-        r.conductance_uS !== undefined ? r.conductance_uS : (r.value || 50),
-        r.channel || 1,
-        r.ticks || '',
-        r.note || r.note_event || '',
-        r.velocity || ''
-      ].join(','));
-    });
+    try {
+      const res = await window.bioquadStorage.exportTakeCsvBlob(takeId, (chunkIdx, totalChunks, count) => {
+        setExportStatus('working', 'PREPARING', `Packaging chunk ${chunkIdx} / ${totalChunks} (${count.toLocaleString()} pts)...`);
+      });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${take.name || 'bioQuad'}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (!res || res.recordCount === 0) {
+        setExportStatus('error', 'EMPTY', 'This recording has no biodata points to export.');
+        return;
+      }
+
+      finalizePreparedExport({
+        blob: res.blob,
+        filename: res.filename,
+        formatLabel: 'CSV (text/csv)',
+        contentsText: `${res.recordCount.toLocaleString()} records`,
+        allowClipboard: true
+      });
+    } catch (err) {
+      setExportStatus('error', 'FAILED', err.message || 'Could not package CSV recording.');
+    }
   };
 
   window.exportTakeMidi = async function (takeId) {
     if (!window.bioquadStorage) return;
-    const takes = await window.bioquadStorage.getAllTakes();
-    const take = takes.find(t => t.id === takeId);
-    if (!take) return;
+    openExportModal('preparing_midi.zip', 'ZIP Archive (.mid per channel)');
 
-    const rec = window.biodataRecorder;
-    if (!rec || typeof rec.generateMidiBlob !== 'function') return;
-
-    let notesToExport = [...(take.midiNotes || [])];
-    if (notesToExport.length === 0 && Array.isArray(take.records)) {
-      const firstTime = take.records[0]?.timestamp_ms || 0;
-      take.records.forEach((r) => {
-        if (r.note && !isNaN(parseInt(r.note))) {
-          const ch = Math.max(0, Math.min(3, (r.channel || 1) - 1));
-          notesToExport.push({
-            timeMs: Math.max(0, (r.timestamp_ms || firstTime) - firstTime),
-            channel: ch,
-            pitch: parseInt(r.note),
-            velocity: r.velocity || 80,
-            durationMs: r.duration || 260
-          });
-        }
+    try {
+      const res = await window.bioquadStorage.exportTakeMidiZipBlob(takeId, (chunkIdx, totalChunks, count) => {
+        setExportStatus('working', 'PREPARING', `Scanning chunk ${chunkIdx} / ${totalChunks} (${count.toLocaleString()} pts)...`);
       });
+
+      finalizePreparedExport({
+        blob: res.blob,
+        filename: res.filename,
+        formatLabel: `MIDI ZIP (${res.channelList.join(', ')})`,
+        contentsText: `${res.noteCount.toLocaleString()} notes · ${res.fileCount} .mid file${res.fileCount === 1 ? '' : 's'}`,
+        allowClipboard: false
+      });
+    } catch (err) {
+      setExportStatus('error', 'NO MIDI', err.message || 'Could not build MIDI archive.');
     }
-
-    const baseName = take.name || 'bioQuad';
-    const activeChannels = [0, 1, 2, 3].filter(ch => notesToExport.some(n => n.channel === ch));
-
-    const triggerDownload = (blob, fname) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fname;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    };
-
-    if (activeChannels.length === 0) {
-      const blob = rec.generateMidiBlob(notesToExport, null, 'bioQuad');
-      if (blob) triggerDownload(blob, `${baseName}.mid`);
-      return;
-    }
-
-    // Export separate MIDI files per channel (ready for Ableton Live)
-    activeChannels.forEach((ch, idx) => {
-      setTimeout(() => {
-        const blob = rec.generateMidiBlob(notesToExport, ch, `CH ${ch + 1}`);
-        if (blob) {
-          triggerDownload(blob, `${baseName}_ch${ch + 1}.mid`);
-        }
-      }, idx * 150);
-    });
   };
 
   // --- 8. MODAL INNER RENDERERS ---
@@ -843,6 +950,117 @@
       });
     }
 
+    // Mapping controls listeners
+    const autoWinChk = $('portal-auto-win-chk');
+    if (autoWinChk) {
+      autoWinChk.addEventListener('change', (e) => {
+        autoApplyWindow = !!e.target.checked;
+      });
+    }
+
+    const idColSelect = $('portal-id-col-select');
+    if (idColSelect) {
+      idColSelect.addEventListener('change', (e) => {
+        selectedIdCol = e.target.value;
+        if (parsedPreview && parsedPreview.rows) {
+          const unique = new Set();
+          const scanLimit = Math.min(2000, parsedPreview.rows.length);
+          for (let r = 0; r < scanLimit; r++) {
+            const v = parsedPreview.rows[r][selectedIdCol];
+            if (v !== null && v !== undefined && v !== '') unique.add(String(v));
+          }
+          parsedPreview.guesses.sensorList = Array.from(unique);
+          sensorToChMap = {};
+          parsedPreview.guesses.sensorList.slice(0, 4).forEach((s, idx) => {
+            sensorToChMap[s] = idx;
+          });
+        }
+        renderMappingSection();
+      });
+    }
+
+    const valColSelect = $('portal-val-col-select');
+    if (valColSelect) {
+      valColSelect.addEventListener('change', (e) => {
+        selectedValueCol = e.target.value;
+      });
+    }
+
+    const timeColSelect = $('portal-time-col-select');
+    if (timeColSelect) {
+      timeColSelect.addEventListener('change', (e) => {
+        selectedTimeCol = e.target.value;
+        const cadenceRateWrap = $('portal-cadence-rate-wrap');
+        if (cadenceRateWrap) {
+          cadenceRateWrap.style.display = !selectedTimeCol ? 'block' : 'none';
+        }
+      });
+    }
+
+    const portalCadenceInput = $('portal-cadence-rate-val');
+    if (portalCadenceInput) {
+      portalCadenceInput.addEventListener('change', (e) => {
+        cadenceRate = Math.max(1, Math.min(500, parseInt(e.target.value) || 30));
+      });
+    }
+
+    // Export Modal handlers (synchronous Share Sheet trigger for iOS / Blueify)
+    const exportShareBtn = $('btn-export-share');
+    if (exportShareBtn) {
+      exportShareBtn.addEventListener('click', () => {
+        if (!currentExportFile || typeof navigator.share !== 'function') return;
+        const feedback = $('export-feedback-text');
+        if (feedback) {
+          feedback.style.display = 'block';
+          feedback.textContent = 'Opening Share Sheet...';
+        }
+        try {
+          const sharePromise = navigator.share({
+            files: [currentExportFile],
+            title: currentExportFilename
+          });
+          if (sharePromise && typeof sharePromise.then === 'function') {
+            sharePromise.then(() => {
+              if (feedback) feedback.textContent = 'Shared or saved via iOS Share Sheet.';
+            }).catch((err) => {
+              if (!feedback) return;
+              if (err && err.name === 'AbortError') {
+                feedback.textContent = 'Share dismissed. Tap Share again or use Download File below.';
+              } else {
+                feedback.textContent = 'Share unavailable here. Tap Download File below instead.';
+              }
+            });
+          }
+        } catch (err) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.textContent = 'Share unavailable here. Tap Download File below instead.';
+          }
+        }
+      });
+    }
+
+    const exportCopyBtn = $('btn-export-copy');
+    if (exportCopyBtn) {
+      exportCopyBtn.addEventListener('click', async () => {
+        if (!currentExportBlob) return;
+        const feedback = $('export-feedback-text');
+        try {
+          const txt = await currentExportBlob.text();
+          await navigator.clipboard.writeText(txt);
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.textContent = 'CSV copied to clipboard.';
+          }
+        } catch (err) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.textContent = 'Clipboard copy blocked. Use Share / Save to Files instead.';
+          }
+        }
+      });
+    }
+
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
@@ -860,8 +1078,9 @@
         ds?.step(true);
       } else if (e.code === 'ArrowLeft') {
         ds?.step(false);
-      } else if (e.code === 'Escape' && isPortalModalOpen) {
-        closePortalModal();
+      } else if (e.code === 'Escape') {
+        if (isExportModalOpen) window.closeExportModal();
+        else if (isPortalModalOpen) closePortalModal();
       }
     });
 
