@@ -1,22 +1,109 @@
-// Service Worker for bioQuad (Network-first with immediate cache purge)
-const CACHE_NAME = 'bioquad-v13';
+/**
+ * bioQuad Stream - Offline-First Service Worker
+ * Designed for pure vanilla static hosting and GitHub Pages.
+ */
 
-self.addEventListener('install', (e) => {
+const CACHE_NAME = 'bioquad-stream-v1.1.0';
+
+const PRECACHE_URLS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './css/styles.css',
+  './css/bioquad-icon.svg',
+  './pwa-192x192.png',
+  './pwa-512x512.png',
+  './pwa-maskable-512x512.png',
+  './apple-touch-icon.png',
+  './js/globals.js',
+  './js/audioEngine.js',
+  './js/uiController.js',
+  './js/visualizer.js',
+  './js/bleMidi.js',
+  './js/dataStreamer.js',
+  './js/streamPortalUI.js',
+  './js/pwa.js',
+  './js/main.js',
+  './datasets/nasa_telemetry_iss.csv',
+  './datasets/ekg_heart_biometrics.csv',
+  './datasets/market_crypto_hft.csv',
+  './datasets/deep_forest_mycelium.csv'
+];
+
+// Install: precache core assets
+self.addEventListener('install', (event) => {
   self.skipWaiting();
-});
-
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.map(k => caches.delete(k))
-    )).then(() => self.clients.claim())
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_URLS).catch((err) => {
+        console.warn('[SW] Some precache assets failed:', err);
+      });
+    })
   );
 });
 
-self.addEventListener('fetch', (e) => {
-  // Network first: always fetch fresh from dev server
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+// Activate: clean up outdated caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+// Fetch: Stale-While-Revalidate for app assets, Cache-First for fonts & CDN
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // External Fonts & CDN
+  if (url.origin.includes('fonts.googleapis.com') || 
+      url.origin.includes('fonts.gstatic.com') || 
+      url.origin.includes('cdn.jsdelivr.net')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        if (cached) return cached;
+        try {
+          const response = await fetch(event.request);
+          if (response && response.status === 200) {
+            cache.put(event.request, response.clone());
+          }
+          return response;
+        } catch (e) {
+          return cached || new Response('', { status: 408 });
+        }
+      })
+    );
+    return;
+  }
+
+  // App shell & local files (Stale-While-Revalidate)
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // If network fails (offline), return cached version
+          return cachedResponse;
+        });
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });
