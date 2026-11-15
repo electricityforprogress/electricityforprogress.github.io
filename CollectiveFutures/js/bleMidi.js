@@ -590,11 +590,31 @@ window.processBiodata = function(payload) {
         else if (payload.stl === 3) p.stealMode = 'env';
         p.steal = p.stealMode;
         
-        for (let i = 0; i < 12; i++) {
-            p.activeScaleBits[i] = (payload.scl & (1 << i)) !== 0;
+        const decodedBits = typeof window.decodeScaleBits === 'function' ? window.decodeScaleBits(payload.scl) : null;
+        if (decodedBits) {
+            p.activeScaleBits = decodedBits;
+        } else {
+            if (!Array.isArray(p.activeScaleBits) || p.activeScaleBits.length !== 12) {
+                p.activeScaleBits = new Array(12).fill(true);
+            }
+            const sclNum = Number(payload.scl) || 0;
+            for (let i = 0; i < 12; i++) {
+                p.activeScaleBits[i] = (sclNum & (1 << i)) !== 0;
+            }
+        }
+        if (typeof window.detectScaleFromBits === 'function') {
+            const detected = window.detectScaleFromBits(p.activeScaleBits, p.scaleRoot);
+            p.scaleType = detected.scaleType;
+            p.scaleRoot = detected.scaleRoot;
         }
         
         window.synthChannels[chIdx].applyParams();
+        if (typeof window.recordPerfSnapshotDelta === 'function') {
+            window.recordPerfSnapshotDelta(chIdx);
+        }
+        if (typeof window.recordPerfParam === 'function') {
+            window.recordPerfParam(0, 'master.bpm', window.masterBPM, true);
+        }
         if (chIdx === window.activeSynthIndex && typeof window.syncUI === 'function') {
             window.syncUI();
             if (typeof window.syncPianoUI === 'function') window.syncPianoUI();

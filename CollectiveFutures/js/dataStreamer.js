@@ -176,7 +176,7 @@
             });
         }
 
-        async saveChunk(takeId, chunkIndex, records, midiNotes = []) {
+        async saveChunk(takeId, chunkIndex, records, midiNotes = [], paramEvents = []) {
             const db = await this.getDb();
             const chunkKey = `${takeId}_${String(chunkIndex).padStart(6, '0')}`;
             return new Promise((resolve, reject) => {
@@ -187,7 +187,8 @@
                     takeId,
                     chunkIndex,
                     records: records || [],
-                    midiNotes: midiNotes || []
+                    midiNotes: midiNotes || [],
+                    paramEvents: paramEvents || []
                 });
                 tx.oncomplete = () => resolve(chunkKey);
                 tx.onerror = (e) => reject(e.target.error);
@@ -198,8 +199,9 @@
             // If take has large inline records, automatically split into chunks so IndexedDB never stores giant monoliths
             const recs = Array.isArray(take.records) ? take.records : [];
             const notes = Array.isArray(take.midiNotes) ? take.midiNotes : [];
+            const params = Array.isArray(take.paramEvents) ? take.paramEvents : [];
 
-            if (recs.length === 0 && take.schemaVersion === 2) {
+            if (recs.length === 0 && params.length === 0 && take.schemaVersion === 2) {
                 return this.saveTakeMeta(take);
             }
 
@@ -209,7 +211,8 @@
             for (let i = 0; i < totalChunks; i++) {
                 const sliceRecs = recs.slice(i * chunkSize, (i + 1) * chunkSize);
                 const sliceNotes = i === 0 ? notes : [];
-                await this.saveChunk(take.id, i, sliceRecs, sliceNotes);
+                const sliceParams = i === 0 ? params : [];
+                await this.saveChunk(take.id, i, sliceRecs, sliceNotes, sliceParams);
             }
 
             const meta = {
@@ -223,6 +226,8 @@
                 totalPointsRecorded: take.totalPointsRecorded || recs.length,
                 chunkCount: totalChunks,
                 schemaVersion: 2,
+                hasAutomation: !!(take.hasAutomation || params.length > 0),
+                automationCount: take.automationCount || params.length,
                 preset: take.preset || null
             };
             return this.saveTakeMeta(meta);
@@ -255,6 +260,10 @@
                     const cursor = e.target.result;
                     if (cursor) {
                         const v = cursor.value;
+                        const hasInlineRecords = Array.isArray(v.records);
+                        const storedCount = (v.schemaVersion === 2 || !hasInlineRecords)
+                            ? (v.totalPointsRecorded || v.sampleCount || 0)
+                            : v.records.length;
                         results.push({
                             id: v.id,
                             name: v.name,
@@ -262,12 +271,15 @@
                             timestamp: v.timestamp,
                             durationMs: v.durationMs || 0,
                             durationFormatted: v.durationFormatted || '00:00.0',
-                            sampleCount: v.sampleCount || (Array.isArray(v.records) ? v.records.length : 0),
-                            totalPointsRecorded: v.totalPointsRecorded || v.sampleCount || (Array.isArray(v.records) ? v.records.length : 0),
+                            sampleCount: v.sampleCount || storedCount,
+                            totalPointsRecorded: v.totalPointsRecorded || v.sampleCount || storedCount,
+                            storedRecordCount: storedCount,
                             chunkCount: v.chunkCount || 0,
                             schemaVersion: v.schemaVersion || 1,
                             isRecordingActive: !!v.isRecordingActive,
-                            hasPreset: !!v.preset
+                            hasPreset: !!v.preset,
+                            hasAutomation: !!(v.hasAutomation || (v.automationCount || 0) > 0),
+                            automationCount: v.automationCount || 0
                         });
                         cursor.continue();
                     } else {
@@ -285,7 +297,8 @@
         }
 
         /**
-         * Iterates chunks of a single take sequentially without loading all takes into RAM.
+         * Iterates chunks of a single take ONE CHUNK AT A TIME so exporting 500k–2M+ records
+         * never loads all chunks into JS heap simultaneously.
          * Supports both v2 chunked takes and legacy v1 monolithic takes seamlessly.
          */
         async iterateTakeChunks(takeId, onChunk) {
@@ -300,41 +313,51 @@
                 for (let i = 0; i < numSlices; i++) {
                     const recSlice = takeMeta.records.slice(i * chunkSize, (i + 1) * chunkSize);
                     const noteSlice = i === 0 ? (takeMeta.midiNotes || []) : [];
+                    const paramSlice = i === 0 ? (takeMeta.paramEvents || []) : [];
                     await onChunk({
                         chunkIndex: i,
                         totalChunks: numSlices,
                         records: recSlice,
-                        midiNotes: noteSlice
+                        midiNotes: noteSlice,
+                        paramEvents: paramSlice
                     }, takeMeta);
                 }
                 return takeMeta;
             }
 
-            // v2 chunked storage via key range scan on chunkKey (`${takeId}_000000` .. `${takeId}_\uffff`)
+            // v2 chunked storage: fetch chunk primary keys only, sort, then stream one chunk at a time
             const db = await this.getDb();
-            const chunks = await new Promise((resolve, reject) => {
+            const chunkKeys = await new Promise((resolve, reject) => {
                 const tx = db.transaction(this.chunkStoreName, 'readonly');
                 const store = tx.objectStore(this.chunkStoreName);
                 const idx = store.index('by_take');
-                const req = idx.getAll(IDBKeyRange.only(takeId));
+                const req = idx.getAllKeys(IDBKeyRange.only(takeId));
                 req.onsuccess = () => {
-                    const list = req.result || [];
-                    list.sort((a, b) => a.chunkIndex - b.chunkIndex);
-                    resolve(list);
+                    const keys = (req.result || []).slice().sort();
+                    resolve(keys);
                 };
                 req.onerror = (e) => reject(e.target.error);
             });
 
-            if (chunks.length === 0) {
+            if (chunkKeys.length === 0) {
                 return takeMeta;
             }
 
-            for (let i = 0; i < chunks.length; i++) {
+            for (let i = 0; i < chunkKeys.length; i++) {
+                const chunk = await new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.chunkStoreName, 'readonly');
+                    const store = tx.objectStore(this.chunkStoreName);
+                    const req = store.get(chunkKeys[i]);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = (e) => reject(e.target.error);
+                });
+                if (!chunk) continue;
                 await onChunk({
-                    chunkIndex: chunks[i].chunkIndex,
-                    totalChunks: chunks.length,
-                    records: chunks[i].records || [],
-                    midiNotes: chunks[i].midiNotes || []
+                    chunkIndex: i,
+                    totalChunks: chunkKeys.length,
+                    records: chunk.records || [],
+                    midiNotes: chunk.midiNotes || [],
+                    paramEvents: chunk.paramEvents || []
                 }, takeMeta);
             }
 
@@ -342,26 +365,58 @@
         }
 
         /**
-         * Builds a memory-safe CSV Blob chunk-by-chunk for takes of any size (including 500k+ records).
+         * Builds a memory-safe CSV Blob chunk-by-chunk for takes of any length (500k–2M+ records).
+         * Merges telemetry rows and inline PERF_PARAM automation rows in chronological order.
          */
         async exportTakeCsvBlob(takeId, onProgress) {
-            const headers = 'timestamp_iso,sensor_id,conductance_uS,channel,raw_ticks,note_event,velocity\n';
+            const headers = 'timestamp_iso,sensor_id,conductance_uS,channel,raw_ticks,note_event,velocity,param_attr,param_value\n';
             const blobParts = [headers];
             let recordCount = 0;
+            let automationCount = 0;
+
+            const formatRecRow = (r) => {
+                const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
+                const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
+                const condVal = r.conductance_uS !== undefined ? r.conductance_uS : (r.value !== undefined ? r.value : 50);
+                return `${csvEscape(r.timestamp || '')},${csvEscape(r.sensor_id || ('CH_' + (r.channel || 1) + '_Sensor'))},${condVal},${r.channel || 1},${r.ticks || ''},${noteVal},${velVal},,`;
+            };
+
+            const formatParamRow = (ev) => {
+                const iso = ev.timestamp || (ev.timestamp_ms !== undefined ? new Date(ev.timestamp_ms).toISOString() : '');
+                const ch = (ev.channel !== null && ev.channel !== undefined) ? ev.channel : 0;
+                return `${csvEscape(iso)},PERF_PARAM,,${ch},,,,${csvEscape(ev.attr || '')},${csvEscape(ev.value ?? '')}`;
+            };
 
             const takeMeta = await this.iterateTakeChunks(takeId, async (chunk) => {
                 const recs = chunk.records || [];
-                const lines = new Array(recs.length);
-                for (let i = 0; i < recs.length; i++) {
-                    const r = recs[i];
-                    const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
-                    const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
-                    const condVal = r.conductance_uS !== undefined ? r.conductance_uS : (r.value !== undefined ? r.value : 50);
-                    lines[i] = `${r.timestamp || ''},${r.sensor_id || ('CH_' + (r.channel || 1) + '_Sensor')},${condVal},${r.channel || 1},${r.ticks || ''},${noteVal},${velVal}`;
+                const pevs = (chunk.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0));
+                const lines = [];
+
+                let ri = 0;
+                let pi = 0;
+                while (ri < recs.length || pi < pevs.length) {
+                    if (pi >= pevs.length) {
+                        lines.push(formatRecRow(recs[ri++]));
+                        recordCount++;
+                    } else if (ri >= recs.length) {
+                        lines.push(formatParamRow(pevs[pi++]));
+                        automationCount++;
+                    } else {
+                        const rMs = recs[ri].timestamp_ms !== undefined ? recs[ri].timestamp_ms : (recs[ri].timestamp ? Date.parse(recs[ri].timestamp) : 0);
+                        const pMs = pevs[pi].timestamp_ms !== undefined ? pevs[pi].timestamp_ms : (pevs[pi].timestamp ? Date.parse(pevs[pi].timestamp) : 0);
+                        if (pMs <= rMs) {
+                            lines.push(formatParamRow(pevs[pi++]));
+                            automationCount++;
+                        } else {
+                            lines.push(formatRecRow(recs[ri++]));
+                            recordCount++;
+                        }
+                    }
                 }
+
                 if (lines.length > 0) {
-                    blobParts.push(lines.join('\n') + '\n');
-                    recordCount += lines.length;
+                    // Wrap each chunk in a sub-Blob immediately so JS strings can be garbage collected
+                    blobParts.push(new Blob([lines.join('\n') + '\n'], { type: 'text/plain' }));
                 }
                 if (typeof onProgress === 'function') {
                     onProgress(chunk.chunkIndex + 1, chunk.totalChunks, recordCount);
@@ -374,6 +429,7 @@
                 blob,
                 filename: `${safeName}.csv`,
                 recordCount,
+                automationCount,
                 byteSize: blob.size,
                 takeMeta
             };
@@ -499,6 +555,421 @@
         }
     }
 
+    // --- PERFORMANCE AUTOMATION CODEC & CSV HELPERS ---
+    function csvEscape(val) {
+        if (val === null || val === undefined) return '';
+        const str = String(val);
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+            return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+    }
+
+    function splitDelimitedRow(line, delimiter) {
+        if (delimiter instanceof RegExp) {
+            return line.split(delimiter).map(s => s.trim().replace(/^["']|["']$/g, ''));
+        }
+        const out = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (inQuotes) {
+                if (ch === '"') {
+                    if (line[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    cur += ch;
+                }
+            } else if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === delimiter) {
+                out.push(cur.trim());
+                cur = '';
+            } else {
+                cur += ch;
+            }
+        }
+        out.push(cur.trim());
+        return out;
+    }
+
+    function normalizeParamValue(attr, val) {
+        if (attr === 'activeScaleBits') {
+            const bits = (typeof window.decodeScaleBits === 'function') ? window.decodeScaleBits(val) : null;
+            if (bits) {
+                return bits.map(b => (b ? '1' : '0')).join('');
+            }
+            if (Array.isArray(val)) {
+                return Array.from({ length: 12 }, (_, i) => (val[i] ? '1' : '0')).join('');
+            }
+            const s = String(val || '').replace(/[^01]/g, '');
+            if (s.length >= 12) return s.slice(0, 12);
+            return '111111111111';
+        }
+        if (typeof val === 'boolean') return val ? '1' : '0';
+        if (typeof val === 'number') {
+            if (!isFinite(val)) return '0';
+            return String(Math.round(val * 10000) / 10000);
+        }
+        return String(val ?? '');
+    }
+
+    function parseBoolParam(val) {
+        if (typeof val === 'boolean') return val;
+        const s = String(val ?? '').trim().toLowerCase();
+        return s === '1' || s === 'true' || s === 'yes';
+    }
+
+    function extractFullStateEvents(timestampMs) {
+        const events = [];
+        const iso = new Date(timestampMs).toISOString();
+        const pushEv = (channel, attr, val) => {
+            events.push({
+                timestamp: iso,
+                timestamp_ms: timestampMs,
+                channel,
+                attr,
+                value: normalizeParamValue(attr, val)
+            });
+        };
+
+        pushEv(0, 'master.vol', window.masterVolumeLevel ?? 0.75);
+        pushEv(0, 'master.muted', !!window.isMasterMuted);
+        pushEv(0, 'master.bpm', window.masterBPM ?? 120);
+
+        if (window.globalFX) {
+            if (window.globalFX.dly) {
+                ['time', 'feedback', 'tone', 'toRev'].forEach(k => pushEv(0, `globalFX.dly.${k}`, window.globalFX.dly[k]));
+            }
+            if (window.globalFX.rev) {
+                ['size', 'damp', 'hpf'].forEach(k => pushEv(0, `globalFX.rev.${k}`, window.globalFX.rev[k]));
+            }
+        }
+
+        const channels = window.synthChannels || [];
+        for (let i = 0; i < 4; i++) {
+            const chObj = channels[i];
+            const p = chObj ? chObj.params : window.defaultParams;
+            if (!p) continue;
+            const ch = i + 1;
+
+            pushEv(ch, 'mixVol', p.mixVol ?? 0.5);
+            pushEv(ch, 'muted', !!p.muted);
+            pushEv(ch, 'midiOutCh', p.midiOutCh !== undefined ? p.midiOutCh : i);
+            pushEv(ch, 'threshold', p.threshold ?? 2.0);
+            pushEv(ch, 'threshMax', p.threshMax ?? 5.0);
+            pushEv(ch, 'sampleSize', p.sampleSize ?? 40);
+            pushEv(ch, 'scaleRoot', p.scaleRoot ?? 0);
+            pushEv(ch, 'scaleType', p.scaleType || 'chromatic');
+            pushEv(ch, 'activeScaleBits', p.activeScaleBits || new Array(12).fill(true));
+            pushEv(ch, 'quantize', p.quantize ?? 0);
+            pushEv(ch, 'density', p.density ?? 100);
+            pushEv(ch, 'durMult', p.durMult ?? 1.0);
+            pushEv(ch, 'spread', p.spread ?? 75);
+            pushEv(ch, 'minNote', p.minNote ?? 36);
+            pushEv(ch, 'maxNote', p.maxNote ?? 84);
+            pushEv(ch, 'velMin', p.velMin ?? 60);
+            pushEv(ch, 'velMax', p.velMax ?? 110);
+            pushEv(ch, 'voices', p.voices ?? 5);
+            pushEv(ch, 'glide', p.glide ?? 0.0);
+            pushEv(ch, 'legato', p.legato ?? 0);
+            pushEv(ch, 'stealMode', p.stealMode || p.steal || 'none');
+
+            if (p.sources && p.sources.osc1) pushEv(ch, 'sources.osc1.type', p.sources.osc1.type || 'sawtooth');
+            if (p.sources && p.sources.noise) pushEv(ch, 'sources.noise.level', p.sources.noise.level ?? 0);
+            if (p.filter) {
+                pushEv(ch, 'filter.cutoff', p.filter.cutoff ?? 8000);
+                pushEv(ch, 'filter.res', p.filter.res ?? 2);
+            }
+
+            ['ampEnv', 'filterEnv', 'pitchEnv'].forEach(envKey => {
+                const env = p[envKey];
+                if (!env) return;
+                ['atk', 'dec', 'sus', 'rel', 'amt', 'timeMode'].forEach(k => {
+                    if (env[k] !== undefined) pushEv(ch, `${envKey}.${k}`, env[k]);
+                });
+            });
+
+            ['ampLfo', 'filterLfo', 'pitchLfo'].forEach(lfoKey => {
+                const lfo = p[lfoKey];
+                if (!lfo) return;
+                ['shape', 'rate', 'depth', 'rateMode'].forEach(k => {
+                    if (lfo[k] !== undefined) pushEv(ch, `${lfoKey}.${k}`, lfo[k]);
+                });
+            });
+
+            if (p.fx) {
+                ['drv', 'drvGrit', 'drvTone', 'drvLvl', 'dly', 'rev'].forEach(k => {
+                    if (p.fx[k] !== undefined) pushEv(ch, `fx.${k}`, p.fx[k]);
+                });
+            }
+
+            pushEv(ch, 'patchName', (chObj && chObj.patchName) ? chObj.patchName : (p.savedPatchName || 'INIT'));
+        }
+
+        return events;
+    }
+
+    function applyPerfEvent(ev, touched) {
+        if (!ev || !ev.attr) return;
+        const ch = parseInt(ev.channel);
+        const attr = String(ev.attr).trim();
+        const val = ev.value;
+
+        // Global / Master / GlobalFX events (channel === 0)
+        if (!ch || ch === 0) {
+            if (attr === 'master.vol') {
+                const num = parseFloat(val);
+                if (!isNaN(num)) {
+                    window.masterVolumeLevel = Math.max(0, Math.min(1, num));
+                    if (window.masterGain && !window.isMasterMuted) {
+                        window.masterGain.gain.value = window.masterVolumeLevel;
+                    }
+                    const slider = document.getElementById('master-vol-slider');
+                    if (slider) slider.value = window.masterVolumeLevel;
+                }
+                touched.ui = true;
+                return;
+            }
+            if (attr === 'master.muted') {
+                const muted = parseBoolParam(val);
+                window.isMasterMuted = muted;
+                if (window.masterGain) {
+                    window.masterGain.gain.value = muted ? 0 : window.masterVolumeLevel;
+                }
+                const btn = document.getElementById('btn-master-mute');
+                if (btn) {
+                    btn.style.backgroundColor = muted ? 'var(--red)' : 'transparent';
+                    btn.style.color = muted ? '#000' : 'var(--red)';
+                }
+                touched.ui = true;
+                return;
+            }
+            if (attr === 'master.bpm') {
+                const bpm = parseFloat(val);
+                if (!isNaN(bpm)) {
+                    window.masterBPM = Math.max(60, Math.min(240, bpm));
+                    touched.ui = true;
+                }
+                return;
+            }
+            if (attr.startsWith('globalFX.') && window.globalFX) {
+                const parts = attr.split('.');
+                if (parts.length === 3 && window.globalFX[parts[1]]) {
+                    const num = parseFloat(val);
+                    window.globalFX[parts[1]][parts[2]] = isNaN(num) ? val : num;
+                    touched.globalFx = true;
+                    touched.ui = true;
+                }
+                return;
+            }
+            return;
+        }
+
+        // Channel events (1..4)
+        const chIdx = ch - 1;
+        const chObj = window.synthChannels ? window.synthChannels[chIdx] : null;
+        if (!chObj || !chObj.params) return;
+        const p = chObj.params;
+
+        if (attr === 'patchName') {
+            chObj.patchName = String(val || 'INIT');
+            chObj.isDirty = false;
+            touched.patchNames = true;
+            return;
+        }
+        if (attr === 'mixVol') {
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+                p.mixVol = Math.max(0, Math.min(1, num));
+                if (chObj.channelOut) {
+                    chObj.channelOut.gain.value = p.muted ? 0 : p.mixVol;
+                }
+                const volSlider = document.getElementById(`ch-vol-${chIdx}`);
+                if (volSlider) volSlider.value = p.mixVol;
+            }
+            return;
+        }
+        if (attr === 'muted') {
+            const muted = parseBoolParam(val);
+            p.muted = muted;
+            if (chObj.channelOut) {
+                chObj.channelOut.gain.value = muted ? 0 : p.mixVol;
+            }
+            const muteBtn = document.getElementById(`mute-btn-${chIdx}`);
+            if (muteBtn) {
+                muteBtn.style.backgroundColor = muted ? 'var(--red)' : 'transparent';
+                muteBtn.style.color = muted ? '#000' : 'var(--text)';
+            }
+            return;
+        }
+        if (attr === 'midiOutCh') {
+            const mch = parseInt(val);
+            if (!isNaN(mch)) {
+                p.midiOutCh = Math.max(0, Math.min(15, mch));
+                const sel = document.getElementById(`ui-midi-ch-${chIdx}`);
+                if (sel) sel.value = p.midiOutCh;
+            }
+            return;
+        }
+        if (attr === 'threshold') {
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+                p.threshold = Math.max(1.0, Math.min(10.0, num));
+                const miniT = document.getElementById(`ch-mini-thresh-${chIdx}`);
+                const miniV = document.getElementById(`ch-val-thresh-${chIdx}`);
+                if (miniT) {
+                    if (p.threshold > parseFloat(miniT.max || 5)) {
+                        p.threshMax = Math.max(p.threshMax || 5, p.threshold);
+                        miniT.max = p.threshMax.toString();
+                    }
+                    miniT.value = p.threshold;
+                }
+                if (miniV) miniV.innerText = p.threshold.toFixed(2) + 'x';
+            }
+            return;
+        }
+        if (attr === 'threshMax') {
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+                p.threshMax = Math.max(1.0, Math.min(10.0, num));
+                const miniT = document.getElementById(`ch-mini-thresh-${chIdx}`);
+                const maxBtn = document.getElementById(`ch-max-btn-${chIdx}`);
+                if (miniT) miniT.max = p.threshMax.toString();
+                if (maxBtn) maxBtn.innerText = `${p.threshMax.toFixed(2)}x`;
+            }
+            return;
+        }
+        if (attr === 'sampleSize') {
+            const num = parseInt(val);
+            if (!isNaN(num)) {
+                p.sampleSize = num;
+                const miniW = document.getElementById(`ch-window-${chIdx}`);
+                const miniWV = document.getElementById(`ch-val-window-${chIdx}`);
+                if (miniW) miniW.value = num;
+                if (miniWV) miniWV.innerText = num;
+            }
+            return;
+        }
+        if (attr === 'activeScaleBits') {
+            const decoded = (typeof window.decodeScaleBits === 'function') ? window.decodeScaleBits(val) : null;
+            if (decoded) {
+                p.activeScaleBits = decoded;
+            } else {
+                const s = String(val || '').trim();
+                if (/^[01]{12}$/.test(s)) {
+                    p.activeScaleBits = s.split('').map(c => c === '1');
+                } else if (s.includes(',')) {
+                    const parts = s.split(',');
+                    p.activeScaleBits = Array.from({ length: 12 }, (_, idx) => parseBoolParam(parts[idx]));
+                }
+            }
+            if (touched.scaleBitsChannels) touched.scaleBitsChannels.add(chIdx);
+            if (touched.lastScaleSourceByCh) touched.lastScaleSourceByCh[chIdx] = 'bits';
+            touched.channels.add(chIdx);
+            if (chIdx === window.activeSynthIndex) touched.piano = true;
+            touched.ui = true;
+            return;
+        }
+        if (attr === 'scaleRoot') {
+            p.scaleRoot = ((parseInt(val, 10) || 0) % 12 + 12) % 12;
+            if (touched.scaleMetaChannels) touched.scaleMetaChannels.add(chIdx);
+            if (touched.lastScaleSourceByCh) touched.lastScaleSourceByCh[chIdx] = 'meta';
+            touched.channels.add(chIdx);
+            return;
+        }
+        if (attr === 'scaleType') {
+            p.scaleType = String(val || 'chromatic');
+            if (touched.scaleMetaChannels) touched.scaleMetaChannels.add(chIdx);
+            if (touched.lastScaleSourceByCh) touched.lastScaleSourceByCh[chIdx] = 'meta';
+            touched.channels.add(chIdx);
+            return;
+        }
+        if (attr === 'stealMode' || attr === 'steal') {
+            const mode = String(val || 'none');
+            p.stealMode = mode;
+            p.steal = mode;
+            touched.channels.add(chIdx);
+            return;
+        }
+
+        if (attr.includes('.')) {
+            const parts = attr.split('.');
+            let obj = p;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (!obj[parts[i]]) obj[parts[i]] = {};
+                obj = obj[parts[i]];
+            }
+            const leaf = parts[parts.length - 1];
+            const isStringLeaf = (leaf === 'type' || leaf === 'shape' || leaf === 'rateMode' || leaf === 'timeMode');
+            if (isStringLeaf) {
+                obj[leaf] = String(val);
+            } else {
+                const num = parseFloat(val);
+                obj[leaf] = isNaN(num) ? val : num;
+            }
+            touched.channels.add(chIdx);
+            return;
+        }
+
+        const num = parseFloat(val);
+        p[attr] = isNaN(num) ? val : num;
+        touched.channels.add(chIdx);
+    }
+
+    function commitPerfBatch(touched) {
+        if (!touched) return;
+        window.isApplyingAutomation = true;
+        try {
+            const scaleTouchChannels = new Set([
+                ...(touched.scaleBitsChannels ? touched.scaleBitsChannels : []),
+                ...(touched.scaleMetaChannels ? touched.scaleMetaChannels : [])
+            ]);
+            scaleTouchChannels.forEach(chIdx => {
+                const chObj = window.synthChannels ? window.synthChannels[chIdx] : null;
+                if (!chObj || !chObj.params) return;
+                const p = chObj.params;
+                const lastSource = touched.lastScaleSourceByCh ? touched.lastScaleSourceByCh[chIdx] : null;
+                if (lastSource === 'bits' && typeof window.detectScaleFromBits === 'function') {
+                    const detected = window.detectScaleFromBits(p.activeScaleBits, p.scaleRoot);
+                    p.scaleType = detected.scaleType;
+                    p.scaleRoot = detected.scaleRoot;
+                } else if (lastSource === 'meta' && p.scaleType !== 'custom' && typeof window.buildScaleBitsFromPreset === 'function') {
+                    p.activeScaleBits = window.buildScaleBitsFromPreset(p.scaleType, p.scaleRoot);
+                    if (chIdx === window.activeSynthIndex) touched.piano = true;
+                } else if (typeof window.normalizeScaleParams === 'function') {
+                    window.normalizeScaleParams(p);
+                }
+            });
+            if (touched.channels && window.synthChannels) {
+                touched.channels.forEach(chIdx => {
+                    if (window.synthChannels[chIdx] && typeof window.synthChannels[chIdx].applyParams === 'function') {
+                        window.synthChannels[chIdx].applyParams();
+                    }
+                });
+            }
+            if (touched.globalFx && window.masterFX && window.globalFX) {
+                window.masterFX.updateParams(window.globalFX);
+            }
+            if (touched.patchNames && typeof window.updateChannelPresetDropdowns === 'function') {
+                window.updateChannelPresetDropdowns();
+            }
+            if ((touched.ui || (touched.channels && touched.channels.size > 0) || touched.globalFx) && typeof window.syncUI === 'function') {
+                window.syncUI();
+            }
+            if ((touched.piano || (touched.channels && touched.channels.has(window.activeSynthIndex))) && typeof window.syncPianoUI === 'function') {
+                window.syncPianoUI();
+            }
+        } finally {
+            window.isApplyingAutomation = false;
+        }
+    }
+
     // Helper: Parse any raw timestamp token into epoch milliseconds
     function parseRawTimeToMs(raw) {
         if (raw === null || raw === undefined || raw === '') return null;
@@ -537,6 +1008,12 @@
             this.totalRecords = 0;
             this.playbackElapsedMs = 0;
             this.totalDurationMs = 0;
+
+            // Performance Automation playback state
+            this.automationEvents = [];
+            this.automationCursor = 0;
+            this.followAutomation = false;
+            this.basePresetSnapshot = null;
             
             this.timerId = null;
             this.lastFrameTime = 0;
@@ -580,6 +1057,9 @@
                 totalRecords: this.totalRecords,
                 playbackElapsedMs: this.playbackElapsedMs,
                 totalDurationMs: this.totalDurationMs,
+                hasAutomation: this.automationEvents.length > 0,
+                automationCount: this.automationEvents.length,
+                followAutomation: this.followAutomation,
                 progress: this.totalDurationMs > 0 ? (this.playbackElapsedMs / this.totalDurationMs) : (this.totalRecords > 0 ? (this.currentIndex / this.totalRecords) : 0),
                 activeChannels: this.channelFeeds.map(f => ({
                     active: f.data.length > 0,
@@ -592,6 +1072,7 @@
                 loadedFile: this.loadedFile ? {
                     name: this.loadedFile.name,
                     rowCount: this.loadedFile.rows.length,
+                    automationCount: (this.loadedFile.automationRows || []).length,
                     columns: this.loadedFile.columns,
                     guesses: this.loadedFile.guesses,
                     recommendedWindow: this.loadedFile.recommendedWindow,
@@ -654,7 +1135,7 @@
                 else if (firstLine.includes('|')) delimiter = '|';
                 else if (!firstLine.includes(',') && firstLine.split(/\s+/).length > 1) delimiter = /\s+/;
 
-                let headerTokens = typeof delimiter === 'string' ? firstLine.split(delimiter).map(s => s.trim().replace(/^["']|["']$/g, '')) : firstLine.split(delimiter);
+                let headerTokens = splitDelimitedRow(firstLine, delimiter);
                 
                 const isFirstLineNumeric = headerTokens.every(t => !isNaN(parseFloat(t)) && isFinite(t));
                 let startIndex = 1;
@@ -670,13 +1151,18 @@
                     const line = lines[i].trim();
                     if (!line || line.startsWith('#') || line.startsWith('//')) continue;
                     
-                    const tokens = typeof delimiter === 'string' ? line.split(delimiter).map(s => s.trim().replace(/^["']|["']$/g, '')) : line.split(delimiter);
+                    const tokens = splitDelimitedRow(line, delimiter);
                     let rowObj = {};
                     columns.forEach((col, cIdx) => {
                         let raw = tokens[cIdx];
                         if (raw !== undefined) {
                             let num = parseFloat(raw);
-                            rowObj[col] = (!isNaN(num) && isFinite(raw)) ? num : raw;
+                            // Keep param_value & activeScaleBits strings intact so bitmasks like '101011010101' aren't coerced to numbers
+                            if (col === 'param_value' || col === 'param_attr' || col === 'sensor_id') {
+                                rowObj[col] = raw;
+                            } else {
+                                rowObj[col] = (!isNaN(num) && isFinite(raw)) ? num : raw;
+                            }
                         } else {
                             rowObj[col] = null;
                         }
@@ -685,9 +1171,26 @@
                 }
             }
 
-            if (rows.length === 0) throw new Error('Could not parse records from this file');
+            // Separate inline performance automation rows BEFORE column detection and window recommendations
+            const telemetryRows = [];
+            const automationRows = [];
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                const isPerfRow = String(r.sensor_id || '').trim() === 'PERF_PARAM' ||
+                    (r.param_attr !== undefined && r.param_attr !== null && String(r.param_attr).trim() !== '');
+                if (isPerfRow) {
+                    automationRows.push(r);
+                } else {
+                    telemetryRows.push(r);
+                }
+            }
+            rows = telemetryRows;
 
-            const guesses = this.detectColumnRoles(columns, rows);
+            if (rows.length === 0 && automationRows.length === 0) throw new Error('Could not parse records from this file');
+
+            const guesses = rows.length > 0
+                ? this.detectColumnRoles(columns, rows)
+                : { timestampCol: columns.find(c => /time|date|iso/i.test(c)) || null, identifierCol: null, primaryValueCol: columns[0], detectedValueCols: [], sensorList: [], colStats: {} };
 
             const N = rows.length;
             let recommendedWindow = 40;
@@ -695,7 +1198,7 @@
 
             if (N < 250) {
                 recommendedWindow = Math.max(10, Math.round(N / 8));
-                recommendedZoom = Math.min(250, N);
+                recommendedZoom = Math.min(250, Math.max(10, N));
             } else if (N < 1500) {
                 recommendedWindow = Math.max(20, Math.min(50, Math.round(N / 25)));
                 recommendedZoom = Math.min(500, Math.round(N * 0.7));
@@ -712,6 +1215,8 @@
                 format: formatType,
                 columns,
                 rows,
+                automationRows,
+                hasAutomation: automationRows.length > 0,
                 sampleRows: rows.slice(0, 10),
                 guesses,
                 recommendedWindow,
@@ -860,7 +1365,13 @@
         applyMappingConfig(config) {
             if (!this.loadedFile) throw new Error('No file loaded to apply mapping');
 
+            this.automationEvents = [];
+            this.automationCursor = 0;
+            this.followAutomation = false;
+            this.basePresetSnapshot = null;
+
             const { rows, recommendedWindow, recommendedZoom, name } = this.loadedFile;
+            const autoRows = this.loadedFile.automationRows || [];
             const mode = config.mode || 'multi_sensor_id';
             const cadenceRps = config.cadenceRps || this.targetCadenceRps || 30;
             this.targetCadenceRps = cadenceRps;
@@ -1052,6 +1563,25 @@
                 }
             }
 
+            // Include automation rows when establishing unified t=0 origin
+            const parsedAutoRows = [];
+            for (let i = 0; i < autoRows.length; i++) {
+                const ar = autoRows[i];
+                const rawT = (timeCol && ar[timeCol] !== undefined) ? ar[timeCol] : (ar.timestamp_iso ?? ar.timestamp ?? null);
+                const ms = parseRawTimeToMs(rawT);
+                if (ms !== null && isFinite(ms)) {
+                    if (ms < minTimeMs) minTimeMs = ms;
+                    validTimeCount++;
+                }
+                const chParsed = parseInt(ar.channel);
+                parsedAutoRows.push({
+                    parsedMs: (ms !== null && isFinite(ms)) ? ms : null,
+                    channel: isNaN(chParsed) ? 0 : chParsed,
+                    attr: String(ar.param_attr || '').trim(),
+                    value: ar.param_value !== undefined && ar.param_value !== null ? ar.param_value : ''
+                });
+            }
+
             const hasRealTimestamps = validTimeCount >= 2 && minTimeMs !== Infinity;
             this.hasRealTimestamps = hasRealTimestamps;
 
@@ -1079,12 +1609,29 @@
                 }
             }
 
-            this.totalDurationMs = maxDurationMs > 0 ? maxDurationMs : ((this.totalRecords / cadenceRps) * 1000);
-            this.playbackElapsedMs = 0;
+            // Build sorted automation timeline aligned to minTimeMs
+            if (parsedAutoRows.length > 0) {
+                for (let i = 0; i < parsedAutoRows.length; i++) {
+                    const pa = parsedAutoRows[i];
+                    if (!pa.attr) continue;
+                    const tOffset = (hasRealTimestamps && pa.parsedMs !== null) ? Math.max(0, pa.parsedMs - minTimeMs) : 0;
+                    if (tOffset > maxDurationMs) maxDurationMs = tOffset;
+                    this.automationEvents.push({
+                        tMs: tOffset,
+                        channel: pa.channel,
+                        attr: pa.attr,
+                        value: pa.value
+                    });
+                }
+                this.automationEvents.sort((a, b) => a.tMs - b.tMs);
+                this.followAutomation = this.automationEvents.length > 0;
+            }
 
             // Sync total length
             const lengths = this.channelFeeds.map(f => f.data.length).filter(len => len > 0);
             this.totalRecords = lengths.length > 0 ? Math.max(...lengths) : 0;
+            this.totalDurationMs = maxDurationMs > 0 ? maxDurationMs : ((this.totalRecords / cadenceRps) * 1000);
+            this.playbackElapsedMs = 0;
             this.currentIndex = 0;
 
             // Pre-warm visualizers with clean bounds
@@ -1117,6 +1664,13 @@
                 }
             }
 
+            if (this.automationEvents.length > 0 && window.biodataRecorder) {
+                this.basePresetSnapshot = window.biodataRecorder.captureCurrentPreset();
+                if (this.followAutomation) {
+                    this.reconcileAutomationToTime(0);
+                }
+            }
+
             if (typeof window.syncUI === 'function') window.syncUI();
             this.emitChange('mapping_applied');
         }
@@ -1124,6 +1678,10 @@
         // --- TRANSPORT CONTROLS ---
         play() {
             if (this.totalRecords === 0) return;
+
+            if (this.totalDurationMs > 0 && this.playbackElapsedMs >= this.totalDurationMs) {
+                this.rewind();
+            }
 
             if (window.audioCtx && window.audioCtx.state === 'suspended') {
                 window.audioCtx.resume().catch(() => {});
@@ -1163,6 +1721,11 @@
         rewind() {
             this.playbackElapsedMs = 0;
             this.currentIndex = 0;
+            if (this.followAutomation && this.automationEvents.length > 0) {
+                this.reconcileAutomationToTime(0);
+            } else {
+                this.automationCursor = 0;
+            }
             for (let i = 0; i < 4; i++) {
                 if (this.channelFeeds[i]) {
                     this.channelFeeds[i].index = 0;
@@ -1181,6 +1744,16 @@
             const ratio = this.totalRecords > 1 ? targetIndex / (this.totalRecords - 1) : 0;
             this.playbackElapsedMs = ratio * this.totalDurationMs;
 
+            if (this.automationEvents.length > 0) {
+                if (this.followAutomation) {
+                    this.reconcileAutomationToTime(this.playbackElapsedMs);
+                } else {
+                    let c = 0;
+                    while (c < this.automationEvents.length && this.automationEvents[c].tMs <= this.playbackElapsedMs) c++;
+                    this.automationCursor = c;
+                }
+            }
+
             for (let ch = 0; ch < 4; ch++) {
                 const feed = this.channelFeeds[ch];
                 if (feed && feed.data.length > 0) {
@@ -1196,6 +1769,48 @@
                 }
             }
             this.emitChange('seek');
+        }
+
+        reconcileAutomationToTime(targetMs) {
+            if (!this.automationEvents || this.automationEvents.length === 0) return;
+
+            window.isApplyingAutomation = true;
+            try {
+                if (this.basePresetSnapshot) {
+                    this.restorePresetSnapshot(this.basePresetSnapshot, true);
+                }
+
+                const latestByKey = new Map();
+                let cursor = 0;
+                for (let i = 0; i < this.automationEvents.length; i++) {
+                    const ev = this.automationEvents[i];
+                    if (ev.tMs <= targetMs) {
+                        latestByKey.set(`${ev.channel}:${ev.attr}`, { idx: i, ev });
+                        cursor = i + 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                const ordered = Array.from(latestByKey.values()).sort((a, b) => a.idx - b.idx);
+                const touched = { channels: new Set(), scaleBitsChannels: new Set(), scaleMetaChannels: new Set(), lastScaleSourceByCh: {}, globalFx: false, ui: false, piano: false, patchNames: false };
+                for (let i = 0; i < ordered.length; i++) {
+                    applyPerfEvent(ordered[i].ev, touched);
+                }
+                commitPerfBatch(touched);
+                this.automationCursor = cursor;
+            } finally {
+                window.isApplyingAutomation = false;
+            }
+        }
+
+        toggleFollowAutomation() {
+            if (this.automationEvents.length === 0) return;
+            this.followAutomation = !this.followAutomation;
+            if (this.followAutomation) {
+                this.reconcileAutomationToTime(this.playbackElapsedMs);
+            }
+            this.emitChange('automation_mode_change');
         }
 
         step(forward = true) {
@@ -1256,6 +1871,10 @@
             this.playbackElapsedMs = 0;
             this.totalDurationMs = 0;
             this.loadedFile = null;
+            this.automationEvents = [];
+            this.automationCursor = 0;
+            this.followAutomation = false;
+            this.basePresetSnapshot = null;
             this.emitChange('cleared_all');
         }
 
@@ -1281,6 +1900,20 @@
                     this.pause();
                     this.seek(this.totalRecords - 1);
                     return;
+                }
+            }
+
+            if (this.followAutomation && this.automationEvents.length > 0) {
+                const touched = { channels: new Set(), scaleBitsChannels: new Set(), scaleMetaChannels: new Set(), lastScaleSourceByCh: {}, globalFx: false, ui: false, piano: false, patchNames: false };
+                let appliedAny = false;
+                while (this.automationCursor < this.automationEvents.length &&
+                       this.automationEvents[this.automationCursor].tMs <= this.playbackElapsedMs) {
+                    applyPerfEvent(this.automationEvents[this.automationCursor], touched);
+                    this.automationCursor++;
+                    appliedAny = true;
+                }
+                if (appliedAny) {
+                    commitPerfBatch(touched);
                 }
             }
 
@@ -1476,14 +2109,40 @@
             }
         }
 
-        restorePresetSnapshot(preset) {
+        restorePresetSnapshot(preset, skipSyncUI = false) {
             if (!preset || !Array.isArray(preset.channels)) return;
+            window.isApplyingAutomation = true;
             try {
                 const chDataPreset = preset.channels;
                 for (let i = 0; i < 4; i++) {
                     if (chDataPreset[i] && window.synthChannels && window.synthChannels[i]) {
-                        window.synthChannels[i].params = JSON.parse(JSON.stringify(chDataPreset[i]));
+                        const base = window.defaultParams ? JSON.parse(JSON.stringify(window.defaultParams)) : {};
+                        const cloned = JSON.parse(JSON.stringify(chDataPreset[i]));
+                        window.synthChannels[i].params = Object.assign(base, cloned);
+                        if (cloned.activeScaleBits === undefined) {
+                            delete window.synthChannels[i].params.activeScaleBits;
+                        }
+                        if (typeof window.normalizeScaleParams === 'function') {
+                            window.normalizeScaleParams(window.synthChannels[i].params);
+                        }
+                        window.synthChannels[i].patchName = window.synthChannels[i].params.savedPatchName || window.synthChannels[i].patchName || 'INIT';
+                        window.synthChannels[i].isDirty = false;
                         window.synthChannels[i].applyParams();
+
+                        if (window.synthChannels[i].channelOut) {
+                            window.synthChannels[i].channelOut.gain.value = window.synthChannels[i].params.muted ? 0 : window.synthChannels[i].params.mixVol;
+                        }
+                        const volSlider = document.getElementById(`ch-vol-${i}`);
+                        if (volSlider) volSlider.value = window.synthChannels[i].params.mixVol;
+                        const muteBtn = document.getElementById(`mute-btn-${i}`);
+                        if (muteBtn) {
+                            muteBtn.style.backgroundColor = window.synthChannels[i].params.muted ? 'var(--red)' : 'transparent';
+                            muteBtn.style.color = window.synthChannels[i].params.muted ? '#000' : 'var(--text)';
+                        }
+                        const midiSel = document.getElementById(`ui-midi-ch-${i}`);
+                        if (midiSel && window.synthChannels[i].params.midiOutCh !== undefined) {
+                            midiSel.value = window.synthChannels[i].params.midiOutCh;
+                        }
 
                         const miniT = document.getElementById(`ch-mini-thresh-${i}`);
                         const miniV = document.getElementById(`ch-val-thresh-${i}`);
@@ -1506,9 +2165,36 @@
                         window.chData[i].config = JSON.parse(JSON.stringify(preset.viz[i]));
                     }
                 }
-                if (typeof window.syncUI === 'function') window.syncUI();
+
+                if (preset.master) {
+                    if (preset.master.vol !== undefined) window.masterVolumeLevel = preset.master.vol;
+                    if (preset.master.muted !== undefined) window.isMasterMuted = !!preset.master.muted;
+                    if (window.masterGain) {
+                        window.masterGain.gain.value = window.isMasterMuted ? 0 : window.masterVolumeLevel;
+                    }
+                    const mSlider = document.getElementById('master-vol-slider');
+                    if (mSlider) mSlider.value = window.masterVolumeLevel;
+                    const mBtn = document.getElementById('btn-master-mute');
+                    if (mBtn) {
+                        mBtn.style.backgroundColor = window.isMasterMuted ? 'var(--red)' : 'transparent';
+                        mBtn.style.color = window.isMasterMuted ? '#000' : 'var(--red)';
+                    }
+                    if (preset.master.bpm !== undefined) window.masterBPM = preset.master.bpm;
+                }
+
+                if (preset.globalFX && window.globalFX) {
+                    window.globalFX = JSON.parse(JSON.stringify(preset.globalFX));
+                    if (window.masterFX) window.masterFX.updateParams(window.globalFX);
+                }
+
+                if (!skipSyncUI) {
+                    if (typeof window.updateChannelPresetDropdowns === 'function') window.updateChannelPresetDropdowns();
+                    if (typeof window.syncUI === 'function') window.syncUI();
+                }
             } catch (presetErr) {
                 console.warn('Could not restore take preset snapshot:', presetErr);
+            } finally {
+                window.isApplyingAutomation = false;
             }
         }
 
@@ -1519,8 +2205,14 @@
             if (!window.bioquadStorage) throw new Error('Storage engine not available');
             this.stop();
 
+            this.automationEvents = [];
+            this.automationCursor = 0;
+            this.followAutomation = false;
+            this.basePresetSnapshot = null;
+
             const partitioned = [[], [], [], []];
             const collectedMidiNotes = [];
+            const collectedParamEvents = [];
             let firstRecTime = null;
             let takeMeta = null;
 
@@ -1532,6 +2224,18 @@
 
                 for (let i = 0; i < recs.length; i++) {
                     const r = recs[i];
+                    if (String(r.sensor_id || '').trim() === 'PERF_PARAM' || (r.param_attr !== undefined && r.param_attr !== null && String(r.param_attr).trim() !== '')) {
+                        const pRawT = r.timestamp_ms || (r.timestamp ? Date.parse(r.timestamp) : null);
+                        const chNum = parseInt(r.channel);
+                        collectedParamEvents.push({
+                            timestamp: r.timestamp || null,
+                            timestamp_ms: (pRawT !== null && isFinite(pRawT)) ? pRawT : 0,
+                            channel: isNaN(chNum) ? 0 : chNum,
+                            attr: String(r.param_attr || '').trim(),
+                            value: r.param_value ?? ''
+                        });
+                        continue;
+                    }
                     const ch = Math.max(0, Math.min(3, (r.channel || 1) - 1));
                     const val = parseFloat(r.conductance_uS !== undefined ? r.conductance_uS : (r.value || 50));
                     if (!isNaN(val) && isFinite(val)) {
@@ -1557,10 +2261,19 @@
                         collectedMidiNotes.push(chunk.midiNotes[j]);
                     }
                 }
+
+                if (Array.isArray(chunk.paramEvents) && chunk.paramEvents.length > 0) {
+                    for (let k = 0; k < chunk.paramEvents.length; k++) {
+                        collectedParamEvents.push(chunk.paramEvents[k]);
+                    }
+                }
             });
 
             if (takeMeta && takeMeta.preset) {
                 this.restorePresetSnapshot(takeMeta.preset);
+                this.basePresetSnapshot = JSON.parse(JSON.stringify(takeMeta.preset));
+            } else if (window.biodataRecorder) {
+                this.basePresetSnapshot = window.biodataRecorder.captureCurrentPreset();
             }
 
             // O(N + M) sorted two-pointer note backfill when midiNotes need attaching to channel feeds
@@ -1606,6 +2319,16 @@
                         if (arr[i].parsedMs < minTimeMs) minTimeMs = arr[i].parsedMs;
                         validTimeCount++;
                     }
+                }
+            }
+
+            for (let i = 0; i < collectedParamEvents.length; i++) {
+                const ev = collectedParamEvents[i];
+                const ms = ev.timestamp_ms !== undefined ? ev.timestamp_ms : (ev.timestamp ? Date.parse(ev.timestamp) : null);
+                if (ms !== null && isFinite(ms)) {
+                    ev.timestamp_ms = ms;
+                    if (ms < minTimeMs) minTimeMs = ms;
+                    validTimeCount++;
                 }
             }
 
@@ -1669,11 +2392,33 @@
                 }
             }
 
+            if (collectedParamEvents.length > 0) {
+                for (let i = 0; i < collectedParamEvents.length; i++) {
+                    const ev = collectedParamEvents[i];
+                    if (!ev.attr) continue;
+                    const tOffset = (hasRealTimestamps && ev.timestamp_ms !== undefined) ? Math.max(0, ev.timestamp_ms - minTimeMs) : 0;
+                    if (tOffset > maxDurationMs) maxDurationMs = tOffset;
+                    const chParsed = parseInt(ev.channel);
+                    this.automationEvents.push({
+                        tMs: tOffset,
+                        channel: isNaN(chParsed) ? 0 : chParsed,
+                        attr: ev.attr,
+                        value: ev.value
+                    });
+                }
+                this.automationEvents.sort((a, b) => a.tMs - b.tMs);
+                this.followAutomation = this.automationEvents.length > 0;
+            }
+
             const lengths = this.channelFeeds.map(f => f.data.length).filter(len => len > 0);
             this.totalRecords = lengths.length > 0 ? Math.max(...lengths) : 0;
             this.currentIndex = 0;
             this.playbackElapsedMs = 0;
             this.totalDurationMs = maxDurationMs > 0 ? maxDurationMs : ((this.totalRecords / 30) * 1000);
+
+            if (this.followAutomation && this.automationEvents.length > 0) {
+                this.reconcileAutomationToTime(0);
+            }
 
             if (typeof window.syncUI === 'function') window.syncUI();
             this.emitChange('mapping_applied');
@@ -1763,7 +2508,12 @@
             this.pauseStartMs = 0;
             this.records = [];
             this.recordedMidiNotes = [];
+            this.paramEvents = [];
+            this.pendingParamTimers = {};
+            this.pendingParamLatest = {};
+            this.lastParamValues = {};
             this.totalPointsRecorded = 0;
+            this.totalParamEventsRecorded = 0;
             this.nextChunkIndex = 0;
             this.chunkSize = 5000;
             this.flushQueue = Promise.resolve();
@@ -1817,6 +2567,8 @@
                 activeTakeId: this.activeTakeId,
                 recordCount: totalPts,
                 totalPointsRecorded: totalPts,
+                automationCount: this.totalParamEventsRecorded,
+                hasAutomation: this.totalParamEventsRecorded > 0,
                 chunkCount: this.nextChunkIndex,
                 elapsedMs,
                 elapsedFormatted: this.formatElapsed(elapsedMs),
@@ -1830,6 +2582,88 @@
             const s = totalSec % 60;
             const tenths = Math.floor((ms % 1000) / 100);
             return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${tenths}`;
+        }
+
+        _commitPendingParam(key) {
+            const entry = this.pendingParamLatest[key];
+            if (this.pendingParamTimers[key]) {
+                clearTimeout(this.pendingParamTimers[key]);
+                delete this.pendingParamTimers[key];
+            }
+            delete this.pendingParamLatest[key];
+            if (!entry || !this.isRecording || this.isPaused) return;
+            if (this.lastParamValues[key] === entry.val) return;
+            this.lastParamValues[key] = entry.val;
+            this.paramEvents.push({
+                timestamp: new Date(entry.ts).toISOString(),
+                timestamp_ms: entry.ts,
+                channel: entry.ch,
+                attr: entry.attr,
+                value: entry.val
+            });
+            this.totalParamEventsRecorded++;
+        }
+
+        flushPendingParams() {
+            const keys = new Set([
+                ...Object.keys(this.pendingParamTimers),
+                ...Object.keys(this.pendingParamLatest)
+            ]);
+            keys.forEach(k => this._commitPendingParam(k));
+        }
+
+        clearPendingParamTimers() {
+            Object.keys(this.pendingParamTimers).forEach(k => clearTimeout(this.pendingParamTimers[k]));
+            this.pendingParamTimers = {};
+            this.pendingParamLatest = {};
+        }
+
+        recordParam(channelOneBased, attr, value, immediate = false) {
+            if (!this.isRecording || this.isPaused || !attr) return;
+            const ch = (channelOneBased === null || channelOneBased === undefined) ? 0 : parseInt(channelOneBased);
+            const normVal = normalizeParamValue(attr, value);
+            const key = `${ch}:${attr}`;
+
+            if (immediate) {
+                if (this.pendingParamTimers[key]) {
+                    clearTimeout(this.pendingParamTimers[key]);
+                    delete this.pendingParamTimers[key];
+                }
+                delete this.pendingParamLatest[key];
+                if (this.lastParamValues[key] === normVal) return;
+                const nowMs = Date.now();
+                this.lastParamValues[key] = normVal;
+                this.paramEvents.push({
+                    timestamp: new Date(nowMs).toISOString(),
+                    timestamp_ms: nowMs,
+                    channel: ch,
+                    attr,
+                    value: normVal
+                });
+                this.totalParamEventsRecorded++;
+                return;
+            }
+
+            this.pendingParamLatest[key] = { ch, attr, val: normVal, ts: Date.now() };
+            if (!this.pendingParamTimers[key]) {
+                this.pendingParamTimers[key] = setTimeout(() => {
+                    this._commitPendingParam(key);
+                }, 35);
+            }
+        }
+
+        recordSnapshotDelta(chIdxOrNull = null) {
+            if (!this.isRecording || this.isPaused) return;
+            this.flushPendingParams();
+            const nowMs = Date.now();
+            const all = extractFullStateEvents(nowMs);
+            for (let i = 0; i < all.length; i++) {
+                const ev = all[i];
+                if (chIdxOrNull !== null && chIdxOrNull !== undefined) {
+                    if (ev.channel !== 0 && ev.channel !== (chIdxOrNull + 1)) continue;
+                }
+                this.recordParam(ev.channel, ev.attr, ev.value, true);
+            }
         }
 
         start(sessionName = '') {
@@ -1848,11 +2682,15 @@
                 this.sessionName = defaultDateName;
             }
 
+            this.clearPendingParamTimers();
             this.activeTakeId = `take_${Date.now()}`;
             this.sessionPreset = this.captureCurrentPreset();
             this.recordedMidiNotes = [];
             this.records = [];
+            this.paramEvents = [];
+            this.lastParamValues = {};
             this.totalPointsRecorded = 0;
+            this.totalParamEventsRecorded = 0;
             this.nextChunkIndex = 0;
             this.flushQueue = Promise.resolve();
 
@@ -1861,6 +2699,15 @@
             this.startTimeMs = Date.now();
             this.pauseTimeAccumulatedMs = 0;
             this.lastPacketTimeByCh = [0, 0, 0, 0];
+
+            // Capture t=0 baseline performance automation snapshot
+            const baseline = extractFullStateEvents(this.startTimeMs);
+            for (let i = 0; i < baseline.length; i++) {
+                const ev = baseline[i];
+                this.lastParamValues[`${ev.channel}:${ev.attr}`] = ev.value;
+                this.paramEvents.push(ev);
+            }
+            this.totalParamEventsRecorded = this.paramEvents.length;
 
             // Persist initial take metadata immediately so even crash recovery has the header
             const initialMeta = {
@@ -1872,6 +2719,8 @@
                 durationFormatted: '00:00.0',
                 sampleCount: 0,
                 totalPointsRecorded: 0,
+                hasAutomation: this.totalParamEventsRecorded > 0,
+                automationCount: this.totalParamEventsRecorded,
                 chunkCount: 0,
                 schemaVersion: 2,
                 isRecordingActive: true,
@@ -1894,17 +2743,22 @@
         flushCurrentBuffers(isFinal = false) {
             if (!this.activeTakeId || !window.bioquadStorage) return Promise.resolve();
 
+            this.flushPendingParams();
+
             const recBatch = this.records;
             const noteBatch = this.recordedMidiNotes;
-            const hasBatchData = recBatch.length > 0 || noteBatch.length > 0;
+            const paramBatch = this.paramEvents;
+            const hasBatchData = recBatch.length > 0 || noteBatch.length > 0 || paramBatch.length > 0;
 
             if (hasBatchData) {
                 this.records = [];
                 this.recordedMidiNotes = [];
+                this.paramEvents = [];
             }
 
             const chunkIdx = hasBatchData ? this.nextChunkIndex++ : this.nextChunkIndex;
             const totalPts = this.totalPointsRecorded;
+            const totalAuto = this.totalParamEventsRecorded;
             const elapsedMs = this.getElapsedMs();
             const takeId = this.activeTakeId;
 
@@ -1917,6 +2771,8 @@
                 durationFormatted: this.formatElapsed(elapsedMs),
                 sampleCount: totalPts,
                 totalPointsRecorded: totalPts,
+                hasAutomation: totalAuto > 0,
+                automationCount: totalAuto,
                 chunkCount: this.nextChunkIndex,
                 schemaVersion: 2,
                 isRecordingActive: !isFinal,
@@ -1925,9 +2781,9 @@
 
             this.flushQueue = this.flushQueue.then(async () => {
                 if (hasBatchData) {
-                    await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch);
+                    await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch, paramBatch);
                 }
-                if (totalPts > 0 || isFinal) {
+                if (totalPts > 0 || totalAuto > 0 || isFinal) {
                     await window.bioquadStorage.saveTakeMeta(metaSnapshot);
                 }
             }).catch(err => {
@@ -1941,6 +2797,9 @@
             try {
                 const channels = (window.synthChannels || []).map(ch => {
                     const p = JSON.parse(JSON.stringify(ch.params || {}));
+                    if (typeof window.normalizeScaleParams === 'function') {
+                        window.normalizeScaleParams(p);
+                    }
                     p.savedPatchName = ch.patchName || "INIT";
                     return p;
                 });
@@ -1962,6 +2821,7 @@
 
         pause() {
             if (!this.isRecording || this.isPaused) return;
+            this.flushPendingParams();
             this.isPaused = true;
             this.pauseStartMs = Date.now();
             this.flushCurrentBuffers(false);
@@ -1977,6 +2837,7 @@
 
         async stop(autoArm = true) {
             if (!this.isRecording) return;
+            this.flushPendingParams();
             const elapsedMs = this.getElapsedMs();
             this.isRecording = false;
             this.isPaused = false;
@@ -1987,15 +2848,18 @@
 
             const takeId = this.activeTakeId;
             const totalPts = this.totalPointsRecorded;
+            const totalAuto = this.totalParamEventsRecorded;
 
-            if (totalPts > 0 || this.records.length > 0 || this.recordedMidiNotes.length > 0) {
+            if (totalPts > 0 || this.records.length > 0 || this.recordedMidiNotes.length > 0 || this.paramEvents.length > 0) {
                 // Capture duration before isRecording became false
                 const recBatch = this.records;
                 const noteBatch = this.recordedMidiNotes;
+                const paramBatch = this.paramEvents;
                 this.records = [];
                 this.recordedMidiNotes = [];
+                this.paramEvents = [];
 
-                const hasBatch = recBatch.length > 0 || noteBatch.length > 0;
+                const hasBatch = recBatch.length > 0 || noteBatch.length > 0 || paramBatch.length > 0;
                 const chunkIdx = hasBatch ? this.nextChunkIndex++ : this.nextChunkIndex;
 
                 const finalMeta = {
@@ -2007,6 +2871,8 @@
                     durationFormatted: this.formatElapsed(elapsedMs),
                     sampleCount: totalPts,
                     totalPointsRecorded: totalPts,
+                    hasAutomation: totalAuto > 0,
+                    automationCount: totalAuto,
                     chunkCount: this.nextChunkIndex,
                     schemaVersion: 2,
                     isRecordingActive: false,
@@ -2016,7 +2882,7 @@
                 try {
                     await this.flushQueue;
                     if (hasBatch) {
-                        await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch);
+                        await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch, paramBatch);
                     }
                     await window.bioquadStorage.saveTakeMeta(finalMeta);
                     window.dispatchEvent(new CustomEvent('bioquad_takes_updated', { detail: finalMeta }));
@@ -2041,9 +2907,13 @@
 
         clear() {
             this.stop(false);
+            this.clearPendingParamTimers();
             this.records = [];
             this.recordedMidiNotes = [];
+            this.paramEvents = [];
+            this.lastParamValues = {};
             this.totalPointsRecorded = 0;
+            this.totalParamEventsRecorded = 0;
             this.nextChunkIndex = 0;
             this.emitChange('clear');
         }
@@ -2143,25 +3013,59 @@
         }
 
         generateCsv(format = 'standard') {
-            if (this.records.length === 0) return '';
+            this.flushPendingParams();
+            const pevs = (this.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0));
+            const recs = this.records || [];
+            if (recs.length === 0 && pevs.length === 0) return '';
 
             const delimiter = format === 'tsv' ? '\t' : ',';
-            const headers = ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity'];
+            const esc = (v) => delimiter === ',' ? csvEscape(v) : String(v ?? '').replace(/\t/g, ' ');
+            const headers = ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity', 'param_attr', 'param_value'];
             const lines = [headers.join(delimiter)];
 
-            this.records.forEach(r => {
+            const pushRec = (r) => {
                 const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
                 const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
                 lines.push([
-                    r.timestamp,
-                    r.sensor_id,
+                    esc(r.timestamp),
+                    esc(r.sensor_id),
                     r.conductance_uS,
                     r.channel,
                     r.ticks,
                     noteVal,
-                    velVal
+                    velVal,
+                    '',
+                    ''
                 ].join(delimiter));
-            });
+            };
+
+            const pushParam = (ev) => {
+                lines.push([
+                    esc(ev.timestamp || (ev.timestamp_ms !== undefined ? new Date(ev.timestamp_ms).toISOString() : '')),
+                    'PERF_PARAM',
+                    '',
+                    ev.channel ?? 0,
+                    '',
+                    '',
+                    '',
+                    esc(ev.attr || ''),
+                    esc(ev.value ?? '')
+                ].join(delimiter));
+            };
+
+            let ri = 0, pi = 0;
+            while (ri < recs.length || pi < pevs.length) {
+                if (pi >= pevs.length) {
+                    pushRec(recs[ri++]);
+                } else if (ri >= recs.length) {
+                    pushParam(pevs[pi++]);
+                } else {
+                    const rMs = recs[ri].timestamp_ms ?? 0;
+                    const pMs = pevs[pi].timestamp_ms ?? 0;
+                    if (pMs <= rMs) pushParam(pevs[pi++]);
+                    else pushRec(recs[ri++]);
+                }
+            }
 
             return lines.join('\n');
         }

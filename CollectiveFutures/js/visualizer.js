@@ -39,6 +39,10 @@ window.setThresholdMax = function(ch, newMax) {
     const maxBtn = document.getElementById(`ch-max-btn-${ch}`);
     if (maxBtn) maxBtn.innerText = `${newMax.toFixed(2)}x`;
     
+    if (typeof window.recordPerfParam === 'function') {
+        window.recordPerfParam(ch + 1, 'threshMax', newMax, false);
+        window.recordPerfParam(ch + 1, 'threshold', p.threshold, false);
+    }
     if (typeof window.debouncedHardwareSync === 'function') window.debouncedHardwareSync(ch);
 }
 
@@ -375,9 +379,9 @@ function renderLoop() {
                     if (lfoParam && lfoParam.shape === 'random' && nowMs - ch.shState[dest] > (1000 / lfoParam.rate)) {
                         ch.shState[dest] = nowMs;
                         const shVal = (Math.random() * 2) - 1;
-                        if (dest === 'pitch' && ch.voices) { ch.voices.forEach(v => { if(v && v.sources && v.sources.osc1 && v.sources.osc1.detuneNode) v.sources.osc1.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); if(v && v.sources && v.sources.sub && v.sources.sub.detuneNode) v.sources.sub.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); }); }
+                        if (dest === 'pitch' && ch.voices) { ch.voices.forEach(v => { if(v && v.sources && v.sources.osc1 && v.sources.osc1.detuneNode) v.sources.osc1.detuneNode.setTargetAtTime(shVal * lfoParam.depth * 200, nowAudio, 0.02); }); }
                         else if (dest === 'filter' && ch.voices) { ch.voices.forEach(v => { if(v && v.vcf && v.vcf.detune) v.vcf.detune.setTargetAtTime(shVal * lfoParam.depth * 2000, nowAudio, 0.02); }); }
-                        else if (dest === 'amp' && ch.ampLfoNode) { ch.ampLfoNode.gain.setTargetAtTime(1.0 + (shVal * lfoParam.depth), nowAudio, 0.02); }
+                        else if (dest === 'amp' && ch.ampLfoNode) { ch.ampLfoNode.gain.setTargetAtTime(Math.max(0, (1.0 - lfoParam.depth * 0.5) + (shVal * lfoParam.depth * 0.5)), nowAudio, 0.02); }
                     }
                 });
             });

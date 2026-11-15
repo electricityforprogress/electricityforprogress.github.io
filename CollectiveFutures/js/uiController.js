@@ -109,7 +109,6 @@ document.addEventListener('input', (e) => {
     }
 
     if (e.target.classList.contains('v-slider') || e.target.classList.contains('dual-slider-input')) {
-        if (e.target.id === 'ui-test-injector') return; 
 
         let slider = e.target;
         let val = parseFloat(slider.value);
@@ -156,32 +155,87 @@ document.addEventListener('pointerup', (e) => {
     }
 });
 
+function hydrateLoadedChannelParams(rawParams) {
+    const base = window.defaultParams ? JSON.parse(JSON.stringify(window.defaultParams)) : {};
+    const src = (rawParams && typeof rawParams === 'object') ? JSON.parse(JSON.stringify(rawParams)) : {};
+    const merged = Object.assign(base, src);
+    ['sources', 'filter', 'lfo', 'pitchLfo', 'filterLfo', 'ampLfo', 'env', 'pitchEnv', 'filterEnv', 'ampEnv', 'fx'].forEach(k => {
+        if (base[k] && typeof base[k] === 'object') {
+            merged[k] = Object.assign({}, base[k], (src[k] && typeof src[k] === 'object') ? src[k] : {});
+            if (k === 'sources') {
+                merged.sources.osc1 = Object.assign({}, base.sources.osc1, src.sources && src.sources.osc1 ? src.sources.osc1 : {});
+                merged.sources.noise = Object.assign({}, base.sources.noise, src.sources && src.sources.noise ? src.sources.noise : {});
+            }
+        }
+    });
+    if (src.activeScaleBits === undefined) {
+        delete merged.activeScaleBits;
+    }
+    if (typeof window.normalizeScaleParams === 'function') {
+        window.normalizeScaleParams(merged);
+    }
+    return merged;
+}
+
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
-    synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx] = !synthChannels[activeSynthIndex].params.activeScaleBits[noteIdx];
-    let sel = document.getElementById('ui-scaleType');
-    if (sel) sel.value = 'custom'; 
-    updateActiveSynth('scaleType', 'custom'); 
+    const p = synthChannels[activeSynthIndex].params;
+    const decoded = typeof window.decodeScaleBits === 'function' ? window.decodeScaleBits(p.activeScaleBits) : null;
+    p.activeScaleBits = decoded || new Array(12).fill(true);
+    p.activeScaleBits[noteIdx] = !p.activeScaleBits[noteIdx];
+
+    if (typeof window.detectScaleFromBits === 'function') {
+        const detected = window.detectScaleFromBits(p.activeScaleBits, p.scaleRoot);
+        p.scaleType = detected.scaleType;
+        p.scaleRoot = detected.scaleRoot;
+    } else {
+        p.scaleType = 'custom';
+    }
+
+    const scaleRootEl = document.getElementById('ui-scaleRoot');
+    if (scaleRootEl) scaleRootEl.value = String(p.scaleRoot);
+    const scaleTypeEl = document.getElementById('ui-scaleType');
+    if (scaleTypeEl) scaleTypeEl.value = p.scaleType || 'custom';
+
+    synthChannels[activeSynthIndex].applyParams();
+    window.markChannelDirty(activeSynthIndex);
+    window.recordPerfParam(activeSynthIndex + 1, 'scaleRoot', p.scaleRoot, true);
+    window.recordPerfParam(activeSynthIndex + 1, 'scaleType', p.scaleType, true);
+    window.recordPerfParam(activeSynthIndex + 1, 'activeScaleBits', p.activeScaleBits, true);
     syncPianoUI();
+    window.debouncedHardwareSync(activeSynthIndex);
 }
 
 function applyScalePreset() {
     if(!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
-    if (p.scaleType === 'custom') return; 
-    p.activeScaleBits.fill(false); 
-    window.SCALES[p.scaleType].forEach(deg => { 
-        p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
-    });
+    p.scaleRoot = ((parseInt(p.scaleRoot, 10) || 0) % 12 + 12) % 12;
+    if (p.scaleType === 'custom') return;
+    if (typeof window.buildScaleBitsFromPreset === 'function') {
+        p.activeScaleBits = window.buildScaleBitsFromPreset(p.scaleType, p.scaleRoot);
+    } else {
+        if (!Array.isArray(p.activeScaleBits) || p.activeScaleBits.length !== 12) {
+            p.activeScaleBits = new Array(12).fill(true);
+        }
+        const degrees = (window.SCALES && window.SCALES[p.scaleType]) ? window.SCALES[p.scaleType] : (window.SCALES ? window.SCALES.chromatic : []);
+        p.activeScaleBits.fill(false);
+        degrees.forEach(deg => {
+            p.activeScaleBits[(p.scaleRoot + deg) % 12] = true;
+        });
+    }
     syncPianoUI();
 }
 
 function syncPianoUI() {
     if(!synthChannels[activeSynthIndex]) return;
-    const bits = synthChannels[activeSynthIndex].params.activeScaleBits;
+    const p = synthChannels[activeSynthIndex].params;
+    const decoded = typeof window.decodeScaleBits === 'function' ? window.decodeScaleBits(p.activeScaleBits) : null;
+    if (decoded) p.activeScaleBits = decoded;
+    else if (!Array.isArray(p.activeScaleBits) || p.activeScaleBits.length !== 12) p.activeScaleBits = new Array(12).fill(true);
+    const bits = p.activeScaleBits;
     for(let i = 0; i < 12; i++) { 
         let k = document.getElementById(`pkey-${i}`); 
-        if(k) k.classList.toggle('active', bits[i]); 
+        if(k) k.classList.toggle('active', Boolean(bits[i])); 
     }
 }
 
@@ -249,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (slider.id.includes('env')) group = 'env';
                     if (slider.id.includes('fx')) group = 'fx';
                     
-                    if (slider.id !== 'ui-test-injector') showTooltip(e.clientX, e.clientY - 20, steppedVal, param, group, slider);
+                    showTooltip(e.clientX, e.clientY - 20, steppedVal, param, group, slider);
                 }
             });
 
@@ -276,6 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let newBpm = startBpm + (deltaY * 0.5); 
             newBpm = Math.max(60, Math.min(240, newBpm));
             window.masterBPM = newBpm;
+            window.recordPerfParam(0, 'master.bpm', newBpm, false);
             syncUI(); 
         });
         window.addEventListener('pointerup', () => { isDraggingBpm = false; });
@@ -292,7 +347,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     let lbl = document.getElementById(labelId);
                     if (lbl) lbl.innerText = formatFn(val);
                 }
-                if (paramKey !== 'testIntensity') window.debouncedHardwareSync(activeSynthIndex);
+                window.recordPerfParam(activeSynthIndex + 1, paramKey, val, false);
+                window.debouncedHardwareSync(activeSynthIndex);
             }
         });
     };
@@ -311,6 +367,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if(nText) nText.innerText = `${midiToNote(min)} (${min}) ↔ ${midiToNote(max)} (${max})`;
         synthChannels[activeSynthIndex].params.minNote = min;
         synthChannels[activeSynthIndex].params.maxNote = max;
+        window.recordPerfParam(activeSynthIndex + 1, 'minNote', min, false);
+        window.recordPerfParam(activeSynthIndex + 1, 'maxNote', max, false);
         window.debouncedHardwareSync(activeSynthIndex);
     };
     if(nMin) nMin.addEventListener('input', updateNote);
@@ -328,6 +386,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if(vText) vText.innerText = `${min} ↔ ${max}`;
         synthChannels[activeSynthIndex].params.velMin = min;
         synthChannels[activeSynthIndex].params.velMax = max;
+        window.recordPerfParam(activeSynthIndex + 1, 'velMin', min, false);
+        window.recordPerfParam(activeSynthIndex + 1, 'velMax', max, false);
         window.debouncedHardwareSync(activeSynthIndex);
     };
     if(vMin) vMin.addEventListener('input', updateVel);
@@ -342,6 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const spans = e.target.nextElementSibling.querySelectorAll('span');
             spans.forEach(s => { s.style.color = '#666'; s.style.fontWeight = 'normal'; });
             if(spans[val]) { spans[val].style.color = 'var(--cyan)'; spans[val].style.fontWeight = 'bold'; }
+            window.recordPerfParam(activeSynthIndex + 1, 'quantize', val, false);
             window.debouncedHardwareSync(activeSynthIndex);
         });
     }
@@ -384,7 +445,7 @@ function buildMixerAndMidiUI() {
         <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px; border-right: none !important;">
             <div class="strip-label" style="color: var(--cyan); margin-bottom: 5px;">MIX</div>
             <div class="strip-controls" style="justify-content: center; width: 100%;">
-                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider slider-master" min="0" max="1" step="0.01" value="0.75" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel;"></div>
+                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider slider-master" min="0" max="1" step="0.01" value="0.75" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel; window.recordPerfParam(0, 'master.vol', window.masterVolumeLevel, false);"></div>
             </div>
             <div style="height: 25px; margin-top: 5px;"></div>
         </div>`;
@@ -394,6 +455,7 @@ function buildMixerAndMidiUI() {
 function updateMidiChannel(synthCh, midiCh) { 
     if (synthChannels[synthCh]) {
         synthChannels[synthCh].params.midiOutCh = parseInt(midiCh); 
+        window.recordPerfParam(synthCh + 1, 'midiOutCh', synthChannels[synthCh].params.midiOutCh, true);
         window.debouncedHardwareSync(synthCh);
     }
 }
@@ -401,6 +463,7 @@ function updateMidiChannel(synthCh, midiCh) {
 function toggleMasterMute() {
     window.isMasterMuted = !window.isMasterMuted;
     if(window.masterGain) window.masterGain.gain.value = window.isMasterMuted ? 0 : window.masterVolumeLevel;
+    window.recordPerfParam(0, 'master.muted', window.isMasterMuted, true);
     const btn = document.getElementById('btn-master-mute');
     if(btn) {
         btn.style.backgroundColor = window.isMasterMuted ? 'var(--red)' : 'transparent';
@@ -421,6 +484,7 @@ function tapTempo() {
         let newBpm = 60000 / avg;
         if(newBpm >= 60 && newBpm <= 240) { 
             window.masterBPM = newBpm; 
+            window.recordPerfParam(0, 'master.bpm', newBpm, true);
             syncUI(); 
             if (window.bleTxCharacteristic && typeof window.sendHardwareCC === 'function') {
                 for (let i=0; i<4; i++) window.sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
@@ -535,10 +599,7 @@ window.syncParamsToHardware = function(chIdx) {
         window.sendHardwareCC(chIdx, 95, p.legato === 1 ? 127 : 0);
     }
     
-    let mask = 0;
-    for (let i = 0; i < 12; i++) {
-        if (p.activeScaleBits[i]) mask |= (1 << i);
-    }
+    const mask = typeof window.encodeScaleMask === 'function' ? window.encodeScaleMask(p.activeScaleBits) : 0x0FFF;
     if (typeof window.sendHardwareScale === 'function') window.sendHardwareScale(chIdx, mask);
 };
 
@@ -546,6 +607,7 @@ function updateActiveSynth(param, value) {
     if (param === 'bpm') {
         if (window.midiClockMode === 'in') return;
         window.masterBPM = isNaN(value) ? window.masterBPM : parseFloat(value);
+        window.recordPerfParam(0, 'master.bpm', window.masterBPM, false);
         syncUI();
         if (window.bleTxCharacteristic && typeof window.sendHardwareCC === 'function') {
             for (let i=0; i<4; i++) window.sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
@@ -554,63 +616,156 @@ function updateActiveSynth(param, value) {
     }
     
     if (!synthChannels[activeSynthIndex]) return;
+    const p = synthChannels[activeSynthIndex].params;
     
     if (param === 'stealMode' || param === 'steal') {
-        synthChannels[activeSynthIndex].params.stealMode = value || 'none';
-        synthChannels[activeSynthIndex].params.steal = value || 'none';
-    } else if (param === 'scaleType' || param === 'scaleRoot') {
-        synthChannels[activeSynthIndex].params[param] = value;
+        p.stealMode = value || 'none';
+        p.steal = value || 'none';
+        window.recordPerfParam(activeSynthIndex + 1, 'stealMode', p.stealMode, true);
+    } else if (param === 'scaleRoot') {
+        const normRoot = ((parseInt(value, 10) || 0) % 12 + 12) % 12;
+        p.scaleRoot = normRoot;
+        window.recordPerfParam(activeSynthIndex + 1, 'scaleRoot', normRoot, true);
+    } else if (param === 'scaleType') {
+        p.scaleType = String(value || 'chromatic');
+        window.recordPerfParam(activeSynthIndex + 1, 'scaleType', p.scaleType, true);
     } else {
-        synthChannels[activeSynthIndex].params[param] = isNaN(value) ? value : parseFloat(value);
+        p[param] = isNaN(value) ? value : parseFloat(value);
+        window.recordPerfParam(activeSynthIndex + 1, param, p[param], param === 'legato');
     }
     
     if (param === 'scaleType' || param === 'scaleRoot') {
-        const p = synthChannels[activeSynthIndex].params;
         if (p.scaleType !== 'custom') {
-            p.activeScaleBits.fill(false); 
-            window.SCALES[p.scaleType].forEach(deg => { 
-                p.activeScaleBits[(parseInt(p.scaleRoot) + deg) % 12] = true; 
-            });
+            if (typeof window.buildScaleBitsFromPreset === 'function') {
+                p.activeScaleBits = window.buildScaleBitsFromPreset(p.scaleType, p.scaleRoot);
+            } else {
+                if (!Array.isArray(p.activeScaleBits) || p.activeScaleBits.length !== 12) {
+                    p.activeScaleBits = new Array(12).fill(true);
+                }
+                const degrees = (window.SCALES && window.SCALES[p.scaleType]) ? window.SCALES[p.scaleType] : (window.SCALES ? window.SCALES.chromatic : []);
+                p.activeScaleBits.fill(false);
+                degrees.forEach(deg => {
+                    p.activeScaleBits[(p.scaleRoot + deg) % 12] = true;
+                });
+            }
+            window.recordPerfParam(activeSynthIndex + 1, 'activeScaleBits', p.activeScaleBits, true);
             if (typeof syncPianoUI === 'function') syncPianoUI();
         }
+        const scaleRootEl = document.getElementById('ui-scaleRoot');
+        if (scaleRootEl) scaleRootEl.value = String(p.scaleRoot);
+        const scaleTypeEl = document.getElementById('ui-scaleType');
+        if (scaleTypeEl) scaleTypeEl.value = p.scaleType;
     }
     
     synthChannels[activeSynthIndex].applyParams();
     window.markChannelDirty(activeSynthIndex);
 
-    if (param !== 'testIntensity' && param !== 'testInjector') {
-        window.debouncedHardwareSync(activeSynthIndex);
-    }
+    window.debouncedHardwareSync(activeSynthIndex);
 }
 
 // --- GLOBAL PRESETS ---
 let globalPresets = {};
 
+function normalizePresetEntry(presetData) {
+    if (!presetData || typeof presetData !== 'object') return presetData;
+    const channelData = presetData.channels || presetData;
+    if (Array.isArray(channelData)) {
+        for (let i = 0; i < 4; i++) {
+            if (channelData[i]) channelData[i] = hydrateLoadedChannelParams(channelData[i]);
+        }
+    }
+    return presetData;
+}
+
+function getActiveChannelPresetMap() {
+    try {
+        const raw = localStorage.getItem('biodataActiveChannelPresets');
+        const parsed = raw ? JSON.parse(raw) : {};
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function setActiveChannelPresetOverride(ch, name) {
+    try {
+        const map = getActiveChannelPresetMap();
+        if (name) map[String(ch)] = name;
+        else delete map[String(ch)];
+        localStorage.setItem('biodataActiveChannelPresets', JSON.stringify(map));
+    } catch (e) {}
+}
+
+function clearActiveChannelPresetOverrides() {
+    try { localStorage.removeItem('biodataActiveChannelPresets'); } catch (e) {}
+}
+
 function loadPresetsFromStorage() {
+    let storedPresets = {};
     try {
         const stored = localStorage.getItem('biodataPresets');
-        if (stored) globalPresets = JSON.parse(stored);
-        else globalPresets = {};
+        if (stored) storedPresets = JSON.parse(stored) || {};
     } catch(e) { console.error("Error loading presets", e); }
+
+    const hasStoredAmbientOrchid = Boolean(storedPresets && Object.prototype.hasOwnProperty.call(storedPresets, 'Ambient Orchid'));
+    globalPresets = { ...storedPresets };
+
+    Object.keys(globalPresets).forEach(key => {
+        globalPresets[key] = normalizePresetEntry(globalPresets[key]);
+    });
     
     if (window.FACTORY_PRESETS) {
         Object.keys(window.FACTORY_PRESETS).forEach(key => {
-            if (!globalPresets[key]) globalPresets[key] = window.FACTORY_PRESETS[key];
+            if (!globalPresets[key]) globalPresets[key] = normalizePresetEntry(JSON.parse(JSON.stringify(window.FACTORY_PRESETS[key])));
         });
     }
     
     updatePresetDropdown();
+
+    let storedChannelPresets = {};
+    try {
+        const storedCh = localStorage.getItem('biodataChannelPresets');
+        if (storedCh) storedChannelPresets = JSON.parse(storedCh) || {};
+    } catch(e) {}
     
     if (typeof loadChannelPresetsFromStorage === 'function') {
         loadChannelPresetsFromStorage(); 
     }
 
-    if (globalPresets["Ambient Orchid"]) {
-        setTimeout(() => {
-            loadPreset("Ambient Orchid");
-            const sel = document.getElementById('preset-select');
-            if (sel) sel.value = "Ambient Orchid";
-        }, 300);
+    // If Ambient Orchid is still using its factory composite and the user saved custom scales
+    // onto any of the default channel patches (Deep Sub Drone, Soft Plucks, etc.), reflect those
+    // saved channel patches on initial load.
+    if (!hasStoredAmbientOrchid && globalPresets["Ambient Orchid"] && Array.isArray(globalPresets["Ambient Orchid"].channels)) {
+        globalPresets["Ambient Orchid"].channels = globalPresets["Ambient Orchid"].channels.map(chParams => {
+            const patchName = chParams && chParams.savedPatchName;
+            if (patchName && Object.prototype.hasOwnProperty.call(storedChannelPresets, patchName) && globalChannelPresets[patchName] && globalChannelPresets[patchName].params) {
+                const updated = hydrateLoadedChannelParams(globalChannelPresets[patchName].params);
+                updated.savedPatchName = patchName;
+                return updated;
+            }
+            return chParams;
+        });
+    }
+
+    let savedActive = null;
+    try { savedActive = localStorage.getItem('biodataActivePreset'); } catch(e) {}
+    const initialPreset = (savedActive && globalPresets[savedActive])
+        ? savedActive
+        : (globalPresets["Ambient Orchid"] ? "Ambient Orchid" : (Object.keys(globalPresets)[0] || ""));
+
+    if (initialPreset) {
+        loadPreset(initialPreset, { preserveChannelOverrides: true });
+    }
+
+    const chOverrides = getActiveChannelPresetMap();
+    for (let ch = 0; ch < 4; ch++) {
+        const overrideName = chOverrides[String(ch)];
+        if (overrideName && globalChannelPresets[overrideName]) {
+            loadChannelPreset(ch, overrideName, { skipTabSelect: true, skipPersistOverride: true });
+        }
+    }
+    if (typeof selectTab === 'function') {
+        selectTab(0);
     }
 }
 
@@ -643,7 +798,8 @@ function savePreset(forceNew = false) {
     
     const presetData = {
         channels: synthChannels.map(ch => {
-            let p = JSON.parse(JSON.stringify(ch.params));
+            let p = hydrateLoadedChannelParams(ch.params);
+            ch.params = hydrateLoadedChannelParams(p);
             p.savedPatchName = ch.patchName || "INIT";
             return p;
         }),
@@ -654,6 +810,8 @@ function savePreset(forceNew = false) {
     
     globalPresets[name] = presetData;
     localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+    try { localStorage.setItem('biodataActivePreset', name); } catch(e) {}
+    clearActiveChannelPresetOverrides();
     updatePresetDropdown();
     if(select) select.value = name;
 }
@@ -666,20 +824,31 @@ function deleteCurrentPreset() {
     if(confirm(`Are you sure you want to delete the preset "${name}"?`)) {
         delete globalPresets[name];
         localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+        try {
+            if (localStorage.getItem('biodataActivePreset') === name) {
+                localStorage.removeItem('biodataActivePreset');
+            }
+        } catch(e) {}
         updatePresetDropdown();
         if(select) select.value = "";
     }
 }
 
-function loadPreset(name) {
+function loadPreset(name, options = {}) {
     if (!name || !globalPresets[name]) return;
     if(typeof ensureSynths === 'function') ensureSynths();
+    try { localStorage.setItem('biodataActivePreset', name); } catch(e) {}
+    if (!options || !options.preserveChannelOverrides) {
+        clearActiveChannelPresetOverrides();
+    }
+    const sel = document.getElementById('preset-select');
+    if (sel) sel.value = name;
     const presetData = globalPresets[name];
     const channelData = presetData.channels || presetData; 
     
     for (let i = 0; i < 4; i++) {
         if (channelData[i] && synthChannels[i]) {
-            synthChannels[i].params = JSON.parse(JSON.stringify(channelData[i]));
+            synthChannels[i].params = hydrateLoadedChannelParams(channelData[i]);
             synthChannels[i].applyParams();
             synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
             
@@ -763,6 +932,7 @@ function loadPreset(name) {
     
     if (typeof updateChannelPresetDropdowns === 'function') updateChannelPresetDropdowns();
     syncUI();
+    window.recordPerfSnapshotDelta(null);
 
     for (let i=0; i<4; i++) {
         if (typeof window.syncParamsToHardware === 'function') window.syncParamsToHardware(i);
@@ -786,6 +956,9 @@ function importPresets(event) {
         try {
             const imported = JSON.parse(e.target.result);
             if (typeof imported === 'object' && imported !== null) {
+                Object.keys(imported).forEach(key => {
+                    imported[key] = normalizePresetEntry(imported[key]);
+                });
                 globalPresets = { ...globalPresets, ...imported };
                 localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
                 updatePresetDropdown();
@@ -800,6 +973,8 @@ function importPresets(event) {
 function clearAllPresets() {
     if(confirm("Are you sure you want to delete all saved presets? This cannot be undone.")) {
         localStorage.removeItem('biodataPresets');
+        localStorage.removeItem('biodataActivePreset');
+        clearActiveChannelPresetOverrides();
         globalPresets = {};
         updatePresetDropdown();
         alert("All presets have been cleared.");
@@ -860,6 +1035,11 @@ window.updateEnvTimeMode = function(val) {
         if (env.rel > 5.0) env.rel = 5.0;
     }
     
+    window.recordPerfParam(activeSynthIndex + 1, `${activeEnvView}.timeMode`, val, true);
+    window.recordPerfParam(activeSynthIndex + 1, `${activeEnvView}.atk`, env.atk, true);
+    window.recordPerfParam(activeSynthIndex + 1, `${activeEnvView}.dec`, env.dec, true);
+    window.recordPerfParam(activeSynthIndex + 1, `${activeEnvView}.rel`, env.rel, true);
+
     synthChannels[activeSynthIndex].applyParams();
     syncUI();
     window.markChannelDirty(activeSynthIndex);
@@ -872,6 +1052,8 @@ window.updateLfoRateMode = function(val) {
     let rate = p[activeLfoView].rate;
     if (val === 'lo' && rate > 20) p[activeLfoView].rate = 20;
     if (val === 'hi' && rate < 20) p[activeLfoView].rate = 20;
+    window.recordPerfParam(activeSynthIndex + 1, `${activeLfoView}.rateMode`, val, true);
+    window.recordPerfParam(activeSynthIndex + 1, `${activeLfoView}.rate`, p[activeLfoView].rate, true);
     synthChannels[activeSynthIndex].applyParams();
     syncUI();
     window.debouncedHardwareSync(activeSynthIndex);
@@ -880,28 +1062,34 @@ window.updateLfoRateMode = function(val) {
 function updateNestedSynth(group, param, value) {
     if (group && group.startsWith('globalFx') && window.globalFX) {
         const fxType = group.split('.')[1];
-        window.globalFX[fxType][param] = isNaN(value) ? value : parseFloat(value);
+        const parsed = isNaN(value) ? value : parseFloat(value);
+        window.globalFX[fxType][param] = parsed;
         if (window.masterFX) window.masterFX.updateParams(window.globalFX);
+        window.recordPerfParam(0, `globalFX.${fxType}.${param}`, parsed, false);
         return;
     }
     
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
     let targetObj;
+    let prefix = group;
     
-    if (group === 'lfo') targetObj = p[activeLfoView];
-    else if (group === 'env') targetObj = p[activeEnvView];
+    if (group === 'lfo') { targetObj = p[activeLfoView]; prefix = activeLfoView; }
+    else if (group === 'env') { targetObj = p[activeEnvView]; prefix = activeEnvView; }
     else if (group === 'filter') targetObj = p.filter;
     else if (group === 'sources') targetObj = p.sources;
     else if (group === 'fx') targetObj = p.fx;
     
+    const parsedVal = isNaN(value) ? value : parseFloat(value);
     if (targetObj) {
         if (param.includes('.')) {
             const keys = param.split('.');
-            targetObj[keys[0]][keys[1]] = isNaN(value) ? value : parseFloat(value);
+            targetObj[keys[0]][keys[1]] = parsedVal;
         } else { 
-            targetObj[param] = isNaN(value) ? value : parseFloat(value); 
+            targetObj[param] = parsedVal; 
         }
+        const isDiscrete = (param === 'shape' || param === 'osc1.type');
+        window.recordPerfParam(activeSynthIndex + 1, `${prefix}.${param}`, parsedVal, isDiscrete);
     }
     
     synthChannels[activeSynthIndex].applyParams();
@@ -1005,7 +1193,16 @@ function syncUI() {
     if (!synthChannels[activeSynthIndex]) return;
     const p = synthChannels[activeSynthIndex].params;
     
-    ['ui-scaleRoot', 'ui-scaleType'].forEach(id => { let el = document.getElementById(id); if(el) el.value = p[id.replace('ui-', '')]; });
+    const normRoot = ((parseInt(p.scaleRoot, 10) || 0) % 12 + 12) % 12;
+    p.scaleRoot = normRoot;
+    const scaleRootEl = document.getElementById('ui-scaleRoot');
+    if (scaleRootEl) scaleRootEl.value = String(normRoot);
+    const scaleTypeEl = document.getElementById('ui-scaleType');
+    if (scaleTypeEl) {
+        const targetType = p.scaleType || 'chromatic';
+        const hasOpt = Array.from(scaleTypeEl.options || []).some(opt => opt.value === targetType);
+        scaleTypeEl.value = hasOpt ? targetType : 'custom';
+    }
     const stealEl = document.getElementById('ui-steal');
     if (stealEl) stealEl.value = p.stealMode || p.steal || 'none';
     const waveEl = document.getElementById('ui-wave'); if(waveEl) waveEl.value = p.sources.osc1.type;
@@ -1056,8 +1253,6 @@ function syncUI() {
 
     setV('ui-slider-density', p.density); setT('ui-density-display', p.density + '%');
     setV('ui-quantize', p.quantize);
-    let testInj = document.getElementById('ui-test-injector');
-    if (testInj) testInj.value = p.testIntensity || 0;
     
     let qSlider = document.getElementById('ui-quantize');
     if (qSlider) {
@@ -1140,11 +1335,20 @@ function loadChannelPresetsFromStorage() {
         if (stored) globalChannelPresets = JSON.parse(stored);
     } catch(e) { console.error("Error loading channel presets", e); }
     
+    Object.keys(globalChannelPresets).forEach(key => {
+        if (globalChannelPresets[key] && globalChannelPresets[key].params) {
+            globalChannelPresets[key].params = hydrateLoadedChannelParams(globalChannelPresets[key].params);
+        }
+    });
+
     // Inject factory channel presets into the dropdowns
     if (window.FACTORY_CHANNEL_PRESETS) {
         Object.keys(window.FACTORY_CHANNEL_PRESETS).forEach(key => {
             if (!globalChannelPresets[key]) {
                 globalChannelPresets[key] = JSON.parse(JSON.stringify(window.FACTORY_CHANNEL_PRESETS[key]));
+                if (globalChannelPresets[key].params) {
+                    globalChannelPresets[key].params = hydrateLoadedChannelParams(globalChannelPresets[key].params);
+                }
             }
         });
     }
@@ -1162,17 +1366,17 @@ function updateChannelPresetDropdowns() {
         };
 
         const currentVal = select.value;
+        const patchName = (synthChannels[i] && synthChannels[i].patchName) ? synthChannels[i].patchName : "INIT";
         select.innerHTML = '<option value="">-- Select --</option>';
         Object.keys(globalChannelPresets).forEach(name => {
             let opt = document.createElement('option');
             opt.value = name; opt.text = name; 
             select.appendChild(opt);
         });
-        select.value = globalChannelPresets[currentVal] ? currentVal : "";
+        select.value = globalChannelPresets[patchName] ? patchName : (globalChannelPresets[currentVal] ? currentVal : "");
         
         const btn = document.getElementById(`ch-preset-btn-${i}`);
         if (btn) {
-            let patchName = (synthChannels[i] && synthChannels[i].patchName) ? synthChannels[i].patchName : "INIT";
             let dirtyStar = (synthChannels[i] && synthChannels[i].isDirty && patchName !== "INIT") ? "*" : "";
             btn.innerHTML = `${patchName}${dirtyStar} ▼`;
             
@@ -1200,13 +1404,16 @@ function saveChannelPreset(ch, forceNew = false) {
         if (!name || name.trim() === "") return;
     }
     
+    const normalizedParams = hydrateLoadedChannelParams(synthChannels[ch].params);
+    synthChannels[ch].params = hydrateLoadedChannelParams(normalizedParams);
     const presetData = {
-        params: JSON.parse(JSON.stringify(synthChannels[ch].params)),
+        params: normalizedParams,
         config: chData[ch] && chData[ch].config ? JSON.parse(JSON.stringify(chData[ch].config)) : null
     };
     
     globalChannelPresets[name] = presetData;
     localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
+    setActiveChannelPresetOverride(ch, name);
     
     synthChannels[ch].patchName = name;
     synthChannels[ch].isDirty = false;
@@ -1219,14 +1426,14 @@ function saveChannelPreset(ch, forceNew = false) {
     }, 150);
 }
 
-function loadChannelPreset(ch, name) {
+function loadChannelPreset(ch, name, options = {}) {
     if (!name || !globalChannelPresets[name]) return;
     if(typeof ensureSynths === 'function') ensureSynths();
     
     const presetData = globalChannelPresets[name];
     
     if (presetData.params && synthChannels[ch]) {
-        synthChannels[ch].params = JSON.parse(JSON.stringify(presetData.params));
+        synthChannels[ch].params = hydrateLoadedChannelParams(presetData.params);
         synthChannels[ch].applyParams();
         
         if (synthChannels[ch].channelOut) {
@@ -1279,12 +1486,18 @@ function loadChannelPreset(ch, name) {
     
     synthChannels[ch].patchName = name;
     synthChannels[ch].isDirty = false;
+    if (!options || !options.skipPersistOverride) {
+        setActiveChannelPresetOverride(ch, name);
+    }
     updateChannelPresetDropdowns();
     
     let select = document.getElementById(`ch-preset-select-${ch}`);
     if(select) select.value = name;
     
-    selectTab(ch); 
+    if (!options || !options.skipTabSelect) {
+        selectTab(ch);
+    }
+    window.recordPerfSnapshotDelta(ch);
     
     setTimeout(() => {
         let btn = document.getElementById(`ch-preset-btn-${ch}`);
@@ -1303,6 +1516,10 @@ function deleteChannelPreset(ch) {
     if(confirm(`Are you sure you want to delete the channel preset "${name}"?`)) {
         delete globalChannelPresets[name];
         localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
+        const overrides = getActiveChannelPresetMap();
+        Object.keys(overrides).forEach(k => {
+            if (overrides[k] === name) setActiveChannelPresetOverride(parseInt(k, 10), null);
+        });
         if (synthChannels[ch].patchName === name) {
             synthChannels[ch].patchName = "INIT";
             synthChannels[ch].isDirty = false;
@@ -1336,10 +1553,12 @@ const catchVisualizerSliders = (e) => {
                 synthChannels[ch].params.threshold = val;
                 let vEl = document.getElementById(`ch-val-thresh-${ch}`);
                 if (vEl) vEl.innerText = val.toFixed(2) + 'x';
+                window.recordPerfParam(ch + 1, 'threshold', val, false);
             } else {
                 synthChannels[ch].params.sampleSize = parseInt(e.target.value);
                 let wEl = document.getElementById(`ch-val-window-${ch}`);
                 if (wEl) wEl.innerText = e.target.value;
+                window.recordPerfParam(ch + 1, 'sampleSize', synthChannels[ch].params.sampleSize, false);
             }
             if (typeof window.debouncedHardwareSync === 'function') window.debouncedHardwareSync(ch);
         }
@@ -1348,3 +1567,52 @@ const catchVisualizerSliders = (e) => {
 
 document.addEventListener('input', catchVisualizerSliders, true);
 document.addEventListener('change', catchVisualizerSliders, true);
+
+window.positionDropdownPanel = function(widget) {
+    if (!widget || !widget.classList.contains('show')) return;
+    const panel = widget.querySelector('.dropdown-content');
+    if (!panel) return;
+
+    panel.style.left = '';
+    panel.style.right = '';
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const margin = 12;
+    panel.style.maxWidth = Math.max(180, vw - margin * 2) + 'px';
+
+    const wRect = widget.getBoundingClientRect();
+    let pRect = panel.getBoundingClientRect();
+
+    if (pRect.left < margin) {
+        panel.style.left = '0px';
+        panel.style.right = 'auto';
+        pRect = panel.getBoundingClientRect();
+    }
+
+    if (pRect.right > vw - margin) {
+        const targetViewportLeft = Math.max(margin, vw - margin - pRect.width);
+        panel.style.left = (targetViewportLeft - wRect.left) + 'px';
+        panel.style.right = 'auto';
+    } else if (pRect.left < margin) {
+        panel.style.left = (margin - wRect.left) + 'px';
+        panel.style.right = 'auto';
+    }
+};
+
+window.toggleDropdownWidget = function(widget, event) {
+    if (event) event.stopPropagation();
+    if (!widget) return;
+    const willShow = !widget.classList.contains('show');
+    document.querySelectorAll('.dropdown-widget.show').forEach(w => {
+        if (w !== widget) w.classList.remove('show');
+    });
+    widget.classList.toggle('show', willShow);
+    if (willShow) {
+        window.positionDropdownPanel(widget);
+    }
+};
+
+window.addEventListener('resize', () => {
+    document.querySelectorAll('.dropdown-widget.show').forEach(w => {
+        window.positionDropdownPanel(w);
+    });
+});

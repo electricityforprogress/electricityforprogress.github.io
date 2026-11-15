@@ -3,7 +3,7 @@
  * Designed for pure vanilla static hosting and GitHub Pages.
  */
 
-const CACHE_NAME = 'bioquad-stream-v1.1.0';
+const CACHE_NAME = 'bioquad-stream-v1.2.8';
 
 const PRECACHE_URLS = [
   './',
@@ -57,7 +57,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Stale-While-Revalidate for app assets, Cache-First for fonts & CDN
+// Fetch: Network-First for app assets (with offline cache fallback), Cache-First for fonts & CDN
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -85,25 +85,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell & local files (Stale-While-Revalidate)
+  // App shell & local files (Network-First so updates apply immediately on reload; offline falls back to cache)
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, clone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // If network fails (offline), return cached version
-          return cachedResponse;
-        });
-
-      return cachedResponse || fetchPromise;
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, clone);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

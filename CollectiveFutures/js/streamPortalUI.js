@@ -280,21 +280,27 @@
       }
     }
 
-    // Transport buttons state
-    const stepBackBtn = $('btn-step-back');
-    const stepFwdBtn = $('btn-step-forward');
-    const stopBtn = $('btn-stop-stream');
+    // Loop & Auto toggle state
     const loopBtn = $('btn-loop-stream');
-
-    if (stepBackBtn) stepBackBtn.disabled = !isStreamingActive;
-    if (stepFwdBtn) stepFwdBtn.disabled = !isStreamingActive;
-    if (stopBtn) stopBtn.disabled = !isStreamingActive;
     if (loopBtn) {
       if (streamState.isLooping) {
         loopBtn.classList.add('active-loop');
       } else {
         loopBtn.classList.remove('active-loop');
       }
+    }
+
+    const autoBtn = $('btn-auto-stream');
+    if (autoBtn) {
+      const hasAuto = !!streamState.hasAutomation;
+      autoBtn.disabled = !hasAuto;
+      autoBtn.classList.toggle('active-auto', hasAuto && !!streamState.followAutomation);
+      autoBtn.setAttribute('aria-pressed', (hasAuto && !!streamState.followAutomation) ? 'true' : 'false');
+      autoBtn.title = !hasAuto
+        ? 'No parameter automation in loaded file'
+        : (streamState.followAutomation
+          ? 'Following recorded synth automation (click for manual control)'
+          : 'Manual control active (click to follow recorded automation)');
     }
 
     // 3. Scrubber slider & time display
@@ -324,21 +330,16 @@
     }
 
     // 5. Playback speed
-    const speedSlider = $('stream-speed-slider');
     const speedVal = $('stream-speed-val');
-    if (speedSlider) speedSlider.value = streamState.playbackRate || 1.0;
     if (speedVal) speedVal.textContent = `${(streamState.playbackRate || 1.0).toFixed(1)}x`;
 
     // 6. Channel status cards
     for (let ch = 0; ch < 4; ch++) {
       const feed = streamState.activeChannels && streamState.activeChannels[ch];
       const hasData = feed && feed.active;
-      const synthCh = window.synthChannels && window.synthChannels[ch];
-      const winSize = synthCh && synthCh.params ? synthCh.params.sampleSize : 40;
 
       const labelEl = $(`stream-ch-label-${ch}`);
       const valEl = $(`stream-ch-val-${ch}`);
-      const winEl = $(`stream-ch-win-${ch}`);
       const clearBtn = $(`stream-ch-clear-${ch}`);
 
       if (labelEl) {
@@ -347,13 +348,12 @@
       }
       if (valEl) {
         if (hasData && feed.currentVal !== null && feed.currentVal !== undefined) {
-          valEl.textContent = `${feed.currentVal.toFixed(1)} µS`;
+          valEl.textContent = `${feed.currentVal.toFixed(1)}`;
           valEl.style.display = 'inline';
         } else {
           valEl.style.display = 'none';
         }
       }
-      if (winEl) winEl.textContent = `W:${winSize}`;
       if (clearBtn) clearBtn.style.display = hasData ? 'inline-block' : 'none';
     }
 
@@ -483,7 +483,12 @@
 
       let html = '';
       takes.forEach((take) => {
-        const pts = (take.totalPointsRecorded || take.sampleCount || 0).toLocaleString();
+        const storedPts = take.storedRecordCount !== undefined ? take.storedRecordCount : (take.sampleCount || 0);
+        const totalPts = take.totalPointsRecorded || storedPts;
+        const isLegacyCapped = take.schemaVersion !== 2 && storedPts > 0 && totalPts > storedPts;
+        const ptsText = isLegacyCapped
+          ? `${storedPts.toLocaleString()} / ${totalPts.toLocaleString()} pts (legacy cap)`
+          : `${totalPts.toLocaleString()} pts`;
         const dur = take.durationFormatted || '00:00.0';
         html += `
           <div class="saved-take-card">
@@ -492,7 +497,8 @@
               <div class="tabular-nums" style="font-size: 10px; color: #8b949e; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px;">
                 <span>${take.date}</span>
                 <span style="color: var(--green); font-weight: 700;">⏱ ${dur}</span>
-                <span style="color: var(--cyan); font-weight: 700;">${pts} pts</span>
+                <span style="color: var(--cyan); font-weight: 700;">${ptsText}</span>
+                ${take.hasAutomation ? `<span style="color: var(--yellow); font-weight: 700;">· + Automation</span>` : ''}
               </div>
             </div>
             <div class="saved-take-actions">
@@ -613,16 +619,21 @@
         setExportStatus('working', 'PREPARING', `Packaging chunk ${chunkIdx} / ${totalChunks} (${count.toLocaleString()} pts)...`);
       });
 
-      if (!res || res.recordCount === 0) {
+      if (!res || (res.recordCount === 0 && (res.automationCount || 0) === 0)) {
         setExportStatus('error', 'EMPTY', 'This recording has no biodata points to export.');
         return;
       }
+
+      const autoCount = res.automationCount || 0;
+      const contentsSummary = autoCount > 0
+        ? `${res.recordCount.toLocaleString()} records · ${autoCount.toLocaleString()} automation`
+        : `${res.recordCount.toLocaleString()} records`;
 
       finalizePreparedExport({
         blob: res.blob,
         filename: res.filename,
         formatLabel: 'CSV (text/csv)',
-        contentsText: `${res.recordCount.toLocaleString()} records`,
+        contentsText: contentsSummary,
         allowClipboard: true
       });
     } catch (err) {
@@ -698,7 +709,9 @@
     }
 
     section.style.display = 'flex';
-    $('portal-file-summary').textContent = `${parsedPreview.name} · ${parsedPreview.rows.length.toLocaleString()} rows · ${parsedPreview.columns.length} columns`;
+    const parsedAutoCount = parsedPreview.automationRows ? parsedPreview.automationRows.length : 0;
+    const autoText = parsedAutoCount > 0 ? ` · ${parsedAutoCount.toLocaleString()} automation events` : '';
+    $('portal-file-summary').textContent = `${parsedPreview.name} · ${parsedPreview.rows.length.toLocaleString()} rows · ${parsedPreview.columns.length} columns${autoText}`;
     $('portal-auto-win-label').textContent = `Auto Window (${parsedPreview.recommendedWindow} pts)`;
 
     // Update Mode Buttons
@@ -879,17 +892,11 @@
       });
     }
 
-    const stepBackBtn = $('btn-step-back');
-    if (stepBackBtn) stepBackBtn.addEventListener('click', () => window.dataStreamer?.step(false));
-
-    const stepFwdBtn = $('btn-step-forward');
-    if (stepFwdBtn) stepFwdBtn.addEventListener('click', () => window.dataStreamer?.step(true));
-
-    const stopBtn = $('btn-stop-stream');
-    if (stopBtn) stopBtn.addEventListener('click', () => window.dataStreamer?.stop());
-
     const loopBtn = $('btn-loop-stream');
     if (loopBtn) loopBtn.addEventListener('click', () => window.dataStreamer?.toggleLoop());
+
+    const autoBtn = $('btn-auto-stream');
+    if (autoBtn) autoBtn.addEventListener('click', () => window.dataStreamer?.toggleFollowAutomation());
 
     const scrubber = $('stream-scrubber');
     if (scrubber) {
@@ -898,10 +905,49 @@
       });
     }
 
-    const speedSlider = $('stream-speed-slider');
-    if (speedSlider) {
-      speedSlider.addEventListener('input', (e) => {
-        window.dataStreamer?.setPlaybackRate(parseFloat(e.target.value));
+    const speedBox = $('stream-speed-box') || $('stream-speed-val');
+    if (speedBox) {
+      let isDraggingSpeed = false;
+      let speedStartY = 0;
+      let speedStartRate = 1.0;
+
+      speedBox.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+        const ds = window.dataStreamer;
+        if (!ds) return;
+        isDraggingSpeed = true;
+        speedStartY = e.clientY;
+        speedStartRate = ds.playbackRate || 1.0;
+        speedBox.classList.add('is-dragging');
+        if (speedBox.setPointerCapture) {
+          try { speedBox.setPointerCapture(e.pointerId); } catch (err) {}
+        }
+        e.preventDefault();
+      });
+
+      speedBox.addEventListener('pointermove', (e) => {
+        if (!isDraggingSpeed) return;
+        const ds = window.dataStreamer;
+        if (!ds) return;
+        const deltaY = speedStartY - e.clientY;
+        const nextRate = Math.max(0.1, Math.min(5.0, Math.round((speedStartRate + deltaY * 0.02) * 10) / 10));
+        ds.setPlaybackRate(nextRate);
+      });
+
+      const stopSpeedDrag = (e) => {
+        if (!isDraggingSpeed) return;
+        isDraggingSpeed = false;
+        speedBox.classList.remove('is-dragging');
+        if (speedBox.releasePointerCapture && e.pointerId !== undefined) {
+          try { speedBox.releasePointerCapture(e.pointerId); } catch (err) {}
+        }
+      };
+
+      speedBox.addEventListener('pointerup', stopSpeedDrag);
+      speedBox.addEventListener('pointercancel', stopSpeedDrag);
+      speedBox.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        window.dataStreamer?.setPlaybackRate(1.0);
       });
     }
 
