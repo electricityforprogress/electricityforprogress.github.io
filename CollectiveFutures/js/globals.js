@@ -5,7 +5,7 @@
 window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 window.isMasterMuted = false;
-window.masterVolumeLevel = 0.75; 
+window.masterVolumeLevel = 0.75;
 window.masterGain = window.audioCtx.createGain();
 window.masterGain.gain.value = 0.75;
 window.masterLimiter = window.audioCtx.createDynamicsCompressor();
@@ -24,27 +24,358 @@ window.chData = [{}, {}, {}, {}];
 window.activeSynthIndex = 0;
 window.midiOutput = null;
 
+// Focused Channel View State (1CH, 2CH, 4CH)
+(function initViewModeDefaults() {
+    const savedMode = localStorage.getItem('bioquad_view_mode');
+    const isNarrowPhone = typeof window !== 'undefined' && window.innerWidth <= 640;
+    window.viewMode = savedMode || (isNarrowPhone ? '1ch' : '2ch');
+    const savedFocus = parseInt(localStorage.getItem('bioquad_focused_ch') || '0', 10);
+    window.focusedChannel = (!isNaN(savedFocus) && savedFocus >= 0 && savedFocus < 4) ? savedFocus : 0;
+    try {
+        const savedDual = JSON.parse(localStorage.getItem('bioquad_dual_chs') || '[0,1]');
+        if (Array.isArray(savedDual) && savedDual.length === 2) {
+            window.dualChannels = [
+                Math.max(0, Math.min(3, parseInt(savedDual[0], 10) || 0)),
+                Math.max(0, Math.min(3, parseInt(savedDual[1], 10) || 1))
+            ];
+            if (window.dualChannels[0] === window.dualChannels[1]) {
+                window.dualChannels[1] = (window.dualChannels[0] + 1) % 4;
+            }
+        } else {
+            window.dualChannels = [0, 1];
+        }
+    } catch (e) {
+        window.dualChannels = [0, 1];
+    }
+})();
+
+// Hardware NVS & I2C Environmental Sensor State
+window.hwNvsState = {
+    status: 'offline', // 'offline' | 'syncing' | 'pending_nvs' | 'saved'
+    transport: 'none', // 'none' | 'usb' | 'ble'
+    lastSavedAt: 0,
+    nvsCommitTimer: null
+};
+window.localHwEnvSensor = null;
+window.lastEmittedLocalEnv = null;
+window.envSensorRateMs = (function() {
+    try {
+        const saved = localStorage.getItem('bioquad_env_rate_ms');
+        if (saved !== null && saved !== '') {
+            const parsed = parseInt(saved, 10);
+            if (!isNaN(parsed)) return parsed;
+        }
+    } catch (e) {}
+    return 15000;
+})();
+window.envTempUnit = (function() {
+    try {
+        return localStorage.getItem('bioquad_temp_unit') === 'C' ? 'C' : 'F';
+    } catch (e) {
+        return 'F';
+    }
+})();
+
+window.isHardwareConnected = function() {
+    const usbOk = Boolean(window.usbHardware && window.usbHardware.isConnected);
+    const bleOk = Boolean(window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected && window.bleTxCharacteristic);
+    return usbOk || bleOk;
+};
+
 // Global UI Constants
-window.CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff']; 
+window.CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff'];
 window.ZOOM_STEPS = [50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 120000];
 
 // Master Clock & Grid
 window.masterBPM = 120;
 window.isApplyingAutomation = false;
+window.isApplyingRemotePatch = false;
+window.isBootstrappingPresets = false;
+
+const LOCAL_OUTPUT_ONLY_ATTRS = new Set([
+    'mixVol',
+    'muted',
+    'midiOutCh',
+    'master.vol',
+    'master.muted'
+]);
+
 window.recordPerfParam = function(channelOneBased, attr, value, immediate = false) {
     if (window.isApplyingAutomation) return;
     if (window.biodataRecorder && typeof window.biodataRecorder.recordParam === 'function') {
         window.biodataRecorder.recordParam(channelOneBased, attr, value, immediate);
     }
+    if (
+        !window.isApplyingRemotePatch &&
+        !window.isBootstrappingPresets &&
+        !LOCAL_OUTPUT_ONLY_ATTRS.has(String(attr || '')) &&
+        channelOneBased >= 1 &&
+        channelOneBased <= 4 &&
+        window.bioquadFeeds &&
+        typeof window.bioquadFeeds.notifyLocalSynthChanged === 'function'
+    ) {
+        window.bioquadFeeds.notifyLocalSynthChanged(channelOneBased - 1, attr);
+    }
 };
+
 window.recordPerfSnapshotDelta = function(chIdxOrNull = null) {
     if (window.isApplyingAutomation) return;
     if (window.biodataRecorder && typeof window.biodataRecorder.recordSnapshotDelta === 'function') {
         window.biodataRecorder.recordSnapshotDelta(chIdxOrNull);
     }
+    if (
+        !window.isApplyingRemotePatch &&
+        !window.isBootstrappingPresets &&
+        window.bioquadFeeds &&
+        typeof window.bioquadFeeds.notifyLocalSynthChanged === 'function'
+    ) {
+        if (chIdxOrNull === null || chIdxOrNull === undefined) {
+            for (let ch = 0; ch < 4; ch++) {
+                window.bioquadFeeds.notifyLocalSynthChanged(ch, 'preset');
+            }
+        } else if (chIdxOrNull >= 0 && chIdxOrNull <= 3) {
+            window.bioquadFeeds.notifyLocalSynthChanged(chIdxOrNull, 'preset');
+        }
+    }
 };
-window.midiClockMode = 'out'; 
-window.lastBeatTime = 0; 
+window.midiClockMode = 'out';
+window.lastBeatTime = 0;
+
+// --- MASTER RHYTHMIC BEAT-1 / BAR CLOCK (INTERNAL 24-PPQN & EXTERNAL MIDI CLOCK) ---
+window.bioClock = {
+    beatsPerBar: 4,
+    ppqn: 24,
+    anchorAudioTime: 0,
+    anchorPerfMs: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+    anchorTotalBeats: 0,
+    lastBpm: 120,
+    lastDispatchedBeatTotal: -1,
+    lastMidiTickSentTotal: -1,
+    extTickCount: 0,
+    extTickTimesMs: [],
+    extRunning: true,
+    beatListeners: [],
+
+    _usingAudioCtx: false,
+
+    _nowAudio() {
+        const ctxRunning = Boolean(window.audioCtx && window.audioCtx.state === 'running' && typeof window.audioCtx.currentTime === 'number');
+        const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (ctxRunning) {
+            if (!this._usingAudioCtx) {
+                const bpm = Math.max(20, Math.min(300, Number(this.lastBpm) || Number(window.masterBPM) || 120));
+                const elapsedSec = Math.max(0, (nowPerf - this.anchorPerfMs) / 1000);
+                this.anchorTotalBeats += elapsedSec / (60 / bpm);
+                this.anchorAudioTime = window.audioCtx.currentTime;
+                this.anchorPerfMs = nowPerf;
+                this._usingAudioCtx = true;
+            }
+            return window.audioCtx.currentTime;
+        }
+        if (this._usingAudioCtx) {
+            this._usingAudioCtx = false;
+            this.anchorPerfMs = nowPerf;
+        }
+        return (nowPerf - this.anchorPerfMs) / 1000 + this.anchorAudioTime;
+    },
+
+    reanchorForBpmChange(newBpm) {
+        const safeBpm = Math.max(20, Math.min(300, Number(newBpm) || window.masterBPM || 120));
+        const nowA = this._nowAudio();
+        const prevBpm = Math.max(20, Math.min(300, Number(this.lastBpm) || window.masterBPM || 120));
+        const elapsedBeats = Math.max(0, (nowA - this.anchorAudioTime) / (60 / prevBpm));
+        this.anchorTotalBeats += elapsedBeats;
+        this.anchorAudioTime = nowA;
+        this.anchorPerfMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.lastBpm = safeBpm;
+        this.lastDispatchedBeatTotal = Math.floor(this.anchorTotalBeats) - 1;
+        this.lastMidiTickSentTotal = Math.floor(this.anchorTotalBeats * this.ppqn) - 1;
+    },
+
+    resetToBeatOne(sendMidiStart = true) {
+        const nowA = this._nowAudio();
+        const safeBpm = Math.max(20, Math.min(300, Number(window.masterBPM) || 120));
+        const curBar = Math.floor((this.getState(nowA).totalBeats || 0) / this.beatsPerBar);
+        // Advance cleanly onto a fresh Bar Beat 1 boundary so cycle count stays monotonic
+        this.anchorTotalBeats = (curBar + 1) * this.beatsPerBar;
+        this.anchorAudioTime = nowA;
+        this.anchorPerfMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.lastBpm = safeBpm;
+        this.extTickCount = this.anchorTotalBeats * this.ppqn;
+        this.extRunning = true;
+        this.lastDispatchedBeatTotal = this.anchorTotalBeats - 1;
+        this.lastMidiTickSentTotal = (this.anchorTotalBeats * this.ppqn) - 1;
+
+        if (sendMidiStart && window.midiClockMode === 'out' && window.midiOutput) {
+            try { window.midiOutput.send([0xFA]); } catch (e) {}
+        }
+    },
+
+    onMidiRealTime(statusByte, eventPerfMs) {
+        if (window.midiClockMode !== 'in') return;
+        const sysNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const nowPerf = (typeof eventPerfMs === 'number' && isFinite(eventPerfMs) && eventPerfMs > 0 && Math.abs(eventPerfMs - sysNow) < 500)
+            ? eventPerfMs
+            : sysNow;
+        const nowA = this._nowAudio();
+
+        if (statusByte === 0xFA) {
+            // MIDI Start -> Reset to Beat 1
+            this.extTickCount = 0;
+            this.extTickTimesMs = [nowPerf];
+            this.extRunning = true;
+            this.anchorTotalBeats = 0;
+            this.anchorAudioTime = nowA;
+            this.anchorPerfMs = nowPerf;
+            this.lastDispatchedBeatTotal = -1;
+            return;
+        }
+        if (statusByte === 0xFB) {
+            // MIDI Continue
+            this.extRunning = true;
+            this.extTickTimesMs = [nowPerf];
+            return;
+        }
+        if (statusByte === 0xFC) {
+            // MIDI Stop
+            this.extRunning = false;
+            return;
+        }
+        if (statusByte === 0xF8) {
+            // 24 PPQN Timing Clock Tick
+            this.extRunning = true;
+            if (this.extTickTimesMs.length > 0 && (nowPerf - this.extTickTimesMs[this.extTickTimesMs.length - 1]) > 1500) {
+                this.extTickTimesMs = [];
+            }
+            this.extTickTimesMs.push(nowPerf);
+            if (this.extTickTimesMs.length > 25) {
+                this.extTickTimesMs.shift();
+            }
+            if (this.extTickTimesMs.length >= 4) {
+                const spanMs = this.extTickTimesMs[this.extTickTimesMs.length - 1] - this.extTickTimesMs[0];
+                const intervals = this.extTickTimesMs.length - 1;
+                if (spanMs > 5) {
+                    const tickMs = spanMs / intervals;
+                    const derivedBpm = 60000 / (tickMs * this.ppqn);
+                    if (derivedBpm >= 30 && derivedBpm <= 300) {
+                        if (Math.abs(derivedBpm - window.masterBPM) > 8) {
+                            window.masterBPM = derivedBpm;
+                        } else {
+                            window.masterBPM = (window.masterBPM * 0.65) + (derivedBpm * 0.35);
+                        }
+                        this.lastBpm = window.masterBPM;
+                        const bpmDisp = document.getElementById('ui-bpm-display');
+                        if (bpmDisp) bpmDisp.innerText = Math.round(window.masterBPM).toString().padStart(3, '0');
+                    }
+                }
+            }
+            this.anchorTotalBeats = this.extTickCount / this.ppqn;
+            this.anchorAudioTime = nowA;
+            this.anchorPerfMs = nowPerf;
+            this.extTickCount++;
+        }
+    },
+
+    getState(queryAudioTime) {
+        const bpm = Math.max(20, Math.min(300, Number(window.masterBPM) || 120));
+        if (Math.abs(bpm - this.lastBpm) > 0.001 && window.midiClockMode !== 'in') {
+            this.reanchorForBpmChange(bpm);
+        }
+        const qTime = (typeof queryAudioTime === 'number' && isFinite(queryAudioTime))
+            ? queryAudioTime
+            : this._nowAudio();
+
+        const isRunning = window.midiClockMode === 'in' ? Boolean(this.extRunning) : true;
+
+        if (window.BioQuadCore && typeof window.BioQuadCore.computeClockPhaseAtTime === 'function') {
+            const st = window.BioQuadCore.computeClockPhaseAtTime(
+                qTime,
+                this.anchorAudioTime,
+                this.anchorTotalBeats,
+                bpm,
+                this.beatsPerBar,
+                this.ppqn
+            );
+            st.running = isRunning;
+            return st;
+        }
+        const secPerBeat = 60 / bpm;
+        const totalBeats = Math.max(0, this.anchorTotalBeats + ((qTime - this.anchorAudioTime) / secPerBeat));
+        const beatIndex = Math.floor(totalBeats % this.beatsPerBar);
+        return {
+            bpm,
+            running: isRunning,
+            totalBeats,
+            cycle: totalBeats / this.beatsPerBar,
+            barIndex: Math.floor(totalBeats / this.beatsPerBar),
+            beatIndex,
+            beatInBar: beatIndex,
+            beatNumber: beatIndex + 1,
+            isDownbeat: beatIndex === 0,
+            barPhase: (totalBeats % this.beatsPerBar) / this.beatsPerBar,
+            beatPhase: totalBeats % 1,
+            tickCount: Math.floor(totalBeats * this.ppqn),
+            tickInBar: Math.floor((totalBeats % this.beatsPerBar) * this.ppqn)
+        };
+    },
+
+    quantizeAudioTime(rawAudioTime, quantizeStep) {
+        const step = Math.round(Number(quantizeStep) || 0);
+        if (step <= 0) return rawAudioTime;
+        const bpm = Math.max(20, Math.min(300, Number(window.masterBPM) || 120));
+        if (Math.abs(bpm - this.lastBpm) > 0.001 && window.midiClockMode !== 'in') {
+            this.reanchorForBpmChange(bpm);
+        }
+        if (window.BioQuadCore && typeof window.BioQuadCore.quantizeAudioTimestamp === 'function') {
+            return window.BioQuadCore.quantizeAudioTimestamp(
+                rawAudioTime,
+                this.anchorAudioTime,
+                bpm,
+                step,
+                this.anchorTotalBeats,
+                this.beatsPerBar
+            );
+        }
+        return rawAudioTime;
+    },
+
+    subscribeBeat(fn) {
+        if (typeof fn === 'function') this.beatListeners.push(fn);
+        return () => {
+            this.beatListeners = this.beatListeners.filter(cb => cb !== fn);
+        };
+    }
+};
+
+window.resetBeatOne = function() {
+    if (window.bioClock) window.bioClock.resetToBeatOne(true);
+};
+
+window.setMidiClockMode = function(mode) {
+    const prev = window.midiClockMode || 'out';
+    const next = (mode === 'off' || mode === 'in' || mode === 'out') ? mode : 'out';
+    if (prev === 'out' && next !== 'out' && window.midiOutput) {
+        try { window.midiOutput.send([0xFC]); } catch (e) {}
+    }
+    window.midiClockMode = next;
+    if (window.bioClock) {
+        if (prev === 'in' && next !== 'in') {
+            window.bioClock.extRunning = true;
+            window.bioClock.extTickTimesMs = [];
+            window.bioClock.reanchorForBpmChange(window.masterBPM);
+        } else if (next === 'in') {
+            window.bioClock.extTickTimesMs = [];
+        } else if (next === 'out') {
+            const curSt = window.bioClock.getState();
+            window.bioClock.lastMidiTickSentTotal = Math.floor(curSt.tickCount) - 1;
+        }
+    }
+    const sel = document.getElementById('midi-clock-dir');
+    if (sel && sel.value !== next) sel.value = next;
+    if (typeof window.syncUI === 'function') window.syncUI();
+    return next;
+};
+
 
 window.SCALES = {
     'chromatic': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
@@ -56,37 +387,37 @@ window.SCALES = {
 };
 
 window.defaultParams = {
-    mixVol: 0.50, muted: false, 
+    mixVol: 0.50, muted: false,
     voices: 5, stealMode: 'none', steal: 'none', legato: 0, glide: 0.0,
     sources: { osc1: { type: 'sawtooth', level: 1.0 }, noise: { level: 0.0 } },
     filter: { cutoff: 8000, res: 2 },
-    
+
     lfo:       { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     pitchLfo:  { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     filterLfo: { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
     ampLfo:    { shape: 'sine', rate: 2.0, rateMode: 'lo', depth: 0 },
-    
-    env: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5, timeMode: 'norm' },
+
+    env: { atk: 0.01, dec: 0.12, sus: 1.0, rel: 0.12, amt: 0.5, timeMode: 'norm' },
     pitchEnv: { atk: 0.0, dec: 0.0, sus: 0.0, rel: 0.0, amt: 0.0, timeMode: 'norm' },
-    filterEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 0.5, timeMode: 'norm' },
-    ampEnv: { atk: 0.01, dec: 0.01, sus: 1.0, rel: 0.01, amt: 1.0, timeMode: 'norm' },
-    
+    filterEnv: { atk: 0.02, dec: 0.18, sus: 0.75, rel: 0.22, amt: 0.35, timeMode: 'norm' },
+    ampEnv: { atk: 0.01, dec: 0.12, sus: 1.0, rel: 0.12, amt: 1.0, timeMode: 'norm' },
+
     fx: { drv: 0, drvGrit: 10, drvTone: 2000, drvLvl: 1.0, dly: 0, rev: 0 },
-    
-    threshold: 2.0, 
-    threshMax: 5.0, // Scalable: 1.0 to 10.0
-    noiseFloor: 0.1, 
-    density: 100, 
-    quantize: 0, 
+
+    threshold: 2.0,
+    threshMax: 5.0,
+    noiseFloor: 0.1,
+    density: 100,
+    quantize: 0,
     sampleSize: 40,
     minNote: 36, maxNote: 84, velMin: 60, velMax: 110,
-    spread: 75, durMult: 1.0, 
+    spread: 75, durMult: 1.0,
     scaleRoot: 0, scaleType: 'chromatic',
     activeScaleBits: new Array(12).fill(true)
 };
 
-window.mapScale = function(value, inMin, inMax, outMin, outMax) { 
-    return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin; 
+window.mapScale = function(value, inMin, inMax, outMin, outMax) {
+    return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
 };
 
 window.applySpreadCurve = function(normPitch, spread) {
@@ -254,7 +585,6 @@ window.normalizeScaleParams = function(params) {
             params.scaleType = 'chromatic';
         }
     } else if (bits.every(Boolean) && hasNamedScale && rawScaleType !== 'chromatic') {
-        // Legacy preset had scaleType specified (e.g., major/minor) while activeScaleBits stayed untouched default all-true
         bits = window.buildScaleBitsFromPreset(rawScaleType, root);
     }
 
@@ -285,6 +615,8 @@ window.scaleNote = function(rawNote, scaleType, root, activeScaleBits, minNote =
 };
 
 window.globalFX = {
+    level: 0.85,
+    muted: false,
     dly: { time: 0.5, feedback: 0.5, tone: 2000, toRev: 0.2 },
     rev: { size: 2.0, damp: 3000, hpf: 100 }
 };
@@ -308,11 +640,11 @@ window.FACTORY_CHANNEL_PRESETS = {
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Soft Plucks": {
-        params: cloneWithDefaults({ mixVol: 0.6, voices: 6, stealMode: 'oldest', steal: 'oldest', minNote: 48, maxNote: 72, durMult: 0.5, sources: { osc1: { type: 'triangle', level: 1.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.05, dec: 0.3, sus: 0.2, rel: 1.5, amt: 1.0, timeMode: 'norm' }, filter: { cutoff: 2000, res: 4 } }),
+        params: cloneWithDefaults({ mixVol: 0.6, voices: 6, stealMode: 'oldest', steal: 'oldest', minNote: 48, maxNote: 72, durMult: 0.5, sources: { osc1: { type: 'triangle', level: 1.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.05, dec: 0.3, sus: 0.2, rel: 1.5, amt: 1.0, timeMode: 'norm' }, filterEnv: { atk: 0.03, dec: 0.35, sus: 0.25, rel: 0.9, amt: 0.4, timeMode: 'norm' }, filter: { cutoff: 2000, res: 4 } }),
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Shimmer Arp": {
-        params: cloneWithDefaults({ mixVol: 0.5, voices: 4, stealMode: 'oldest', steal: 'oldest', minNote: 72, maxNote: 96, quantize: 4, durMult: 0.2, sources: { osc1: { type: 'sawtooth', level: 1.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.01, dec: 0.1, sus: 0.0, rel: 0.5, amt: 1.0, timeMode: 'norm' } }),
+        params: cloneWithDefaults({ mixVol: 0.5, voices: 4, stealMode: 'oldest', steal: 'oldest', minNote: 72, maxNote: 96, quantize: 4, durMult: 0.2, sources: { osc1: { type: 'sawtooth', level: 1.0 }, noise: { level: 0.0 } }, ampEnv: { atk: 0.01, dec: 0.14, sus: 0.0, rel: 0.5, amt: 1.0, timeMode: 'norm' }, filterEnv: { atk: 0.015, dec: 0.2, sus: 0.15, rel: 0.4, amt: 0.35, timeMode: 'norm' } }),
         config: { zoom: 500, smooth: 0.05, freeze: false }
     },
     "Bio Percussion": {
@@ -325,7 +657,7 @@ window.FACTORY_CHANNEL_PRESETS = {
 window.FACTORY_PRESETS = {
     "Ambient Orchid": {
         master: { vol: 0.75, muted: false, bpm: 90 },
-        globalFX: { dly: { time: 0.75, feedback: 0.6, tone: 1500, toRev: 0.4 }, rev: { size: 3.5, damp: 2000, hpf: 150 } },
+        globalFX: { level: 0.85, muted: false, dly: { time: 0.75, feedback: 0.6, tone: 1500, toRev: 0.4 }, rev: { size: 3.5, damp: 2000, hpf: 150 } },
         channels: [
             { ...JSON.parse(JSON.stringify(window.FACTORY_CHANNEL_PRESETS["Deep Sub Drone"].params)), savedPatchName: "Deep Sub Drone" },
             { ...JSON.parse(JSON.stringify(window.FACTORY_CHANNEL_PRESETS["Soft Plucks"].params)), savedPatchName: "Soft Plucks" },

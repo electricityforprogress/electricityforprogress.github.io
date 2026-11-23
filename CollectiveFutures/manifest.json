@@ -1,14 +1,14 @@
 {
-  "name": "bioQuad - 4-Channel Biodata Sonification",
+  "name": "bioQuad Stream",
   "short_name": "bioQuad",
-  "description": "4-Channel Galvanic Plant Biodata Sonification & ESP32 Modular Synthesizer",
-  "start_url": "/",
+  "description": "Multi-channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, USB/BLE/MQTT live telemetry sync, and universal time-series data streaming engine.",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#0d1117",
   "theme_color": "#0d1117",
   "icons": [
     {
-      "src": "/css/bioquad-icon.svg",
+      "src": "./css/bioquad-icon.svg",
       "sizes": "64x64 128x128 512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"

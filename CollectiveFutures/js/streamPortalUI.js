@@ -1,49 +1,24 @@
 /**
- * bioQuad Stream - Pure Vanilla Data Stream & File Portal UI Controller
- * Runs directly in the browser without React, Vite, Node, or any build step.
- * Designed for offline-first PWA on GitHub Pages.
+ * bioQuad Stream - Pure Vanilla Data Stream, Saved Sessions & Cloud Feeds UI Controller
+ * Runs directly in the browser without React, Tailwind, or external runtime libraries.
+ * Designed for real-time performance & static GitHub Pages deployment.
  */
 
 (function () {
   'use strict';
 
-  // Sample Datasets definitions with dense time-series data
   const SAMPLE_DATASETS = [
-    {
-      id: 'nasa',
-      name: 'NASA ISS Telemetry',
-      badge: '5,000 rows · Multi-Column',
-      desc: 'Solar array volts, cabin pressure kPa, coolant temp °C, gyro drift rate',
-      file: './datasets/nasa_telemetry_iss.csv'
-    },
-    {
-      id: 'ekg',
-      name: 'EKG Cardiac & GSR',
-      badge: '6,000 rows · Multi-Series',
-      desc: 'Lead_I_Heart wave (P-Q-R-S-T) + Lead_II_GSR galvanic skin response',
-      file: './datasets/ekg_heart_biometrics.csv'
-    },
-    {
-      id: 'crypto',
-      name: 'Crypto Tick HFT',
-      badge: '5,000 rows · Multi-Series',
-      desc: 'BTC_USDT, ETH_USDT, and SOL_USDT high-density prices and tick volume',
-      file: './datasets/market_crypto_hft.csv'
-    },
-    {
-      id: 'forest',
-      name: 'Deep Forest Mycelium',
-      badge: '8,000 rows · 4 Channels',
-      desc: 'Oak canopy, fern spore, mycelium network, and moss bio-conductance',
-      file: './datasets/deep_forest_mycelium.csv'
-    }
+    { id: 'nasa', name: 'NASA ISS Telemetry', file: './datasets/nasa_telemetry_iss.csv' },
+    { id: 'ekg', name: 'Cardiac GSR', file: './datasets/ekg_heart_biometrics.csv' },
+    { id: 'crypto', name: 'Crypto Tick HFT', file: './datasets/market_crypto_hft.csv' },
+    { id: 'forest', name: 'Deep Forest Mycelium', file: './datasets/deep_forest_mycelium.csv' }
   ];
 
   const CH_COLORS = ['#ff3333', '#39ff14', '#33ccff', '#b84dff'];
 
-  // Local UI State
-  let isBoxVisible = localStorage.getItem('bioquad_portal_box_visible') !== 'false';
+  let isBoxVisible = localStorage.getItem('bioquad_file_deck_open') === 'true';
   let isPortalModalOpen = false;
+  let isFeedsModalOpen = false;
   let isExportModalOpen = false;
   let currentExportObjectUrl = null;
   let currentExportBlob = null;
@@ -52,6 +27,7 @@
   let parsedPreview = null;
   let mappingMode = 'multi_sensor_id';
   let targetSingleChannel = 0;
+  let activeImportSourceCh = null;
   let sensorToChMap = {};
   let colToChMap = {};
   let selectedIdCol = '';
@@ -60,9 +36,28 @@
   let autoApplyWindow = true;
   let cadenceRate = 30;
 
-  // DOM utility
+  // Saved Data Manager UI state
+  let savedTakesSearch = '';
+  let savedTakesSort = 'newest';
+  let editingTakeId = null;
+  let clearAllTakesArmed = false;
+  let clearAllTakesTimer = null;
+  let sessionSavedFeedbackTimer = null;
+  let showSimFeeds = false;
+  let showIdleStreams = false;
+  let streamSearchQuery = '';
+
   function $(id) {
     return document.getElementById(id);
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function formatMs(ms) {
@@ -87,90 +82,257 @@
     return isIOS || isBluefy;
   }
 
-  // --- 1. VISIBILITY & TOOLBAR SYNC ---
-  window.toggleDataPortalUI = function () {
-    isBoxVisible = !isBoxVisible;
-    localStorage.setItem('bioquad_portal_box_visible', String(isBoxVisible));
+  // --- 1. COMPACT RECORD BAR + EXPANDABLE FILE MANAGER DETAILS ---
+  function setFileWorkspaceOpen(shouldOpen, expandDetails) {
+    isBoxVisible = Boolean(shouldOpen);
+    if (!isBoxVisible) {
+      isPortalModalOpen = false;
+      editingTakeId = null;
+    } else if (expandDetails !== undefined) {
+      isPortalModalOpen = Boolean(expandDetails);
+    }
+    try { localStorage.setItem('bioquad_file_deck_open', String(isBoxVisible)); } catch (e) {}
     updateDeckVisibility();
+  }
+
+  window.toggleDataPortalUI = function () {
+    setFileWorkspaceOpen(!isBoxVisible, false);
   };
 
   window.openDataPortal = function () {
+    setFileWorkspaceOpen(true);
+  };
+
+  window.closeDataPortalUI = function () {
+    setFileWorkspaceOpen(false, false);
+  };
+
+  window.openFileDetailsPanel = function () {
     isBoxVisible = true;
-    localStorage.setItem('bioquad_portal_box_visible', 'true');
+    isPortalModalOpen = true;
+    try { localStorage.setItem('bioquad_file_deck_open', 'true'); } catch (e) {}
     updateDeckVisibility();
-    openPortalModal();
+  };
+
+  window.closeFileDetailsPanel = function () {
+    isPortalModalOpen = false;
+    editingTakeId = null;
+    updateDeckVisibility();
+  };
+
+  window.toggleFileDetailsPanel = function () {
+    if (!isBoxVisible) {
+      window.openFileDetailsPanel();
+    } else {
+      isPortalModalOpen = !isPortalModalOpen;
+      if (!isPortalModalOpen) editingTakeId = null;
+      updateDeckVisibility();
+    }
   };
 
   function updateDeckVisibility() {
     const deck = $('stream-transport-deck');
+    const modal = $('file-portal-modal');
     const toggleBtn = $('toggle-portal-btn');
+    const expandBtn = $('btn-expand-file-manager');
+
     if (deck) {
+      deck.classList.toggle('ui-hidden', !isBoxVisible);
       deck.style.display = isBoxVisible ? 'flex' : 'none';
     }
+    const showDetails = isBoxVisible && isPortalModalOpen;
+    if (modal) {
+      modal.classList.toggle('ui-hidden', !showDetails);
+      modal.style.display = showDetails ? 'flex' : 'none';
+      if (showDetails) {
+        renderChannelsInModal();
+        renderSavedTakes();
+        renderMappingSection();
+      }
+    }
+    if (expandBtn) {
+      expandBtn.classList.toggle('is-active', showDetails);
+      expandBtn.setAttribute('aria-expanded', showDetails ? 'true' : 'false');
+      expandBtn.textContent = showDetails ? 'FILES ▴' : 'FILES ▾';
+    }
     if (toggleBtn) {
-      toggleBtn.style.opacity = isBoxVisible ? '1.0' : '0.6';
-      toggleBtn.style.borderColor = isBoxVisible ? 'var(--cyan)' : 'var(--border)';
+      toggleBtn.classList.toggle('is-active', isBoxVisible);
+      toggleBtn.style.opacity = '';
+      toggleBtn.style.borderColor = '';
     }
   }
 
   function updateToolbarIndicator() {
     const ind = $('file-portal-indicator');
-    if (!ind) return;
+    if (ind) {
+      const ds = window.dataStreamer;
+      const rec = window.biodataRecorder;
+      const isRecording = rec && rec.isRecording;
+      const isPlaying = ds && ds.isPlaying;
 
-    const ds = window.dataStreamer;
-    const rec = window.biodataRecorder;
-    const isRecording = rec && rec.isRecording;
-    const isPlaying = ds && ds.isPlaying;
+      if (isRecording) {
+        ind.innerHTML = '';
+        ind.style.display = 'inline-block';
+        ind.style.width = '7px';
+        ind.style.height = '7px';
+        ind.style.borderRadius = '50%';
+        ind.style.background = '#ff0033';
+        ind.style.boxShadow = '0 0 8px #ff0033';
+      } else if (isPlaying) {
+        ind.innerHTML = '▶';
+        ind.style.display = 'inline-block';
+        ind.style.width = 'auto';
+        ind.style.height = 'auto';
+        ind.style.background = 'transparent';
+        ind.style.boxShadow = 'none';
+        ind.style.color = 'var(--cyan, #00f0ff)';
+        ind.style.fontSize = '8px';
+        ind.style.lineHeight = '1';
+      } else {
+        ind.innerHTML = '';
+        ind.style.display = 'inline-block';
+        ind.style.width = '6px';
+        ind.style.height = '6px';
+        ind.style.borderRadius = '50%';
+        ind.style.background = '#661111';
+        ind.style.boxShadow = 'none';
+      }
+    }
 
-    if (isRecording) {
-      ind.innerHTML = '';
-      ind.style.display = 'inline-block';
-      ind.style.width = '7px';
-      ind.style.height = '7px';
-      ind.style.borderRadius = '50%';
-      ind.style.background = '#ff0033';
-      ind.style.boxShadow = '0 0 8px #ff0033';
-    } else if (isPlaying) {
-      ind.innerHTML = '▶';
-      ind.style.display = 'inline-block';
-      ind.style.width = 'auto';
-      ind.style.height = 'auto';
-      ind.style.background = 'transparent';
-      ind.style.boxShadow = 'none';
-      ind.style.color = 'var(--cyan, #00f0ff)';
-      ind.style.fontSize = '8px';
-      ind.style.lineHeight = '1';
-    } else {
-      ind.innerHTML = '';
-      ind.style.display = 'inline-block';
-      ind.style.width = '6px';
-      ind.style.height = '6px';
-      ind.style.borderRadius = '50%';
-      ind.style.background = '#661111';
-      ind.style.boxShadow = 'none';
+    // Sync Cloud Feeds Toolbar Pill & Channel Feed Badges
+    const feedsMgr = window.bioquadFeeds;
+    if (feedsMgr) {
+      const fState = feedsMgr.getState();
+      const fDot = $('feeds-toolbar-dot');
+      const fLbl = $('feeds-toolbar-label');
+      if (fDot) {
+        const live = fState.activeRouteCount > 0 || fState.isConnected || fState.isPublishing;
+        fDot.className = live ? 'status-online' : 'status-offline';
+      }
+      if (fLbl) {
+        fLbl.textContent = fState.activeRouteCount > 0 ? `STREAM (${fState.activeRouteCount})` : 'STREAM';
+      }
+
+      for (let ch = 0; ch < 4; ch++) {
+        const badge = $(`ch-feed-badge-${ch}`);
+        const route = fState.channelRoutes[ch];
+        if (badge) {
+          if (route && route.feedId) {
+            const meta = fState.feeds.find(f => f.feedId === route.feedId);
+            const shortName = meta ? meta.name : route.feedId;
+            const streamNum = (route.remoteCh || 0) + 1;
+            const modeTag = route.followPatch === false ? 'CUSTOM' : 'AUTO';
+            badge.textContent = `${shortName} · S${streamNum} · ${modeTag}`;
+            badge.style.display = 'inline-flex';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+      }
+      updateSynthFeedAutoBar(fState);
     }
   }
 
-  // --- 2. MODAL CONTROLS ---
-  function openPortalModal() {
-    isPortalModalOpen = true;
-    const modal = $('file-portal-modal');
-    if (modal) {
-      modal.style.display = 'flex';
-      renderChannelsInModal();
-      renderSavedTakes();
+  function updateSynthFeedAutoBar(fStateOverride = null) {
+    const bar = $('synth-feed-auto-bar');
+    if (!bar || !window.bioquadFeeds) return;
+    const fState = fStateOverride || window.bioquadFeeds.getState();
+    const activeCh = typeof window.activeSynthIndex === 'number' ? window.activeSynthIndex : 0;
+    const route = fState.channelRoutes[activeCh];
+
+    if (!route || !route.feedId) {
+      bar.style.display = 'none';
+      return;
     }
+
+    const feed = fState.feeds.find(f => f.feedId === route.feedId);
+    const feedName = feed ? (feed.name || feed.feedId) : route.feedId;
+    const streamNum = (route.remoteCh || 0) + 1;
+    const isAuto = route.followPatch !== false;
+    const patchObj = feed && Array.isArray(feed.patches) ? feed.patches[route.remoteCh || 0] : null;
+    const patchSummary = (patchObj && window.BioQuadCore && window.BioQuadCore.summarizePatch)
+      ? window.BioQuadCore.summarizePatch(patchObj)
+      : (patchObj && patchObj.patchName ? patchObj.patchName : '');
+
+    bar.style.display = 'flex';
+    const srcEl = $('synth-feed-source-label');
+    if (srcEl) srcEl.textContent = `CH ${activeCh + 1} ← ${feedName} · S${streamNum}`;
+
+    const patchEl = $('synth-feed-patch-label');
+    if (patchEl) {
+      patchEl.textContent = patchSummary ? `(${patchSummary})` : '';
+    }
+
+    const btn = $('btn-synth-feed-auto');
+    if (btn) {
+      btn.textContent = isAuto ? 'AUTO' : 'CUSTOM';
+      btn.setAttribute('aria-pressed', isAuto ? 'true' : 'false');
+      btn.style.borderColor = isAuto ? 'var(--green)' : 'var(--yellow)';
+      btn.style.color = isAuto ? 'var(--green)' : 'var(--yellow)';
+      btn.style.background = isAuto ? 'rgba(57,255,20,0.12)' : 'rgba(255,215,0,0.12)';
+    }
+  }
+
+  window.updateSynthFeedAutoBar = updateSynthFeedAutoBar;
+
+  window.toggleActiveSynthFeedAuto = function () {
+    if (!window.bioquadFeeds) return;
+    const activeCh = typeof window.activeSynthIndex === 'number' ? window.activeSynthIndex : 0;
+    window.bioquadFeeds.toggleRouteFollowPatch(activeCh);
+    updateSynthFeedAutoBar();
+    if (isFeedsModalOpen) renderFeedsModal(false);
+  };
+
+  window.toggleFeedPatchFollow = function (localCh) {
+    if (!window.bioquadFeeds) return;
+    window.bioquadFeeds.toggleRouteFollowPatch(localCh);
+    updateSynthFeedAutoBar();
+    if (isFeedsModalOpen) renderFeedsModal(false);
+    updateToolbarIndicator();
+  };
+
+  // --- 2. INLINE WORKSPACE CARD CONTROLS (FILE & STREAM) ---
+  function openPortalModal() {
+    window.openFileDetailsPanel();
   }
 
   function closePortalModal() {
-    isPortalModalOpen = false;
-    const modal = $('file-portal-modal');
-    if (modal) {
-      modal.style.display = 'none';
-    }
+    window.closeFileDetailsPanel();
   }
 
+  window.openPortalModal = openPortalModal;
   window.closePortalModal = closePortalModal;
+  window.togglePortalModal = function () {
+    window.toggleFileDetailsPanel();
+  };
+
+  window.openFeedsModal = function () {
+    isFeedsModalOpen = true;
+    const modal = $('feeds-portal-modal');
+    const feedsBtn = $('btn-open-feeds');
+    if (feedsBtn) feedsBtn.classList.add('is-active');
+    if (modal) {
+      modal.classList.remove('ui-hidden');
+      modal.style.display = 'flex';
+      renderFeedsModal(true);
+    }
+  };
+
+  window.closeFeedsModal = function () {
+    isFeedsModalOpen = false;
+    const modal = $('feeds-portal-modal');
+    const feedsBtn = $('btn-open-feeds');
+    if (feedsBtn) feedsBtn.classList.remove('is-active');
+    if (modal) {
+      modal.classList.add('ui-hidden');
+      modal.style.display = 'none';
+    }
+  };
+
+  window.toggleFeedsModal = function () {
+    if (isFeedsModalOpen) window.closeFeedsModal();
+    else window.openFeedsModal();
+  };
 
   function revokeExportResources() {
     if (currentExportObjectUrl) {
@@ -214,15 +376,13 @@
     const dlLink = $('btn-export-download');
     const copyBtn = $('btn-export-copy');
     const feedback = $('export-feedback-text');
-    const iosHint = $('export-ios-hint');
 
     if (shareBtn) { shareBtn.style.display = 'none'; shareBtn.disabled = true; }
     if (dlLink) { dlLink.style.display = 'none'; }
     if (copyBtn) { copyBtn.style.display = 'none'; }
     if (feedback) { feedback.style.display = 'none'; feedback.textContent = ''; }
-    if (iosHint) { iosHint.style.display = isIOSorBlueify() ? 'block' : 'none'; }
 
-    setExportStatus('working', 'PREPARING', 'Reading chunks from storage...');
+    setExportStatus('working', 'PREPARING', 'Packaging...');
   }
 
   window.closeExportModal = function () {
@@ -232,7 +392,39 @@
     revokeExportResources();
   };
 
-  // --- 3. TRANSPORT DECK RENDERING & SYNC ---
+  // --- 3. SESSION FILENAME BAR & TRANSPORT DECK ---
+  async function commitSessionNameFromInput() {
+    const input = $('stream-session-name');
+    const rec = window.biodataRecorder;
+    if (!input || !rec) return;
+    const clean = await rec.setSessionName(input.value, true);
+    input.value = clean;
+    const savedTag = $('session-name-saved-tag');
+    if (savedTag) {
+      savedTag.style.display = 'inline-block';
+      clearTimeout(sessionSavedFeedbackTimer);
+      sessionSavedFeedbackTimer = setTimeout(() => {
+        savedTag.style.display = 'none';
+      }, 1800);
+    }
+  }
+
+  window.applySessionFilename = commitSessionNameFromInput;
+
+  window.resetSessionFilename = function () {
+    const rec = window.biodataRecorder;
+    const input = $('stream-session-name');
+    if (!rec) return;
+    const fresh = rec.resetSessionNameToTimestamp();
+    if (input) input.value = fresh;
+  };
+
+  window.toggleRecordAutomationUI = function () {
+    if (!window.biodataRecorder || typeof window.biodataRecorder.toggleRecordAutomation !== 'function') return;
+    window.biodataRecorder.toggleRecordAutomation();
+    updateTransportDeck();
+  };
+
   function updateTransportDeck() {
     const ds = window.dataStreamer;
     const rec = window.biodataRecorder;
@@ -242,9 +434,12 @@
     const isStreamingActive = streamState && streamState.totalRecords > 0;
     const isRecording = rec && rec.isRecording;
 
-    // 1. Record button & data points
+    // 1. Record button, automation recording toggle, session filename input & data points
     const recBtn = $('btn-rec-stream');
+    const recAutoBtn = $('btn-rec-auto');
     const ptsCounter = $('stream-pts-counter');
+    const sessionInput = $('stream-session-name');
+
     if (recBtn) {
       if (isRecording) {
         recBtn.classList.add('recording');
@@ -254,13 +449,27 @@
         recBtn.innerHTML = '● REC';
       }
     }
+
+    if (recAutoBtn) {
+      const recAutoOn = Boolean(rec && rec.recordAutomation);
+      recAutoBtn.classList.toggle('active-auto', recAutoOn);
+      recAutoBtn.setAttribute('aria-pressed', recAutoOn ? 'true' : 'false');
+      recAutoBtn.textContent = recAutoOn ? '● REC AUTO' : 'REC AUTO';
+    }
+
+    if (sessionInput && rec && document.activeElement !== sessionInput) {
+      if (sessionInput.value !== rec.sessionName) {
+        sessionInput.value = rec.sessionName || '';
+      }
+    }
+
     if (ptsCounter) {
       if (isRecording) {
         ptsCounter.style.color = '#ff5577';
         ptsCounter.textContent = `${(rec.totalPointsRecorded || rec.recordCount || 0).toLocaleString()} pts`;
-      } else if (rec && rec.hasData) {
+      } else if (rec && (rec.totalPointsRecorded || rec.recordCount)) {
         ptsCounter.style.color = '#c9d1d9';
-        ptsCounter.textContent = `${rec.recordCount.toLocaleString()} pts`;
+        ptsCounter.textContent = `${(rec.totalPointsRecorded || rec.recordCount || 0).toLocaleString()} pts`;
       } else {
         ptsCounter.style.color = '#6e7681';
         ptsCounter.textContent = '0 pts';
@@ -280,14 +489,9 @@
       }
     }
 
-    // Loop & Auto toggle state
     const loopBtn = $('btn-loop-stream');
     if (loopBtn) {
-      if (streamState.isLooping) {
-        loopBtn.classList.add('active-loop');
-      } else {
-        loopBtn.classList.remove('active-loop');
-      }
+      loopBtn.classList.toggle('active-loop', Boolean(streamState.isLooping));
     }
 
     const autoBtn = $('btn-auto-stream');
@@ -296,11 +500,6 @@
       autoBtn.disabled = !hasAuto;
       autoBtn.classList.toggle('active-auto', hasAuto && !!streamState.followAutomation);
       autoBtn.setAttribute('aria-pressed', (hasAuto && !!streamState.followAutomation) ? 'true' : 'false');
-      autoBtn.title = !hasAuto
-        ? 'No parameter automation in loaded file'
-        : (streamState.followAutomation
-          ? 'Following recorded synth automation (click for manual control)'
-          : 'Manual control active (click to follow recorded automation)');
     }
 
     // 3. Scrubber slider & time display
@@ -313,54 +512,91 @@
       scrubber.value = streamState.currentIndex || 0;
     }
     if (timeDisp) {
-      if (isStreamingActive) {
-        timeDisp.textContent = `${formatMs(streamState.playbackElapsedMs)} / ${formatMs(streamState.totalDurationMs)}`;
-      } else {
-        timeDisp.textContent = '00:00 / 00:00';
-      }
+      timeDisp.textContent = isStreamingActive
+        ? `${formatMs(streamState.playbackElapsedMs)} / ${formatMs(streamState.totalDurationMs)}`
+        : '00:00 / 00:00';
     }
     if (idxDisp) {
       idxDisp.textContent = isStreamingActive ? `#${(streamState.currentIndex || 0).toLocaleString()}` : '#0';
     }
 
-    // 4. Cadence box (for datasets without timestamps)
     const cadenceBox = $('stream-cadence-box');
     if (cadenceBox) {
       cadenceBox.style.display = (isStreamingActive && !streamState.hasTimestamps) ? 'flex' : 'none';
     }
 
-    // 5. Playback speed
     const speedVal = $('stream-speed-val');
     if (speedVal) speedVal.textContent = `${(streamState.playbackRate || 1.0).toFixed(1)}x`;
 
-    // 6. Channel status cards
+    // 6. Channel status cards (shows file stream OR active Cloud Feed route)
+    const feedsState = window.bioquadFeeds ? window.bioquadFeeds.getState() : null;
     for (let ch = 0; ch < 4; ch++) {
       const feed = streamState.activeChannels && streamState.activeChannels[ch];
-      const hasData = feed && feed.active;
+      const hasFileData = feed && feed.active;
+      const mqttRoute = feedsState ? feedsState.channelRoutes[ch] : null;
+      const mqttMeta = (mqttRoute && feedsState)
+        ? feedsState.feeds.find(f => f.feedId === mqttRoute.feedId)
+        : null;
 
       const labelEl = $(`stream-ch-label-${ch}`);
       const valEl = $(`stream-ch-val-${ch}`);
       const clearBtn = $(`stream-ch-clear-${ch}`);
 
       if (labelEl) {
-        labelEl.textContent = hasData ? feed.label : 'Empty';
-        labelEl.style.color = hasData ? '#c9d1d9' : '#6e7681';
+        if (hasFileData) {
+          labelEl.textContent = feed.label;
+          labelEl.style.color = '#c9d1d9';
+        } else if (mqttRoute) {
+          const streamNum = (mqttRoute.remoteCh || 0) + 1;
+          labelEl.textContent = `${mqttMeta ? mqttMeta.name : mqttRoute.feedId} · S${streamNum}`;
+          labelEl.style.color = 'var(--cyan)';
+        } else {
+          labelEl.textContent = 'Empty';
+          labelEl.style.color = '#6e7681';
+        }
       }
+
       if (valEl) {
-        if (hasData && feed.currentVal !== null && feed.currentVal !== undefined) {
-          valEl.textContent = `${feed.currentVal.toFixed(1)}`;
+        if (hasFileData && feed.currentVal !== null && feed.currentVal !== undefined) {
+          valEl.textContent = (window.BioQuadCore && typeof window.BioQuadCore.formatChannelMetricValue === 'function')
+            ? window.BioQuadCore.formatChannelMetricValue(feed.currentVal, feed.metricMeta, true)
+            : `${feed.currentVal.toFixed(1)}`;
+          valEl.style.display = 'inline';
+        } else if (mqttRoute && window.chData && window.chData[ch] && window.chData[ch].waveBuffer && window.chData[ch].waveBuffer.length > 0) {
+          const latest = window.chData[ch].waveBuffer[window.chData[ch].waveBuffer.length - 1];
+          valEl.textContent = `${latest.r.toFixed(1)} µS`;
           valEl.style.display = 'inline';
         } else {
           valEl.style.display = 'none';
         }
       }
-      if (clearBtn) clearBtn.style.display = hasData ? 'inline-block' : 'none';
+
+      if (clearBtn) {
+        clearBtn.style.display = (hasFileData || mqttRoute) ? 'inline-block' : 'none';
+      }
     }
 
     updateToolbarIndicator();
+    if (isFeedsModalOpen) {
+      updateFeedsSyncTelemetryOnly();
+    }
   }
 
-  // --- 4. FILE INGESTION & PROCESSING ---
+  // --- 4. FILE INGESTION & MAPPING ---
+  function scrollPortalMappingIntoView() {
+    const modal = $('file-portal-modal');
+    const body = $('file-portal-modal-body') || (modal ? modal.querySelector('.modal-body') : null);
+    if (body) {
+      body.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    const section = $('portal-mapping-section');
+    if (section && typeof section.scrollIntoView === 'function') {
+      requestAnimationFrame(() => {
+        try { section.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+      });
+    }
+  }
+
   function processFileText(text, fileName, targetChannelOverride) {
     const ds = window.dataStreamer;
     if (!ds) return;
@@ -368,37 +604,52 @@
     try {
       const parsed = ds.parseFileContent(text, fileName);
       parsedPreview = parsed;
+      activeImportSourceCh = (targetChannelOverride !== undefined && targetChannelOverride !== null)
+        ? targetChannelOverride
+        : null;
 
-      const guesses = parsed.guesses;
+      const guesses = parsed.guesses || {};
       selectedIdCol = guesses.identifierCol || '';
       selectedValueCol = guesses.primaryValueCol || (parsed.columns[0] || '');
       selectedTimeCol = guesses.timestampCol || '';
 
-      if (targetChannelOverride !== undefined) {
-        mappingMode = 'single_channel';
-        targetSingleChannel = targetChannelOverride;
-      } else if (guesses.identifierCol && guesses.sensorList && guesses.sensorList.length >= 2) {
-        mappingMode = 'multi_sensor_id';
-        sensorToChMap = {};
+      // Always initialize BOTH sensor and column maps freshly for this file so switching modes works cleanly
+      sensorToChMap = {};
+      if (Array.isArray(guesses.sensorList) && guesses.sensorList.length > 0) {
         guesses.sensorList.slice(0, 4).forEach((s, idx) => {
           sensorToChMap[s] = idx;
         });
+      }
+
+      colToChMap = {};
+      const detectedCols = Array.isArray(guesses.detectedValueCols) && guesses.detectedValueCols.length > 0
+        ? guesses.detectedValueCols
+        : parsed.columns.filter(c => c !== selectedTimeCol && c !== selectedIdCol);
+      detectedCols.slice(0, 4).forEach((c, idx) => {
+        colToChMap[c] = idx;
+      });
+
+      if (activeImportSourceCh !== null) {
+        mappingMode = 'single_channel';
+        targetSingleChannel = activeImportSourceCh;
+      } else if (guesses.identifierCol && guesses.sensorList && guesses.sensorList.length >= 2) {
+        mappingMode = 'multi_sensor_id';
       } else if (guesses.detectedValueCols && guesses.detectedValueCols.length >= 2) {
         mappingMode = 'multi_value_cols';
-        colToChMap = {};
-        guesses.detectedValueCols.slice(0, 4).forEach((c, idx) => {
-          colToChMap[c] = idx;
-        });
       } else {
         mappingMode = 'single_channel';
         targetSingleChannel = 0;
       }
 
       hidePortalError();
+      window.openFileDetailsPanel();
       renderMappingSection();
       renderChannelsInModal();
+      scrollPortalMappingIntoView();
     } catch (err) {
+      window.openFileDetailsPanel();
       showPortalError(err.message || 'Error parsing file format');
+      scrollPortalMappingIntoView();
     }
   }
 
@@ -406,14 +657,22 @@
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target.result;
-      processFileText(text, file.name, targetCh);
+      processFileText(e.target.result, file.name, targetCh);
     };
-    reader.onerror = () => showPortalError('Failed to read file from disk');
+    reader.onerror = () => {
+      showPortalError('Failed to read file from disk');
+      scrollPortalMappingIntoView();
+    };
     reader.readAsText(file);
   }
 
-  // --- 5. TEST DATASETS LOADER ---
+  window.dismissMappingSection = function () {
+    parsedPreview = null;
+    activeImportSourceCh = null;
+    const section = $('portal-mapping-section');
+    if (section) section.style.display = 'none';
+  };
+
   window.loadSampleDataset = async function (sampleId) {
     const sample = SAMPLE_DATASETS.find(s => s.id === sampleId);
     if (!sample) return;
@@ -426,10 +685,10 @@
       processFileText(text, sample.file.split('/').pop() || 'dataset.csv');
     } catch (err) {
       showPortalError(err.message || 'Error loading sample dataset');
+      scrollPortalMappingIntoView();
     }
   };
 
-  // --- 6. APPLY MAPPING & START PLAYER ---
   window.applyStreamMapping = function () {
     const ds = window.dataStreamer;
     if (!ds || !parsedPreview) return;
@@ -447,14 +706,33 @@
         cadenceRps: cadenceRate
       });
 
-      closePortalModal();
+      // Disconnect any active Cloud Feed routes on channels that now have file data loaded
+      if (window.bioquadFeeds) {
+        const st = ds.getState();
+        for (let ch = 0; ch < 4; ch++) {
+          if (st.activeChannels && st.activeChannels[ch] && st.activeChannels[ch].active) {
+            const fState = window.bioquadFeeds.getState();
+            if (fState.channelRoutes && fState.channelRoutes[ch]) {
+              window.bioquadFeeds.assignRoute(ch, null);
+            }
+          }
+        }
+      }
+
+      parsedPreview = null;
+      activeImportSourceCh = null;
+      const section = $('portal-mapping-section');
+      if (section) section.style.display = 'none';
+
+      renderChannelsInModal();
       ds.play();
+      updateTransportDeck();
     } catch (err) {
       showPortalError(err.message || 'Error applying mapping');
     }
   };
 
-  // --- 7. SAVED DATA & TAKES HANDLERS ---
+  // --- 5. SAVED DATA MANAGER (SEARCH, SORT & INLINE RENAME) ---
   async function renderSavedTakes() {
     const container = $('portal-saved-takes-list');
     const countBadge = $('portal-saved-count-badge');
@@ -467,36 +745,72 @@
     }
 
     try {
-      const takes = await window.bioquadStorage.getAllTakes();
+      const allTakes = await window.bioquadStorage.getAllTakes();
       if (countBadge) {
-        countBadge.textContent = takes.length;
-        countBadge.style.display = takes.length > 0 ? 'inline-block' : 'none';
+        countBadge.textContent = allTakes.length;
+        countBadge.style.display = allTakes.length > 0 ? 'inline-block' : 'none';
       }
       if (clearAllBtn) {
-        clearAllBtn.style.display = takes.length > 0 ? 'inline-flex' : 'none';
+        clearAllBtn.style.display = allTakes.length > 0 ? 'inline-flex' : 'none';
+        clearAllBtn.textContent = clearAllTakesArmed ? 'Confirm Clear All?' : 'Clear All';
       }
 
-      if (takes.length === 0) {
-        container.innerHTML = '<div style="color: #6e7681; padding: 16px; text-align: center; font-size: 11px;">No saved data yet. Click REC on the transport bar to record live biodata.</div>';
+      if (allTakes.length === 0) {
+        container.innerHTML = '<div style="color: #6e7681; padding: 12px; text-align: center; font-size: 11px;">No saved sessions</div>';
+        return;
+      }
+
+      const query = savedTakesSearch.trim().toLowerCase();
+      let filtered = allTakes.filter(t => {
+        if (!query) return true;
+        return String(t.name || '').toLowerCase().includes(query) || String(t.date || '').toLowerCase().includes(query);
+      });
+
+      filtered.sort((a, b) => {
+        if (savedTakesSort === 'oldest') return (a.timestamp || 0) - (b.timestamp || 0);
+        if (savedTakesSort === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''));
+        if (savedTakesSort === 'points_desc') {
+          const pa = a.totalPointsRecorded || a.sampleCount || 0;
+          const pb = b.totalPointsRecorded || b.sampleCount || 0;
+          return pb - pa;
+        }
+        return (b.timestamp || 0) - (a.timestamp || 0);
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div style="color: #6e7681; padding: 12px; text-align: center; font-size: 11px;">No matches</div>';
         return;
       }
 
       let html = '';
-      takes.forEach((take) => {
+      filtered.forEach((take) => {
         const storedPts = take.storedRecordCount !== undefined ? take.storedRecordCount : (take.sampleCount || 0);
         const totalPts = take.totalPointsRecorded || storedPts;
-        const isLegacyCapped = take.schemaVersion !== 2 && storedPts > 0 && totalPts > storedPts;
-        const ptsText = isLegacyCapped
-          ? `${storedPts.toLocaleString()} / ${totalPts.toLocaleString()} pts (legacy cap)`
-          : `${totalPts.toLocaleString()} pts`;
+        const ptsText = `${totalPts.toLocaleString()} pts`;
         const dur = take.durationFormatted || '00:00.0';
+        const isEditing = editingTakeId === take.id;
+        const safeName = escapeHtml(take.name);
+
         html += `
           <div class="saved-take-card">
-            <div>
-              <div style="font-weight: 700; font-size: 11px; color: #fff;">${take.name}</div>
-              <div class="tabular-nums" style="font-size: 10px; color: #8b949e; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px;">
-                <span>${take.date}</span>
-                <span style="color: var(--green); font-weight: 700;">⏱ ${dur}</span>
+            <div style="flex: 1; min-width: 200px;">
+              ${isEditing ? `
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;">
+                  <input type="text" id="rename-take-input-${take.id}" value="${safeName}" aria-label="New filename for ${safeName}"
+                    style="background: #0d1117; color: var(--cyan); border: 1px solid var(--cyan); border-radius: 4px; padding: 4px 8px; font-size: 11px; font-family: inherit; font-weight: 700; min-width: 180px; flex: 1;"
+                    onkeydown="if(event.key==='Enter'){window.commitRenameTake('${take.id}');}else if(event.key==='Escape'){window.cancelRenameTake();}">
+                  <button class="stream-btn rename-save-btn" aria-label="Save new filename" onclick="window.commitRenameTake('${take.id}')" style="min-height: 28px; width: auto; min-width: 58px; padding: 2px 10px; background: #0f2c1c; color: #39ff14; border-color: #2ea043;">Save</button>
+                  <button class="stream-btn" aria-label="Cancel rename" onclick="window.cancelRenameTake()" style="min-height: 28px; padding: 2px 8px;">Cancel</button>
+                </div>
+              ` : `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-weight: 700; font-size: 12px; color: #fff;">${safeName}</span>
+                  <button class="stream-btn" onclick="window.startRenameTake('${take.id}')" title="Rename saved session" aria-label="Rename ${safeName}" style="min-height: 22px; padding: 1px 7px; font-size: 10px; color: var(--cyan); border-color: rgba(0,240,255,0.35);">✎ Rename</button>
+                </div>
+              `}
+              <div class="tabular-nums" style="font-size: 10px; color: #8b949e; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 3px;">
+                <span>${escapeHtml(take.date)}</span>
+                <span style="color: var(--green); font-weight: 700;">⏱ ${escapeHtml(dur)}</span>
                 <span style="color: var(--cyan); font-weight: 700;">${ptsText}</span>
                 ${take.hasAutomation ? `<span style="color: var(--yellow); font-weight: 700;">· + Automation</span>` : ''}
               </div>
@@ -505,23 +819,53 @@
               <button class="stream-btn play-btn" onclick="window.playSavedTake('${take.id}')">▶ Play</button>
               <button class="stream-btn" onclick="window.exportTakeCsv('${take.id}')">CSV</button>
               <button class="stream-btn" onclick="window.exportTakeMidi('${take.id}')" style="color: var(--cyan); border-color: rgba(0,240,255,0.4);" title="Export all channels as a single MIDI ZIP bundle">MIDI</button>
-              <button class="stream-btn" onclick="window.deleteSavedTake('${take.id}')" style="color: #ff5577; border-color: rgba(255,85,119,0.4); min-width: 40px;" title="Delete take">✕</button>
+              <button class="stream-btn" onclick="window.deleteSavedTake('${take.id}')" aria-label="Delete ${safeName}" style="color: #ff5577; border-color: rgba(255,85,119,0.4); min-width: 40px;" title="Delete take">✕</button>
             </div>
           </div>
         `;
       });
       container.innerHTML = html;
+
+      if (editingTakeId) {
+        const inp = $(`rename-take-input-${editingTakeId}`);
+        if (inp) {
+          inp.focus();
+          inp.select();
+        }
+      }
     } catch (e) {
       console.warn('Error reading saved takes:', e);
     }
   }
+
+  window.startRenameTake = function (takeId) {
+    editingTakeId = takeId;
+    renderSavedTakes();
+  };
+
+  window.cancelRenameTake = function () {
+    editingTakeId = null;
+    renderSavedTakes();
+  };
+
+  window.commitRenameTake = async function (takeId) {
+    if (!window.bioquadStorage) return;
+    const inp = $(`rename-take-input-${takeId}`);
+    const newVal = inp ? inp.value : '';
+    editingTakeId = null;
+    const updated = await window.bioquadStorage.renameTake(takeId, newVal);
+    if (updated && window.biodataRecorder && window.biodataRecorder.lastSavedTakeId === takeId && !window.biodataRecorder.isRecording) {
+      window.biodataRecorder.sessionName = updated.name;
+    }
+    renderSavedTakes();
+  };
 
   window.playSavedTake = async function (takeId) {
     if (!window.bioquadStorage || !window.dataStreamer) return;
     try {
       hidePortalError();
       await window.dataStreamer.loadTakeById(takeId);
-      closePortalModal();
+      renderChannelsInModal();
       window.dataStreamer.play();
     } catch (err) {
       showPortalError(err.message || 'Could not load saved recording');
@@ -536,12 +880,471 @@
 
   window.clearAllSavedTakes = async function () {
     if (!window.bioquadStorage) return;
-    if (confirm('Clear all saved biodata recordings?')) {
-      await window.bioquadStorage.clearAllTakes();
+    if (!clearAllTakesArmed) {
+      clearAllTakesArmed = true;
       renderSavedTakes();
+      clearTimeout(clearAllTakesTimer);
+      clearAllTakesTimer = setTimeout(() => {
+        clearAllTakesArmed = false;
+        renderSavedTakes();
+      }, 4000);
+      return;
+    }
+    clearAllTakesArmed = false;
+    clearTimeout(clearAllTakesTimer);
+    await window.bioquadStorage.clearAllTakes();
+    renderSavedTakes();
+  };
+
+  // --- 6. CLOUD MQTT FEEDS & MULTI-USER PLAYOUT SYNC UI ---
+  function updateFeedsSyncTelemetryOnly() {
+    const mgr = window.bioquadFeeds;
+    if (!mgr) return;
+    const st = mgr.getState();
+    const sync = st.syncStats || {};
+
+    if ($('sync-buffer-val')) $('sync-buffer-val').textContent = `${st.playoutBufferMs} ms`;
+    if ($('sync-offset-val')) $('sync-offset-val').textContent = `${sync.offsetMs >= 0 ? '+' : ''}${sync.offsetMs || 0} ms`;
+    if ($('sync-jitter-val')) $('sync-jitter-val').textContent = `±${sync.jitterMs || 0} ms`;
+    if ($('sync-pkt-val')) $('sync-pkt-val').textContent = `${(sync.syncedCount || 0).toLocaleString()} synced`;
+
+    if ($('mqtt-tx-val')) $('mqtt-tx-val').textContent = (st.txCount || 0).toLocaleString();
+    if ($('mqtt-rx-val')) $('mqtt-rx-val').textContent = (st.rxCount || 0).toLocaleString();
+    if ($('mqtt-rtt-val')) {
+      $('mqtt-rtt-val').textContent = st.lastRttMs !== null && st.lastRttMs !== undefined
+        ? `${st.lastRttMs} ms`
+        : '--';
+      $('mqtt-rtt-val').style.color = st.lastRttMs !== null ? 'var(--green)' : '#fff';
+    }
+    if ($('mqtt-topic-val')) {
+      $('mqtt-topic-val').textContent = st.lastTopic
+        ? st.lastTopic
+        : (st.isConnected ? `Subscribed · bioquad/feeds/+` : 'Idle');
+      $('mqtt-topic-val').style.color = st.lastTopic ? 'var(--cyan)' : '#8b949e';
+    }
+
+    const pubBadge = $('mqtt-pub-status-badge');
+    if (pubBadge) {
+      if (st.isPublishing && st.isConnected) {
+        pubBadge.textContent = `Live · ${st.publishFeedId}`;
+        pubBadge.style.color = 'var(--green)';
+      } else if (st.isPublishing) {
+        pubBadge.textContent = `Connecting · ${st.publishFeedId}`;
+        pubBadge.style.color = 'var(--cyan)';
+      } else {
+        pubBadge.textContent = 'Off';
+        pubBadge.style.color = '#8b949e';
+      }
+    }
+
+    // 1. Outgoing per-channel TX status cards (CH 1 -> S1 .. CH 4 -> S4)
+    const txStats = st.txChStats || [];
+    for (let ch = 0; ch < 4; ch++) {
+      const dotEl = $(`mqtt-tx-dot-${ch}`);
+      const statEl = $(`mqtt-tx-stat-${ch}`);
+      const route = st.channelRoutes[ch];
+      const isReceiving = Boolean(route && !(st.isPublishing && route.feedId === st.publishFeedId && route.remoteCh === ch));
+      const sentCount = txStats[ch] ? (txStats[ch].msgCount || 0) : 0;
+
+      if (!st.isPublishing) {
+        if (dotEl) { dotEl.textContent = '○'; dotEl.style.color = '#484f58'; }
+        if (statEl) {
+          statEl.textContent = isReceiving ? `RX · S${(route.remoteCh || 0) + 1}` : 'Off';
+          statEl.style.color = isReceiving ? 'var(--cyan)' : '#6e7681';
+        }
+      } else if (isReceiving) {
+        if (dotEl) { dotEl.textContent = '↳'; dotEl.style.color = 'var(--cyan)'; }
+        if (statEl) {
+          statEl.textContent = `RX · S${(route.remoteCh || 0) + 1}`;
+          statEl.style.color = 'var(--cyan)';
+        }
+      } else if (sentCount > 0) {
+        if (dotEl) { dotEl.textContent = '●'; dotEl.style.color = 'var(--green)'; }
+        if (statEl) {
+          statEl.textContent = `${sentCount.toLocaleString()} pkts`;
+          statEl.style.color = 'var(--green)';
+        }
+      } else {
+        if (dotEl) { dotEl.textContent = '○'; dotEl.style.color = '#8b949e'; }
+        if (statEl) {
+          statEl.textContent = st.isConnected ? 'Waiting' : 'Connecting';
+          statEl.style.color = '#8b949e';
+        }
+      }
+    }
+
+    // 2. Live feeds summary + Clear Idle visibility
+    const liveMqttFeeds = st.feeds.filter(f => !f.isVirtualUtc);
+    const idleRemoteCount = liveMqttFeeds.filter(f => !f.isSelfBroadcast && (f.msgCount || 0) === 0).length;
+    if ($('mqtt-live-feeds-summary')) {
+      const activeStreamTotal = liveMqttFeeds.reduce((acc, f) => {
+        const activeChs = Array.isArray(f.chStats) ? f.chStats.filter(c => c.msgCount > 0).length : 0;
+        return acc + activeChs;
+      }, 0);
+      $('mqtt-live-feeds-summary').textContent = activeStreamTotal > 0
+        ? `${activeStreamTotal} active stream${activeStreamTotal === 1 ? '' : 's'}`
+        : (liveMqttFeeds.length > 0 ? `${liveMqttFeeds.length} ready` : 'Local');
+      $('mqtt-live-feeds-summary').style.color = activeStreamTotal > 0 ? 'var(--green)' : '#8b949e';
+    }
+    if ($('btn-mqtt-clear-stale')) {
+      $('btn-mqtt-clear-stale').style.display = idleRemoteCount > 0 ? 'inline-flex' : 'none';
+    }
+
+    // 3. In-place packet counter updates for rendered live stream rows (zero DOM flicker)
+    document.querySelectorAll('[data-stream-pkt-key]').forEach(el => {
+      const key = el.getAttribute('data-stream-pkt-key') || '';
+      const parsed = window.BioQuadCore && window.BioQuadCore.parseStreamSelectValue
+        ? window.BioQuadCore.parseStreamSelectValue(key)
+        : null;
+      if (!parsed) return;
+      const f = st.feeds.find(item => item.feedId === parsed.feedId);
+      if (!f || f.isVirtualUtc) return;
+      const rxPkts = Array.isArray(f.chStats) && f.chStats[parsed.remoteCh]
+        ? f.chStats[parsed.remoteCh].msgCount
+        : 0;
+      const txPkts = f.isSelfBroadcast && st.txChStats && st.txChStats[parsed.remoteCh]
+        ? st.txChStats[parsed.remoteCh].msgCount
+        : 0;
+      const count = Math.max(rxPkts, txPkts);
+      el.textContent = count > 0 ? `${count.toLocaleString()} pkts` : 'Idle';
+      el.style.color = count > 0 ? 'var(--green)' : '#6e7681';
+    });
+  }
+
+  function renderFeedsModal(syncInputs = false) {
+    const mgr = window.bioquadFeeds;
+    if (!mgr) return;
+    const st = mgr.getState();
+
+    if (syncInputs) {
+      const urlInp = $('mqtt-broker-url-input');
+      if (urlInp && document.activeElement !== urlInp) urlInp.value = st.brokerUrl;
+      const userInp = $('mqtt-broker-user-input');
+      if (userInp && document.activeElement !== userInp) userInp.value = st.brokerUser || '';
+      const passInp = $('mqtt-broker-pass-input');
+      if (passInp && document.activeElement !== passInp && window.bioquadFeeds) {
+        passInp.value = window.bioquadFeeds.brokerPass || '';
+      }
+      if ((st.brokerUser || st.hasBrokerPass) && $('mqtt-auth-row')) {
+        $('mqtt-auth-row').style.display = 'grid';
+      }
+      const pubNameInp = $('mqtt-pub-name-input');
+      if (pubNameInp && document.activeElement !== pubNameInp) pubNameInp.value = st.publishName;
+      const pubIdInp = $('mqtt-pub-id-input');
+      if (pubIdInp && document.activeElement !== pubIdInp) pubIdInp.value = st.publishFeedId;
+      const bufSlider = $('sync-buffer-slider');
+      if (bufSlider && document.activeElement !== bufSlider) bufSlider.value = st.playoutBufferMs;
+      const searchInp = $('feeds-stream-search');
+      if (searchInp && document.activeElement !== searchInp) searchInp.value = streamSearchQuery;
+    }
+
+    const authBtn = $('btn-mqtt-auth-toggle');
+    const authRow = $('mqtt-auth-row');
+    if (authBtn && authRow) {
+      const isAuthOpen = authRow.style.display !== 'none';
+      const hasAuth = Boolean(st.brokerUser || st.hasBrokerPass);
+      authBtn.classList.toggle('is-tls', isAuthOpen || hasAuth);
+      authBtn.setAttribute('aria-expanded', isAuthOpen ? 'true' : 'false');
+    }
+
+    document.querySelectorAll('.mqtt-preset-btn').forEach(btn => {
+      const isMatch = btn.dataset.presetUrl === st.brokerUrl;
+      btn.style.borderColor = isMatch ? 'var(--cyan)' : 'var(--border)';
+      btn.style.color = isMatch ? 'var(--cyan)' : 'var(--text)';
+      btn.style.background = isMatch ? 'rgba(0,240,255,0.12)' : '';
+    });
+
+    const statusBadge = $('mqtt-broker-status-badge');
+    if (statusBadge) {
+      statusBadge.textContent = st.statusText;
+      statusBadge.style.color = st.isConnected ? 'var(--green)' : (st.isConnecting ? 'var(--cyan)' : 'var(--text-muted)');
+    }
+
+    const connBtn = $('btn-mqtt-connect');
+    if (connBtn) {
+      connBtn.textContent = st.isConnected ? 'Disconnect' : (st.isConnecting ? 'Connecting...' : 'Connect');
+      connBtn.classList.toggle('danger', st.isConnected);
+      connBtn.classList.toggle('play-btn', !st.isConnected);
+    }
+
+    const pubBtn = $('btn-mqtt-publish-toggle');
+    if (pubBtn) {
+      pubBtn.textContent = st.isPublishing ? 'Stop' : 'Broadcast';
+      pubBtn.classList.toggle('recording', st.isPublishing);
+    }
+
+    const idleChk = $('feeds-show-idle-chk');
+    if (idleChk) idleChk.checked = showIdleStreams;
+
+    const simChk = $('feeds-show-sim-chk');
+    if (simChk) simChk.checked = showSimFeeds;
+
+    // 1. Active Routed Channels Strip (per-channel AUTO / CUSTOM toggle + unroute)
+    const routedStrip = $('feeds-routed-strip');
+    if (routedStrip) {
+      const activeRoutes = [];
+      for (let localCh = 0; localCh < 4; localCh++) {
+        if (st.channelRoutes[localCh]) {
+          activeRoutes.push({ localCh, route: st.channelRoutes[localCh] });
+        }
+      }
+
+      if (activeRoutes.length === 0) {
+        routedStrip.style.display = 'none';
+        routedStrip.innerHTML = '';
+      } else {
+        routedStrip.style.display = 'flex';
+        let rHtml = `<div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px;">
+          <span>ACTIVE ROUTES</span>
+          <span>SYNTH PATCH</span>
+        </div>`;
+        activeRoutes.forEach(({ localCh, route }) => {
+          const col = CH_COLORS[localCh];
+          const feed = st.feeds.find(f => f.feedId === route.feedId);
+          const feedLabel = feed ? (feed.name || feed.feedId) : route.feedId;
+          const streamNum = (route.remoteCh || 0) + 1;
+          const isAuto = route.followPatch !== false;
+          const safeFeedLabel = escapeHtml(feedLabel);
+
+          rHtml += `
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 3px 0; border-top: 1px solid #1d2530;">
+              <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
+                <span style="font-weight: 700; font-size: 11px; color: ${col}; flex-shrink: 0;">CH ${localCh + 1}</span>
+                <span style="font-size: 11px; color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">← ${safeFeedLabel} · S${streamNum}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
+                <button type="button" id="btn-route-auto-${localCh}" class="stream-btn"
+                  onclick="window.toggleFeedPatchFollow(${localCh})"
+                  aria-pressed="${isAuto ? 'true' : 'false'}"
+                  title="${isAuto ? 'Following artist synth patch and live automation. Click to customize locally.' : 'Custom local synth active. Click to re-sync artist patch.'}"
+                  style="min-height: 22px; padding: 1px 8px; font-size: 9.5px; font-weight: 700; border-color: ${isAuto ? 'var(--green)' : 'var(--yellow)'}; color: ${isAuto ? 'var(--green)' : 'var(--yellow)'}; background: ${isAuto ? 'rgba(57,255,20,0.12)' : 'rgba(255,215,0,0.12)'};">
+                  ${isAuto ? 'AUTO' : 'CUSTOM'}
+                </button>
+                <button type="button" class="stream-btn" onclick="window.handleChannelStreamSelect(${localCh}, '')" aria-label="Disconnect Channel ${localCh + 1}" style="min-height: 22px; min-width: 24px; padding: 1px 5px; font-size: 9.5px; color: #ff5577; border-color: rgba(255,85,119,0.4);">✕</button>
+              </div>
+            </div>
+          `;
+        });
+        routedStrip.innerHTML = rHtml;
+      }
+    }
+
+    // 2. Scalable Live Stream Rows Directory with Direct [CH 1] [CH 2] [CH 3] [CH 4] Buttons
+    const listEl = $('feeds-active-list');
+    if (!listEl) {
+      updateFeedsSyncTelemetryOnly();
+      return;
+    }
+
+    const rows = (window.BioQuadCore && typeof window.BioQuadCore.filterStreamDirectoryRows === 'function')
+      ? window.BioQuadCore.filterStreamDirectoryRows(st.feeds, {
+          query: streamSearchQuery,
+          showIdle: showIdleStreams,
+          showSim: showSimFeeds,
+          channelRoutes: st.channelRoutes,
+          txChStats: st.txChStats
+        })
+      : [];
+
+    if ($('feeds-visible-count')) {
+      $('feeds-visible-count').textContent = `${rows.length} shown`;
+    }
+
+    if (rows.length === 0) {
+      const emptyMsg = streamSearchQuery.trim()
+        ? 'No matching streams'
+        : (st.isConnected ? 'No active streams' : 'Disconnected');
+      listEl.innerHTML = `<div style="font-size: 11px; color: #8b949e; text-align: center; padding: 12px 8px; background: #161b22; border: 1px dashed var(--border); border-radius: 8px;">${emptyMsg}</div>`;
+      updateFeedsSyncTelemetryOnly();
+      return;
+    }
+
+    let html = '';
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const safeFeedId = escapeHtml(row.feedId);
+      const safeName = escapeHtml(row.feedName);
+      const safePatch = escapeHtml(row.patchSummary);
+      const isRouted = row.routedLocalChs.length > 0;
+      const dotColor = row.isVirtualUtc ? 'var(--yellow)' : (row.pktCount > 0 ? 'var(--green)' : '#6e7681');
+      const dotChar = row.isVirtualUtc ? '●' : (row.pktCount > 0 ? '●' : '○');
+      const tagText = row.isVirtualUtc ? 'UTC' : (row.isSelfBroadcast ? 'SELF' : 'LIVE');
+      const tagColor = row.isVirtualUtc ? 'var(--yellow)' : (row.isSelfBroadcast ? 'var(--cyan)' : 'var(--green)');
+      const pktText = row.isVirtualUtc ? 'UTC' : (row.pktCount > 0 ? `${row.pktCount.toLocaleString()} pkts` : 'Idle');
+      const pktColor = row.isVirtualUtc ? 'var(--yellow)' : (row.pktCount > 0 ? 'var(--green)' : '#6e7681');
+
+      let chBtnsHtml = '';
+      for (let lCh = 0; lCh < 4; lCh++) {
+        const active = row.routedLocalChs.includes(lCh);
+        const col = CH_COLORS[lCh];
+        chBtnsHtml += `
+          <button type="button" class="stream-btn feed-route-btn"
+            data-feed-id="${safeFeedId}" data-remote-ch="${row.remoteCh}" data-local-ch="${lCh}"
+            onclick="window.toggleFeedRoute(${lCh}, '${safeFeedId}', ${row.remoteCh})"
+            aria-pressed="${active ? 'true' : 'false'}"
+            style="min-height: 24px; min-width: 40px; padding: 2px 6px; font-size: 10px; font-weight: 700; border-color: ${active ? col : 'var(--border)'}; color: ${active ? '#000' : col}; background: ${active ? col : '#0d1117'};">
+            CH ${lCh + 1}
+          </button>
+        `;
+      }
+
+      html += `
+        <div class="stream-dir-row" data-stream-row="${safeFeedId}:${row.remoteCh}"
+          style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; background: #161b22; border: 1px solid ${isRouted ? 'rgba(0,240,255,0.55)' : 'var(--border)'}; border-radius: 14px; padding: 6px 11px;">
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 170px; flex: 1; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+              <span style="color: ${dotColor}; font-size: 10px; flex-shrink: 0;">${dotChar}</span>
+              <span style="font-weight: 700; font-size: 11px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${safeName}</span>
+              <span style="font-size: 9.5px; font-weight: 700; color: var(--cyan); background: rgba(0,240,255,0.1); border: 1px solid rgba(0,240,255,0.28); border-radius: 999px; padding: 0 7px; flex-shrink: 0;">${row.streamLabel}</span>
+              <span style="font-size: 9px; font-weight: 700; color: ${tagColor}; flex-shrink: 0;">${tagText}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 10px; color: #8b949e; overflow: hidden;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${safePatch ? `♪ ${safePatch}` : safeFeedId}</span>
+              <span data-stream-pkt-key="${safeFeedId}:${row.remoteCh}" class="tabular-nums" style="color: ${pktColor}; font-weight: 700; flex-shrink: 0;">${pktText}</span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
+            ${chBtnsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    listEl.innerHTML = html;
+    updateFeedsSyncTelemetryOnly();
+  }
+
+  window.handleFeedsSearchInput = function (val) {
+    streamSearchQuery = String(val || '');
+    renderFeedsModal(false);
+  };
+
+  window.toggleShowIdleStreams = function (checked) {
+    showIdleStreams = Boolean(checked);
+    renderFeedsModal(false);
+  };
+
+  window.toggleShowSimFeeds = function (checked) {
+    showSimFeeds = Boolean(checked);
+    renderFeedsModal(false);
+  };
+
+  window.handlePurgeStaleFeeds = function () {
+    if (!window.bioquadFeeds) return;
+    window.bioquadFeeds.purgeStaleFeeds(true);
+    renderFeedsModal(false);
+  };
+
+  window.handleChannelStreamSelect = function (localCh, rawValue) {
+    if (!window.bioquadFeeds) return;
+    const parsed = window.BioQuadCore && window.BioQuadCore.parseStreamSelectValue
+      ? window.BioQuadCore.parseStreamSelectValue(rawValue)
+      : null;
+
+    if (!parsed) {
+      window.bioquadFeeds.assignRoute(localCh, null);
+    } else {
+      window.bioquadFeeds.assignRoute(localCh, parsed.feedId, parsed.remoteCh, true);
+      if (window.dataStreamer) {
+        const dsState = window.dataStreamer.getState();
+        if (dsState && dsState.activeChannels && dsState.activeChannels[localCh] && dsState.activeChannels[localCh].active) {
+          window.dataStreamer.clearChannel(localCh);
+        }
+      }
+      if (window.viewMode === '1ch' && typeof window.selectChannelInCurrentView === 'function') {
+        window.selectChannelInCurrentView(localCh);
+      }
+    }
+    renderFeedsModal(false);
+    updateTransportDeck();
+  };
+
+  window.toggleMqttAuthRow = function (forceShow) {
+    const row = $('mqtt-auth-row');
+    const btn = $('btn-mqtt-auth-toggle');
+    if (!row) return;
+    const nextOpen = forceShow !== undefined ? Boolean(forceShow) : (row.style.display === 'none');
+    row.style.display = nextOpen ? 'grid' : 'none';
+    if (btn) {
+      btn.classList.toggle('is-tls', nextOpen);
+      btn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
     }
   };
 
+  window.selectMqttPreset = function (url) {
+    const inp = $('mqtt-broker-url-input');
+    if (inp) inp.value = url;
+    // Public preset brokers do not require authentication
+    if (window.bioquadFeeds) {
+      const uInp = $('mqtt-broker-user-input');
+      const pInp = $('mqtt-broker-pass-input');
+      if (uInp) uInp.value = '';
+      if (pInp) pInp.value = '';
+      window.bioquadFeeds.switchBroker(url, '', '');
+    }
+  };
+
+  window.handleMqttConnectClick = function () {
+    if (!window.bioquadFeeds) return;
+    const inp = $('mqtt-broker-url-input');
+    const url = inp ? inp.value.trim() : '';
+    const userInp = $('mqtt-broker-user-input');
+    const passInp = $('mqtt-broker-pass-input');
+    const uVal = userInp ? userInp.value.trim() : undefined;
+    const pVal = passInp ? passInp.value : undefined;
+    if (window.bioquadFeeds.isConnected || window.bioquadFeeds.isConnecting) {
+      window.bioquadFeeds.disconnectBroker();
+    } else {
+      window.bioquadFeeds.connectBroker(url, uVal, pVal);
+    }
+  };
+
+  window.handleMqttPingClick = function () {
+    if (!window.bioquadFeeds) return;
+    const inp = $('mqtt-broker-url-input');
+    const url = inp ? inp.value.trim() : '';
+    const userInp = $('mqtt-broker-user-input');
+    const passInp = $('mqtt-broker-pass-input');
+    const uVal = userInp ? userInp.value.trim() : undefined;
+    const pVal = passInp ? passInp.value : undefined;
+    if (url && (url !== window.bioquadFeeds.brokerUrl || (uVal !== undefined && uVal !== window.bioquadFeeds.brokerUser))) {
+      window.bioquadFeeds.switchBroker(url, uVal, pVal);
+    }
+    window.bioquadFeeds.sendTestPing();
+  };
+
+  window.handleMqttBroadcastToggle = function () {
+    if (!window.bioquadFeeds) return;
+    const pubName = $('mqtt-pub-name-input') ? $('mqtt-pub-name-input').value : '';
+    const pubId = $('mqtt-pub-id-input') ? $('mqtt-pub-id-input').value : '';
+    window.bioquadFeeds.togglePublishLocal(!window.bioquadFeeds.isPublishing, pubId, pubName);
+  };
+
+  window.handleSyncBufferInput = function (val) {
+    if (!window.bioquadFeeds) return;
+    window.bioquadFeeds.setPlayoutBufferMs(val);
+    updateFeedsSyncTelemetryOnly();
+  };
+
+  window.toggleFeedRoute = function (localCh, feedId, remoteCh = 0) {
+    if (!window.bioquadFeeds) return;
+    const activeRoute = window.bioquadFeeds.toggleRoute(localCh, feedId, remoteCh);
+    if (activeRoute) {
+      if (window.dataStreamer) {
+        const dsState = window.dataStreamer.getState();
+        if (dsState && dsState.activeChannels && dsState.activeChannels[localCh] && dsState.activeChannels[localCh].active) {
+          window.dataStreamer.clearChannel(localCh);
+        }
+      }
+      if (window.viewMode === '1ch' && typeof window.selectChannelInCurrentView === 'function') {
+        window.selectChannelInCurrentView(localCh);
+      }
+    }
+    renderFeedsModal(false);
+    updateTransportDeck();
+  };
+
+  // --- 7. EXPORT HELPERS ---
   function finalizePreparedExport({ blob, filename, formatLabel, contentsText, allowClipboard }) {
     currentExportBlob = blob;
     currentExportFilename = filename;
@@ -594,11 +1397,8 @@
       copyBtn.style.display = canCopy ? 'inline-flex' : 'none';
     }
 
-    setExportStatus('ready', 'READY', isIOSorBlueify()
-      ? 'File is ready. Tap Share / Save to Files to save on iPad.'
-      : 'File is ready. Download started or use actions below.');
+    setExportStatus('ready', 'READY', filename);
 
-    // Auto-trigger standard anchor download on desktop browsers (iOS/Blueify uses Share Sheet / link tap)
     if (!isIOSorBlueify()) {
       const autoA = document.createElement('a');
       autoA.href = currentExportObjectUrl;
@@ -663,6 +1463,20 @@
   };
 
   // --- 8. MODAL INNER RENDERERS ---
+  window.clearPortalChannel = function (ch) {
+    if (window.dataStreamer) {
+      window.dataStreamer.clearChannel(ch);
+    }
+    if (window.bioquadFeeds) {
+      const fState = window.bioquadFeeds.getState();
+      if (fState.channelRoutes && fState.channelRoutes[ch]) {
+        window.bioquadFeeds.assignRoute(ch, null);
+      }
+    }
+    renderChannelsInModal();
+    updateTransportDeck();
+  };
+
   function renderChannelsInModal() {
     const container = $('portal-channels-grid');
     if (!container) return;
@@ -677,18 +1491,21 @@
       const color = CH_COLORS[ch];
 
       html += `
-        <div style="background: #161b22; border: 1px solid var(--border); border-left: 3px solid ${color}; border-radius: 4px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 700; color: ${color}; font-size: 11px;">Channel ${ch + 1}</span>
-            ${hasData ? `<button class="stream-btn" onclick="window.dataStreamer.clearChannel(${ch}); window.updateStreamUI();" style="padding: 1px 5px; font-size: 9px; color: #ff5577;">Clear</button>` : ''}
+        <div style="background: #121720; border: 1px solid ${hasData ? 'rgba(0,240,255,0.4)' : 'var(--border)'}; border-radius: 14px; padding: 9px 11px; display: flex; flex-direction: column; justify-content: space-between; gap: 7px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: ${color}; font-size: 11px;">
+              <span class="ch-pill-dot" style="background: ${color};"></span>
+              <span>CH ${ch + 1}</span>
+            </span>
+            ${hasData ? `<button type="button" class="stream-btn" onclick="window.clearPortalChannel(${ch})" style="min-height: 20px; padding: 0 7px; font-size: 9px; color: #ff5577;">✕</button>` : ''}
           </div>
           <div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: ${hasData ? '#c9d1d9' : '#6e7681'};">
-            ${hasData ? feed.label : 'Empty'}
+            ${hasData ? escapeHtml(feed.label) : 'Empty'}
           </div>
-          <button class="stream-btn" onclick="document.getElementById('portal-ch-file-input-${ch}').click()" style="width: 100%; justify-content: center; padding: 4px; font-size: 10px;">
-            📁 Select File
+          <button type="button" class="stream-btn" onclick="document.getElementById('portal-ch-file-input-${ch}').click()" style="width: 100%; justify-content: center; padding: 4px 10px; font-size: 10px;">
+            Select File
           </button>
-          <input type="file" id="portal-ch-file-input-${ch}" style="display:none;" accept=".csv,.tsv,.tab,.txt,.json,.xml,.dat,.log" onchange="window.handlePortalChFile(this, ${ch})">
+          <input type="file" id="portal-ch-file-input-${ch}" style="display:none;" accept=".csv,.tsv,.tab,.txt,.json,.xml,.dat,.log,text/csv,text/plain,application/json" onchange="window.handlePortalChFile(this, ${ch})">
         </div>
       `;
     }
@@ -696,8 +1513,10 @@
   }
 
   window.handlePortalChFile = function (input, ch) {
-    if (input.files && input.files[0]) {
-      handleFileInputChange(input.files[0], ch);
+    const file = input && input.files && input.files[0] ? input.files[0] : null;
+    if (input) input.value = '';
+    if (file) {
+      handleFileInputChange(file, ch);
     }
   };
 
@@ -714,7 +1533,6 @@
     $('portal-file-summary').textContent = `${parsedPreview.name} · ${parsedPreview.rows.length.toLocaleString()} rows · ${parsedPreview.columns.length} columns${autoText}`;
     $('portal-auto-win-label').textContent = `Auto Window (${parsedPreview.recommendedWindow} pts)`;
 
-    // Update Mode Buttons
     ['multi_value_cols', 'multi_sensor_id', 'single_channel'].forEach((m) => {
       const btn = $(`portal-mode-btn-${m}`);
       if (btn) {
@@ -730,21 +1548,19 @@
       }
     });
 
-    // Render Mode Specific Mapping Controls
     const mappingControls = $('portal-mode-controls');
     if (mappingControls) {
       let html = '';
       if (mappingMode === 'multi_value_cols') {
-        html += '<div style="font-size: 10px; color: #8b949e; margin-bottom: 4px;">Assign Columns to Channels:</div>';
         html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">';
         for (let ch = 0; ch < 4; ch++) {
-          const activeCol = Object.keys(colToChMap).find(c => colToChMap[c] === ch) || (parsedPreview.guesses.detectedValueCols && parsedPreview.guesses.detectedValueCols[ch]) || '';
+          const activeCol = Object.keys(colToChMap).find(c => colToChMap[c] === ch) || '';
           html += `
-            <div style="background: #161b22; padding: 8px; border: 1px solid var(--border); border-radius: 4px;">
-              <div style="font-weight: 700; font-size: 10px; margin-bottom: 4px; color: ${CH_COLORS[ch]};">Channel ${ch + 1}:</div>
-              <select onchange="window.setColMapping('${ch}', this.value)" style="width: 100%; background: #0d1117; color: #fff; border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 11px;">
+            <div style="background: #161b22; padding: 8px; border: 1px solid var(--border); border-radius: 8px;">
+              <div style="font-weight: 700; font-size: 10px; margin-bottom: 4px; color: ${CH_COLORS[ch]};">CH ${ch + 1}</div>
+              <select onchange="window.setColMapping('${ch}', this.value)" style="width: 100%; background: #0d1117; color: #fff; border: 1px solid var(--border); padding: 4px 8px; border-radius: 999px; font-size: 11px;">
                 <option value="">-- Ignore --</option>
-                ${parsedPreview.columns.map(c => `<option value="${c}" ${c === activeCol ? 'selected' : ''}>${c}</option>`).join('')}
+                ${parsedPreview.columns.map(c => `<option value="${escapeHtml(c)}" ${c === activeCol ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
               </select>
             </div>
           `;
@@ -752,34 +1568,34 @@
         html += '</div>';
       } else if (mappingMode === 'multi_sensor_id') {
         const sensors = parsedPreview.guesses.sensorList || [];
-        html += '<div style="font-size: 10px; color: #8b949e; margin-bottom: 4px;">Map Series / Sensor IDs to Channels:</div>';
         if (sensors.length >= 1) {
           html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">';
           sensors.slice(0, 4).forEach((s, idx) => {
             const chTarget = sensorToChMap[s] !== undefined ? sensorToChMap[s] : idx;
+            const safeS = escapeHtml(s);
             html += `
-              <div style="background: #161b22; padding: 8px; border: 1px solid var(--border); border-radius: 4px;">
-                <div style="font-weight: 700; font-size: 10px; margin-bottom: 4px; color: #fff; overflow:hidden; text-overflow:ellipsis;">${s}</div>
-                <select onchange="window.setSensorMapping('${s}', this.value)" style="width: 100%; background: #0d1117; color: ${CH_COLORS[chTarget]}; border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 11px; font-weight: 700;">
-                  <option value="0" ${chTarget === 0 ? 'selected' : ''}>Channel 1</option>
-                  <option value="1" ${chTarget === 1 ? 'selected' : ''}>Channel 2</option>
-                  <option value="2" ${chTarget === 2 ? 'selected' : ''}>Channel 3</option>
-                  <option value="3" ${chTarget === 3 ? 'selected' : ''}>Channel 4</option>
+              <div style="background: #161b22; padding: 8px; border: 1px solid var(--border); border-radius: 8px;">
+                <div style="font-weight: 700; font-size: 10px; margin-bottom: 4px; color: #fff; overflow:hidden; text-overflow:ellipsis;">${safeS}</div>
+                <select data-sensor="${safeS}" onchange="window.setSensorMapping(this.dataset.sensor, this.value)" style="width: 100%; background: #0d1117; color: ${CH_COLORS[chTarget]}; border: 1px solid var(--border); padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;">
+                  <option value="0" ${chTarget === 0 ? 'selected' : ''}>CH 1</option>
+                  <option value="1" ${chTarget === 1 ? 'selected' : ''}>CH 2</option>
+                  <option value="2" ${chTarget === 2 ? 'selected' : ''}>CH 3</option>
+                  <option value="3" ${chTarget === 3 ? 'selected' : ''}>CH 4</option>
                 </select>
               </div>
             `;
           });
           html += '</div>';
         } else {
-          html += '<div style="font-size: 11px; color: #6e7681; font-style: italic;">No discrete series detected. Select Series ID column below.</div>';
+          html += '<div style="font-size: 11px; color: #6e7681;">No discrete series</div>';
         }
       } else if (mappingMode === 'single_channel') {
-        html += '<div style="display: flex; align-items: center; gap: 8px;">';
+        html += '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">';
         html += '<span style="font-size: 11px; color: #8b949e;">Target:</span>';
         for (let ch = 0; ch < 4; ch++) {
           const active = targetSingleChannel === ch;
           html += `
-            <button class="stream-btn" onclick="window.setTargetSingleCh(${ch})" style="color: ${CH_COLORS[ch]}; border-color: ${active ? 'var(--cyan)' : 'var(--border)'}; background: ${active ? '#000' : '#161b22'};">
+            <button type="button" class="stream-btn" onclick="window.setTargetSingleCh(${ch})" style="color: ${CH_COLORS[ch]}; border-color: ${active ? 'var(--cyan)' : 'var(--border)'}; background: ${active ? '#000' : '#161b22'};">
               Channel ${ch + 1}
             </button>
           `;
@@ -789,26 +1605,25 @@
       mappingControls.innerHTML = html;
     }
 
-    // Populate Column Selectors
     const idColWrap = $('portal-id-col-wrap');
     const idColSelect = $('portal-id-col-select');
     if (idColWrap && idColSelect) {
       idColWrap.style.display = mappingMode === 'multi_sensor_id' ? 'block' : 'none';
       idColSelect.innerHTML = '<option value="">None (Single Stream)</option>' +
-        parsedPreview.columns.map(c => `<option value="${c}" ${c === selectedIdCol ? 'selected' : ''}>${c}</option>`).join('');
+        parsedPreview.columns.map(c => `<option value="${escapeHtml(c)}" ${c === selectedIdCol ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
     }
 
     const valColWrap = $('portal-val-col-wrap');
     const valColSelect = $('portal-val-col-select');
     if (valColWrap && valColSelect) {
       valColWrap.style.display = mappingMode !== 'multi_value_cols' ? 'block' : 'none';
-      valColSelect.innerHTML = parsedPreview.columns.map(c => `<option value="${c}" ${c === selectedValueCol ? 'selected' : ''}>${c}</option>`).join('');
+      valColSelect.innerHTML = parsedPreview.columns.map(c => `<option value="${escapeHtml(c)}" ${c === selectedValueCol ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
     }
 
     const timeColSelect = $('portal-time-col-select');
     if (timeColSelect) {
       timeColSelect.innerHTML = '<option value="">Fixed Cadence Rate</option>' +
-        parsedPreview.columns.map(c => `<option value="${c}" ${c === selectedTimeCol ? 'selected' : ''}>${c}</option>`).join('');
+        parsedPreview.columns.map(c => `<option value="${escapeHtml(c)}" ${c === selectedTimeCol ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
     }
 
     const cadenceRateWrap = $('portal-cadence-rate-wrap');
@@ -816,14 +1631,13 @@
       cadenceRateWrap.style.display = !selectedTimeCol ? 'block' : 'none';
     }
 
-    // Render Preview Table
     const tableHeader = $('portal-table-head');
     const tableBody = $('portal-table-body');
     if (tableHeader && tableBody) {
-      tableHeader.innerHTML = parsedPreview.columns.map(c => `<th>${c}</th>`).join('');
+      tableHeader.innerHTML = parsedPreview.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
       let tbodyHtml = '';
       parsedPreview.sampleRows.slice(0, 5).forEach((row) => {
-        tbodyHtml += '<tr>' + parsedPreview.columns.map(c => `<td>${row[c] !== null && row[c] !== undefined ? row[c] : '-'}</td>`).join('') + '</tr>';
+        tbodyHtml += '<tr>' + parsedPreview.columns.map(c => `<td>${row[c] !== null && row[c] !== undefined ? escapeHtml(row[c]) : '-'}</td>`).join('') + '</tr>';
       });
       tableBody.innerHTML = tbodyHtml;
     }
@@ -840,7 +1654,7 @@
   };
 
   window.setColMapping = function (chStr, col) {
-    const ch = parseInt(chStr);
+    const ch = parseInt(chStr, 10);
     Object.keys(colToChMap).forEach(k => {
       if (colToChMap[k] === ch) delete colToChMap[k];
     });
@@ -848,21 +1662,21 @@
   };
 
   window.setSensorMapping = function (sensor, chStr) {
-    sensorToChMap[sensor] = parseInt(chStr);
+    sensorToChMap[sensor] = parseInt(chStr, 10);
     renderMappingSection();
   };
 
   function showPortalError(msg) {
-    const alert = $('portal-error-alert');
-    if (alert) {
-      alert.style.display = 'flex';
+    const alertBox = $('portal-error-alert');
+    if (alertBox) {
+      alertBox.style.display = 'flex';
       $('portal-error-text').textContent = msg;
     }
   }
 
   function hidePortalError() {
-    const alert = $('portal-error-alert');
-    if (alert) alert.style.display = 'none';
+    const alertBox = $('portal-error-alert');
+    if (alertBox) alertBox.style.display = 'none';
   }
 
   window.hidePortalError = hidePortalError;
@@ -871,14 +1685,51 @@
   document.addEventListener('DOMContentLoaded', () => {
     updateDeckVisibility();
 
-    // Hook up transport clicks
     const recBtn = $('btn-rec-stream');
     if (recBtn) {
       recBtn.addEventListener('click', () => {
         const rec = window.biodataRecorder;
         if (!rec) return;
-        if (rec.isRecording) rec.stop();
-        else rec.start();
+        const sessionInput = $('stream-session-name');
+        if (rec.isRecording) {
+          rec.stop();
+        } else {
+          const typedName = sessionInput ? sessionInput.value.trim() : '';
+          rec.start(typedName);
+        }
+      });
+    }
+
+    const sessionInput = $('stream-session-name');
+    if (sessionInput) {
+      if (window.biodataRecorder) {
+        sessionInput.value = window.biodataRecorder.sessionName;
+      }
+      sessionInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitSessionNameFromInput();
+          sessionInput.blur();
+        }
+      });
+      sessionInput.addEventListener('change', () => {
+        commitSessionNameFromInput();
+      });
+    }
+
+    const searchInput = $('portal-takes-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        savedTakesSearch = e.target.value || '';
+        renderSavedTakes();
+      });
+    }
+
+    const sortSelect = $('portal-takes-sort');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        savedTakesSort = e.target.value || 'newest';
+        renderSavedTakes();
       });
     }
 
@@ -892,6 +1743,9 @@
       });
     }
 
+    const recAutoBtn = $('btn-rec-auto');
+    if (recAutoBtn) recAutoBtn.addEventListener('click', window.toggleRecordAutomationUI);
+
     const loopBtn = $('btn-loop-stream');
     if (loopBtn) loopBtn.addEventListener('click', () => window.dataStreamer?.toggleLoop());
 
@@ -901,36 +1755,55 @@
     const scrubber = $('stream-scrubber');
     if (scrubber) {
       scrubber.addEventListener('input', (e) => {
-        window.dataStreamer?.seek(parseInt(e.target.value));
+        window.dataStreamer?.seek(parseInt(e.target.value, 10));
       });
     }
 
     const speedBox = $('stream-speed-box') || $('stream-speed-val');
     if (speedBox) {
       let isDraggingSpeed = false;
+      let speedStartX = 0;
       let speedStartY = 0;
       let speedStartRate = 1.0;
+      let speedPointerType = 'mouse';
 
       speedBox.addEventListener('pointerdown', (e) => {
         if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
         const ds = window.dataStreamer;
         if (!ds) return;
         isDraggingSpeed = true;
+        speedPointerType = e.pointerType || 'mouse';
+        speedStartX = e.clientX;
         speedStartY = e.clientY;
         speedStartRate = ds.playbackRate || 1.0;
         speedBox.classList.add('is-dragging');
-        if (speedBox.setPointerCapture) {
-          try { speedBox.setPointerCapture(e.pointerId); } catch (err) {}
+        if (speedPointerType !== 'touch') {
+          if (speedBox.setPointerCapture) {
+            try { speedBox.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+          e.preventDefault();
         }
-        e.preventDefault();
       });
 
       speedBox.addEventListener('pointermove', (e) => {
         if (!isDraggingSpeed) return;
         const ds = window.dataStreamer;
         if (!ds) return;
-        const deltaY = speedStartY - e.clientY;
-        const nextRate = Math.max(0.1, Math.min(5.0, Math.round((speedStartRate + deltaY * 0.02) * 10) / 10));
+        let delta = 0;
+        if (speedPointerType === 'touch') {
+          const dx = e.clientX - speedStartX;
+          const dy = e.clientY - speedStartY;
+          if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+            isDraggingSpeed = false;
+            speedBox.classList.remove('is-dragging');
+            return;
+          }
+          if (Math.abs(dx) < 4) return;
+          delta = dx;
+        } else {
+          delta = speedStartY - e.clientY;
+        }
+        const nextRate = Math.max(0.1, Math.min(5.0, Math.round((speedStartRate + delta * 0.02) * 10) / 10));
         ds.setPlaybackRate(nextRate);
       });
 
@@ -954,25 +1827,30 @@
     const cadenceInput = $('stream-cadence-val');
     if (cadenceInput) {
       cadenceInput.addEventListener('change', (e) => {
-        window.dataStreamer?.setCadenceRps(parseInt(e.target.value) || 30);
+        window.dataStreamer?.setCadenceRps(parseInt(e.target.value, 10) || 30);
       });
     }
 
     const loadBtn = $('btn-open-portal');
-    if (loadBtn) loadBtn.addEventListener('click', openPortalModal);
+    if (loadBtn) loadBtn.addEventListener('click', window.togglePortalModal);
 
-    // Channel clear handlers
+    // Channel clear handlers (clears either file stream OR active Cloud Feed route)
     for (let ch = 0; ch < 4; ch++) {
       const clearBtn = $(`stream-ch-clear-${ch}`);
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-          window.dataStreamer?.clearChannel(ch);
+          const ds = window.dataStreamer;
+          const st = ds ? ds.getState() : null;
+          if (st && st.activeChannels && st.activeChannels[ch] && st.activeChannels[ch].active) {
+            ds.clearChannel(ch);
+          } else if (window.bioquadFeeds) {
+            window.bioquadFeeds.assignRoute(ch, null);
+          }
           updateTransportDeck();
         });
       }
     }
 
-    // Dropzone setup
     const dropzone = $('portal-dropzone');
     const fileInput = $('portal-file-input');
     if (dropzone && fileInput) {
@@ -990,13 +1868,14 @@
       });
       dropzone.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files[0]) {
-          handleFileInputChange(e.target.files[0]);
+        const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+        e.target.value = '';
+        if (file) {
+          handleFileInputChange(file);
         }
       });
     }
 
-    // Mapping controls listeners
     const autoWinChk = $('portal-auto-win-chk');
     if (autoWinChk) {
       autoWinChk.addEventListener('change', (e) => {
@@ -1046,11 +1925,10 @@
     const portalCadenceInput = $('portal-cadence-rate-val');
     if (portalCadenceInput) {
       portalCadenceInput.addEventListener('change', (e) => {
-        cadenceRate = Math.max(1, Math.min(500, parseInt(e.target.value) || 30));
+        cadenceRate = Math.max(1, Math.min(500, parseInt(e.target.value, 10) || 30));
       });
     }
 
-    // Export Modal handlers (synchronous Share Sheet trigger for iOS / Blueify)
     const exportShareBtn = $('btn-export-share');
     if (exportShareBtn) {
       exportShareBtn.addEventListener('click', () => {
@@ -1067,14 +1945,12 @@
           });
           if (sharePromise && typeof sharePromise.then === 'function') {
             sharePromise.then(() => {
-              if (feedback) feedback.textContent = 'Shared or saved via iOS Share Sheet.';
+              if (feedback) feedback.textContent = 'Shared or saved via Share Sheet.';
             }).catch((err) => {
               if (!feedback) return;
-              if (err && err.name === 'AbortError') {
-                feedback.textContent = 'Share dismissed. Tap Share again or use Download File below.';
-              } else {
-                feedback.textContent = 'Share unavailable here. Tap Download File below instead.';
-              }
+              feedback.textContent = (err && err.name === 'AbortError')
+                ? 'Share dismissed. Tap Share again or use Download File below.'
+                : 'Share unavailable here. Tap Download File below instead.';
             });
           }
         } catch (err) {
@@ -1101,13 +1977,12 @@
         } catch (err) {
           if (feedback) {
             feedback.style.display = 'block';
-            feedback.textContent = 'Clipboard copy blocked. Use Share / Save to Files instead.';
+            feedback.textContent = 'Clipboard copy blocked. Use Download File instead.';
           }
         }
       });
     }
 
-    // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       const ds = window.dataStreamer;
@@ -1126,16 +2001,23 @@
         ds?.step(false);
       } else if (e.code === 'Escape') {
         if (isExportModalOpen) window.closeExportModal();
+        else if (isFeedsModalOpen) window.closeFeedsModal();
         else if (isPortalModalOpen) closePortalModal();
       }
     });
 
-    // Subscriptions & Loop
     window.addEventListener('bioquad_stream_update', updateTransportDeck);
     window.addEventListener('bioquad_recorder_update', updateTransportDeck);
     window.addEventListener('bioquad_takes_updated', renderSavedTakes);
+    window.addEventListener('bioquad_feeds_update', () => {
+      if (isFeedsModalOpen) renderFeedsModal(false);
+      updateToolbarIndicator();
+    });
+    window.addEventListener('bioquad_mqtt_telemetry', () => {
+      if (isFeedsModalOpen) updateFeedsSyncTelemetryOnly();
+    });
 
-    setInterval(updateTransportDeck, 80);
+    setInterval(updateTransportDeck, 100);
     renderSavedTakes();
   });
 

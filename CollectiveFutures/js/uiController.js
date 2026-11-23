@@ -5,13 +5,524 @@
 
 window.syncTimers = {};
 window.debouncedHardwareSync = function(chIdx) {
-    if (!window.bleTxCharacteristic) return;
+    if (typeof window.isHardwareConnected === 'function' ? !window.isHardwareConnected() : !window.bleTxCharacteristic) return;
     clearTimeout(window.syncTimers[chIdx]);
     window.syncTimers[chIdx] = setTimeout(() => {
         if (typeof window.syncParamsToHardware === 'function') {
             window.syncParamsToHardware(chIdx);
         }
     }, 100); 
+};
+
+let hwNoticeTimer = null;
+window.showHardwareNotice = function(msg, durationMs = 4500, options = {}) {
+    const banner = document.getElementById('hw-toast-banner');
+    const textEl = document.getElementById('hw-toast-text');
+    const actionLink = document.getElementById('hw-toast-action-link');
+    const needsStandalone = Boolean(options && options.needsStandaloneTab);
+    if (!banner || !textEl) {
+        console.info('[bioQuad]', msg);
+        return;
+    }
+    textEl.textContent = msg;
+    if (actionLink) {
+        actionLink.href = window.location.href;
+        actionLink.style.display = needsStandalone ? 'inline-flex' : 'none';
+    }
+    banner.style.display = 'flex';
+    clearTimeout(hwNoticeTimer);
+    hwNoticeTimer = setTimeout(() => {
+        banner.style.display = 'none';
+    }, durationMs);
+};
+
+window.refreshHardwareStatusUI = function() {
+    const usbHw = window.usbHardware || null;
+    const usbActive = Boolean(usbHw && usbHw.isConnected);
+    const usbConnecting = Boolean(usbHw && usbHw.isConnecting);
+    const usbErr = (usbHw && usbHw.lastError) ? usbHw.lastError : '';
+
+    const bleActive = Boolean(window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected);
+    const bleConnecting = Boolean(window.bleIsConnecting);
+    const bleState = window.bleStatusState || 'idle';
+    const bleErr = window.bleLastError || '';
+
+    const anyConnected = usbActive || bleActive;
+
+    // 1. Top Toolbar CONNECT Pill
+    const dot = document.getElementById('hw-conn-dot');
+    const lbl = document.getElementById('hw-conn-label');
+    if (dot) {
+        dot.className = anyConnected ? 'status-online' : 'status-offline';
+    }
+    if (lbl) {
+        if (usbActive && bleActive) lbl.textContent = 'USB+BLE';
+        else if (usbActive) lbl.textContent = 'USB LIVE';
+        else if (bleActive) lbl.textContent = 'BLE LIVE';
+        else if (usbConnecting || bleConnecting) lbl.textContent = 'LINKING';
+        else lbl.textContent = 'CONNECT';
+    }
+
+    // 2. Connect Hub Dropdown Cards
+    const usbDot = document.getElementById('usb-hub-dot');
+    const usbStatus = document.getElementById('usb-hub-status');
+    const usbBtn = document.getElementById('btn-usb-connect');
+    if (usbDot) usbDot.className = usbActive ? 'status-online' : 'status-offline';
+    if (usbStatus) {
+        if (usbActive) {
+            const devName = usbHw.deviceName || 'ESP32 USB Serial';
+            const pktInfo = usbHw.rxPacketCount > 0 ? ` · ${usbHw.rxPacketCount} pkts` : '';
+            usbStatus.textContent = `${devName} · Raw Active${pktInfo}`;
+            usbStatus.style.color = 'var(--green)';
+        } else if (usbConnecting) {
+            usbStatus.textContent = 'Opening USB port...';
+            usbStatus.style.color = 'var(--cyan)';
+        } else if (usbErr) {
+            usbStatus.textContent = usbErr;
+            usbStatus.style.color = '#ff7b72';
+        } else {
+            const caps = usbHw ? usbHw.getCapabilities() : { supported: false };
+            usbStatus.textContent = caps.supported ? '115200 baud' : 'Unsupported';
+            usbStatus.style.color = 'var(--text-muted)';
+        }
+    }
+    if (usbBtn) {
+        usbBtn.textContent = usbActive ? 'DISCONNECT USB' : (usbConnecting ? 'CONNECTING...' : 'CONNECT USB');
+        usbBtn.classList.toggle('danger', usbActive);
+    }
+
+    const bleDot = document.getElementById('ble-hub-dot');
+    const bleStatus = document.getElementById('ble-hub-status');
+    const bleBtn = document.getElementById('btn-ble-connect');
+    if (bleDot) bleDot.className = bleActive ? 'status-online' : 'status-offline';
+    if (bleStatus) {
+        if (bleActive) {
+            bleStatus.textContent = usbActive
+                ? 'USB priority'
+                : `${window.activeBleDevice.name || 'Biodata-Q4'} · GATT Active`;
+            bleStatus.style.color = 'var(--green)';
+        } else if (bleConnecting) {
+            bleStatus.textContent = bleState === 'linking' ? 'Linking...' : 'Scanning...';
+            bleStatus.style.color = 'var(--cyan)';
+        } else if (bleErr) {
+            bleStatus.textContent = bleErr;
+            bleStatus.style.color = '#ff7b72';
+        } else {
+            bleStatus.textContent = (navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function')
+                ? 'Standby'
+                : 'Unsupported';
+            bleStatus.style.color = 'var(--text-muted)';
+        }
+    }
+    if (bleBtn) {
+        bleBtn.textContent = bleActive
+            ? 'DISCONNECT BLE'
+            : (bleConnecting ? (bleState === 'linking' ? 'LINKING...' : 'SCANNING...') : 'CONNECT BLE');
+        bleBtn.classList.toggle('danger', bleActive);
+    }
+
+    // Show standalone tab launch button ONLY if an embedded preview frame actually blocked Web Serial / BLE
+    const standaloneLink = document.getElementById('hw-hub-standalone-link');
+    if (standaloneLink) {
+        const showStandalone = !anyConnected && Boolean((usbHw && usbHw.needsStandaloneTab) || window.bleNeedsStandaloneTab);
+        standaloneLink.href = window.location.href;
+        standaloneLink.style.display = showStandalone ? 'inline-flex' : 'none';
+    }
+
+    if (typeof window.refreshHardwareNetUI === 'function') {
+        window.refreshHardwareNetUI(false);
+    }
+};
+
+// --- ESP32 WIFI & CLOUD MQTT PROVISIONING CONTROLLER (BLE GATT / USB SERIAL) ---
+window.hwNetFormState = {
+    en: true,
+    tls: false,
+    authOpen: false
+};
+
+window.syncHwBrokerPresetHighlight = function() {
+    const Core = window.BioQuadCore;
+    const hostInput = document.getElementById('hw-mqtt-host');
+    const cleanHost = (hostInput ? hostInput.value : '').trim().toLowerCase();
+    const btns = document.querySelectorAll('.hw-broker-preset-btn');
+    btns.forEach((btn) => {
+        const key = btn.getAttribute('data-hw-preset');
+        const preset = (Core && Core.HW_BROKER_PRESETS && key) ? Core.HW_BROKER_PRESETS[key] : null;
+        const isMatch = Boolean(preset && preset.host === cleanHost);
+        btn.classList.toggle('is-active', isMatch);
+    });
+};
+
+window.refreshHardwareNetUI = function(syncFieldsFromHw = false, explicitRead = false) {
+    const usbHw = window.usbHardware || null;
+    const usbActive = Boolean(usbHw && usbHw.isConnected);
+    const bleActive = Boolean(window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected);
+    const anyConnected = usbActive || bleActive;
+    const st = anyConnected ? (window.hwNetStatus || null) : null;
+
+    const dotEl = document.getElementById('hw-net-dot');
+    const badgeEl = document.getElementById('hw-net-status-badge');
+    const ssidEl = document.getElementById('hw-wifi-ssid');
+    const wpassEl = document.getElementById('hw-wifi-pass');
+    const hostEl = document.getElementById('hw-mqtt-host');
+    const portEl = document.getElementById('hw-mqtt-port');
+    const muserEl = document.getElementById('hw-mqtt-user');
+    const mpassEl = document.getElementById('hw-mqtt-pass');
+    const nameEl = document.getElementById('hw-mqtt-name');
+    const idEl = document.getElementById('hw-mqtt-id');
+    const cloudBtn = document.getElementById('btn-hw-cloud-enable');
+    const tlsBtn = document.getElementById('btn-hw-mqtt-tls');
+    const envRateSelect = document.getElementById('hw-env-rate-select');
+    const envSummaryEl = document.getElementById('hw-env-live-summary');
+
+    // 1. Live WiFi & MQTT status badge
+    if (dotEl && badgeEl) {
+        if (!anyConnected) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = '';
+            badgeEl.textContent = 'Connect BLE or USB';
+            badgeEl.style.color = 'var(--text-muted)';
+        } else if (!st) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = '';
+            badgeEl.textContent = 'Link Active · Flash v011 for WiFi/MQTT';
+            badgeEl.style.color = 'var(--text-muted)';
+        } else if (!st.en) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = '';
+            badgeEl.textContent = st.ssid ? `Cloud Off · ${st.ssid} (Radio Off)` : 'Cloud Off (WiFi Radio Off)';
+            badgeEl.style.color = 'var(--text-muted)';
+        } else if (st.wifi === 1) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = 'var(--cyan)';
+            badgeEl.textContent = `WiFi Linking · ${st.ssid || '...'}`;
+            badgeEl.style.color = 'var(--cyan)';
+        } else if (st.wifi === 3) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = '#ff7b72';
+            badgeEl.textContent = `WiFi Failed · ${st.ssid || 'Check 2.4GHz SSID/Pass'}`;
+            badgeEl.style.color = '#ff7b72';
+        } else if (st.wifi === 2 && st.mqtt === 2) {
+            dotEl.className = 'status-online';
+            dotEl.style.color = '';
+            const rssiText = typeof st.rssi === 'number' ? ` (${st.rssi} dBm)` : '';
+            badgeEl.textContent = `MQTT Live · ${st.id || 'esp32'}${rssiText}`;
+            badgeEl.style.color = 'var(--green)';
+        } else if (st.wifi === 2 && st.mqtt === 3) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = '#ff7b72';
+            badgeEl.textContent = `WiFi ${st.ip || 'OK'} · Broker Err (${st.merr ?? '?'})`;
+            badgeEl.style.color = '#ff7b72';
+        } else if (st.wifi === 2) {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = 'var(--cyan)';
+            badgeEl.textContent = `WiFi ${st.ip || 'OK'} · MQTT Linking...`;
+            badgeEl.style.color = 'var(--cyan)';
+        } else {
+            dotEl.className = 'status-offline';
+            dotEl.style.color = '';
+            badgeEl.textContent = 'WiFi Standby';
+            badgeEl.style.color = 'var(--text-muted)';
+        }
+    }
+
+    // 2. Password placeholders reflect NVS secret presence without exposing raw passwords
+    if (wpassEl) {
+        wpassEl.placeholder = (st && st.hasWpass)
+            ? 'Saved in ESP32 NVS (leave blank to keep)'
+            : 'WiFi Password';
+    }
+    if (mpassEl) {
+        mpassEl.placeholder = (st && st.hasMpass)
+            ? 'Saved in ESP32 NVS (leave blank to keep)'
+            : 'MQTT Password (custom broker)';
+    }
+
+    // 3. Populate fields when connecting or clicking READ (never clobbering focused input)
+    if (syncFieldsFromHw && st) {
+        const activeEl = document.activeElement;
+        if (ssidEl && activeEl !== ssidEl && (st.ssid || explicitRead)) {
+            ssidEl.value = st.ssid || '';
+        }
+        if (hostEl && activeEl !== hostEl && st.host) {
+            hostEl.value = st.host;
+        }
+        if (portEl && activeEl !== portEl && st.port) {
+            portEl.value = String(st.port);
+        }
+        if (muserEl && activeEl !== muserEl) {
+            muserEl.value = st.muser || '';
+        }
+        if (idEl && activeEl !== idEl && st.id) {
+            idEl.value = st.id;
+        }
+        if (nameEl && activeEl !== nameEl && st.name) {
+            nameEl.value = st.name;
+        }
+
+        // On factory-fresh boards (en===0 && !ssid), keep UI toggle at AUTO ON ready to save
+        // unless user explicitly clicked READ
+        if (st.en || st.ssid || explicitRead) {
+            window.hwNetFormState.en = Boolean(st.en);
+        }
+        window.hwNetFormState.tls = Boolean(st.tls);
+
+        if (st.envMs !== undefined && window.BioQuadCore && typeof window.BioQuadCore.normalizeEnvRateMs === 'function') {
+            window.envSensorRateMs = window.BioQuadCore.normalizeEnvRateMs(st.envMs);
+            try { localStorage.setItem('bioquad_env_rate_ms', String(window.envSensorRateMs)); } catch (e) {}
+        }
+
+        if (st.muser || st.hasMpass) {
+            window.toggleHwMqttAuthRow(true);
+        }
+    }
+
+    if (envRateSelect && document.activeElement !== envRateSelect) {
+        const curRateStr = String(window.envSensorRateMs !== undefined ? window.envSensorRateMs : 15000);
+        if (Array.from(envRateSelect.options).some(opt => opt.value === curRateStr)) {
+            envRateSelect.value = curRateStr;
+        }
+    }
+
+    if (envSummaryEl) {
+        if (window.envSensorRateMs === 0) {
+            envSummaryEl.textContent = 'Sensor Polling Off';
+            envSummaryEl.style.color = '#6e7681';
+        } else if (window.localHwEnvSensor && window.BioQuadCore && typeof window.BioQuadCore.formatEnvSensorTooltip === 'function') {
+            envSummaryEl.textContent = window.BioQuadCore.formatEnvSensorTooltip(window.localHwEnvSensor) || 'SHT4x Active';
+            envSummaryEl.style.color = 'var(--green)';
+        } else if (st && st.sht === 1) {
+            envSummaryEl.textContent = 'SHT4x Ready · SDA 8 / SCL 9';
+            envSummaryEl.style.color = 'var(--cyan)';
+        } else {
+            envSummaryEl.textContent = 'SDA 8 · SCL 9';
+            envSummaryEl.style.color = 'var(--text-muted)';
+        }
+    }
+
+    if (cloudBtn) {
+        const isOn = Boolean(window.hwNetFormState.en);
+        cloudBtn.textContent = isOn ? 'AUTO ON' : 'AUTO OFF';
+        cloudBtn.classList.toggle('is-on', isOn);
+        cloudBtn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+    }
+    if (tlsBtn) {
+        const isTls = Boolean(window.hwNetFormState.tls);
+        tlsBtn.classList.toggle('is-tls', isTls);
+        tlsBtn.setAttribute('aria-pressed', isTls ? 'true' : 'false');
+    }
+
+    window.syncHwBrokerPresetHighlight();
+};
+
+window.setHardwareEnvRate = function(rawVal) {
+    const Core = window.BioQuadCore;
+    const ms = (Core && typeof Core.normalizeEnvRateMs === 'function')
+        ? Core.normalizeEnvRateMs(rawVal)
+        : (parseInt(rawVal, 10) || 15000);
+
+    window.envSensorRateMs = ms;
+    window.lastEmittedLocalEnv = null;
+    try { localStorage.setItem('bioquad_env_rate_ms', String(ms)); } catch (e) {}
+
+    if (ms === 0) {
+        window.localHwEnvSensor = null;
+        if (window.chData) {
+            for (let i = 0; i < 4; i++) {
+                if (window.chData[i]) window.chData[i].localEnvSensor = null;
+            }
+        }
+    }
+
+    if (typeof window.isHardwareConnected === 'function' && window.isHardwareConnected()) {
+        const cmdObj = (Core && typeof Core.buildHardwareEnvConfigCommand === 'function')
+            ? Core.buildHardwareEnvConfigCommand(ms)
+            : { command: `ENVCFG:${JSON.stringify({ ms })}\n` };
+        if (typeof window.sendHardwareCommand === 'function') {
+            window.sendHardwareCommand(cmdObj.command);
+        }
+        const label = (Core && typeof Core.formatEnvRateLabel === 'function') ? Core.formatEnvRateLabel(ms) : `${ms}ms`;
+        if (typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice(`I2C sensor rate set to ${label} (saved to ESP32 NVS).`, 3000);
+        }
+    }
+
+    if (typeof window.refreshAllSensorHUDs === 'function') window.refreshAllSensorHUDs();
+    window.refreshHardwareNetUI(false);
+    return ms;
+};
+
+window.toggleHwCloudEnable = function() {
+    window.hwNetFormState.en = !window.hwNetFormState.en;
+    window.refreshHardwareNetUI(false);
+};
+
+window.toggleHwMqttTls = function() {
+    window.hwNetFormState.tls = !window.hwNetFormState.tls;
+    const portEl = document.getElementById('hw-mqtt-port');
+    if (portEl) {
+        const curPort = parseInt(portEl.value, 10);
+        if (window.hwNetFormState.tls && (isNaN(curPort) || curPort === 1883)) {
+            portEl.value = '8883';
+        } else if (!window.hwNetFormState.tls && curPort === 8883) {
+            portEl.value = '1883';
+        }
+    }
+    window.refreshHardwareNetUI(false);
+};
+
+window.toggleHwMqttAuthRow = function(force) {
+    const row = document.getElementById('hw-mqtt-auth-row');
+    const btn = document.getElementById('btn-hw-mqtt-auth-toggle');
+    if (!row) return false;
+    const isOpen = force !== undefined ? Boolean(force) : (row.style.display === 'none');
+    window.hwNetFormState.authOpen = isOpen;
+    row.style.display = isOpen ? 'grid' : 'none';
+    if (btn) {
+        btn.classList.toggle('is-tls', isOpen);
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    return isOpen;
+};
+
+window.applyHwBrokerPreset = function(presetKey) {
+    const Core = window.BioQuadCore;
+    const preset = (Core && Core.HW_BROKER_PRESETS) ? Core.HW_BROKER_PRESETS[presetKey] : null;
+    if (!preset) return;
+    const hostEl = document.getElementById('hw-mqtt-host');
+    const portEl = document.getElementById('hw-mqtt-port');
+    if (hostEl) hostEl.value = preset.host;
+    window.hwNetFormState.tls = Boolean(preset.tls);
+    if (portEl) portEl.value = String(window.hwNetFormState.tls ? preset.tlsPort : preset.port);
+    window.refreshHardwareNetUI(false);
+};
+
+window.requestHardwareNetStatus = function() {
+    if (typeof window.isHardwareConnected === 'function' && !window.isHardwareConnected()) {
+        if (typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice('Connect your ESP32 via Bluetooth LE or USB-C first.', 3600);
+        }
+        return false;
+    }
+    window._hwNetPendingSync = true;
+    if (typeof window.sendHardwareCommand === 'function') {
+        window.sendHardwareCommand('NETGET\n');
+    }
+    return true;
+};
+
+window.saveHardwareNetConfig = function() {
+    if (typeof window.isHardwareConnected === 'function' && !window.isHardwareConnected()) {
+        if (typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice('Connect your ESP32 via Bluetooth LE or USB-C first to save WiFi & MQTT settings.', 4200);
+        }
+        return false;
+    }
+
+    const Core = window.BioQuadCore;
+    if (!Core || typeof Core.buildHardwareNetConfigCommand !== 'function') return false;
+
+    const ssidEl = document.getElementById('hw-wifi-ssid');
+    const wpassEl = document.getElementById('hw-wifi-pass');
+    const hostEl = document.getElementById('hw-mqtt-host');
+    const portEl = document.getElementById('hw-mqtt-port');
+    const muserEl = document.getElementById('hw-mqtt-user');
+    const mpassEl = document.getElementById('hw-mqtt-pass');
+    const nameEl = document.getElementById('hw-mqtt-name');
+    const idEl = document.getElementById('hw-mqtt-id');
+
+    const ssidVal = ssidEl ? ssidEl.value.trim() : '';
+    if (window.hwNetFormState.en && !ssidVal) {
+        if (typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice('Enter a 2.4GHz WiFi SSID (or toggle AUTO OFF to disable hardware WiFi).', 4200);
+        }
+        if (ssidEl) ssidEl.focus();
+        return false;
+    }
+
+    const built = Core.buildHardwareNetConfigCommand({
+        en: window.hwNetFormState.en,
+        ssid: ssidVal,
+        wpass: wpassEl ? wpassEl.value : '',
+        host: hostEl ? hostEl.value : 'test.mosquitto.org',
+        port: portEl ? portEl.value : 1883,
+        tls: window.hwNetFormState.tls,
+        muser: muserEl ? muserEl.value : '',
+        mpass: mpassEl ? mpassEl.value : '',
+        id: idEl ? idEl.value : 'esp32-bioquad-01',
+        name: nameEl ? nameEl.value : 'ESP32 BioQuad',
+        envMs: window.envSensorRateMs
+    }, window.hwNetStatus || null);
+
+    // Reflect normalized host/port/tls/id back into inputs
+    if (hostEl) hostEl.value = built.payload.host;
+    if (portEl) portEl.value = String(built.payload.port);
+    if (idEl) idEl.value = built.payload.id;
+    window.hwNetFormState.tls = Boolean(built.payload.tls);
+
+    // Clear plaintext password inputs once dispatched (ESP32 NVS stores & reports hasWpass/hasMpass)
+    if (wpassEl && wpassEl.value) wpassEl.value = '';
+    if (mpassEl && mpassEl.value) mpassEl.value = '';
+
+    if (typeof window.sendHardwareCommand === 'function') {
+        window.sendHardwareCommand(built.command);
+    }
+    window.refreshHardwareNetUI(false);
+
+    if (typeof window.showHardwareNotice === 'function') {
+        window.showHardwareNotice(
+            built.payload.en
+                ? `Sending WiFi & MQTT (${built.payload.host}:${built.payload.port}) to ESP32 NVS...`
+                : 'Disabling ESP32 WiFi radio in NVS...',
+            3600
+        );
+    }
+    return true;
+};
+
+window.openHwFeedInStream = function() {
+    const Core = window.BioQuadCore;
+    const hostEl = document.getElementById('hw-mqtt-host');
+    const muserEl = document.getElementById('hw-mqtt-user');
+    const mpassEl = document.getElementById('hw-mqtt-pass');
+    const idEl = document.getElementById('hw-mqtt-id');
+
+    const rawHost = hostEl ? hostEl.value : 'test.mosquitto.org';
+    const curWss = (window.bioquadFeeds && window.bioquadFeeds.brokerUrl) ? window.bioquadFeeds.brokerUrl : '';
+    const targetWss = (Core && typeof Core.resolveWssUrlForHardwareHost === 'function')
+        ? Core.resolveWssUrlForHardwareHost(rawHost, window.hwNetFormState.tls, curWss)
+        : 'wss://test.mosquitto.org:8081/mqtt';
+
+    if (window.bioquadFeeds) {
+        const hwUser = muserEl ? muserEl.value.trim() : '';
+        const hwPass = mpassEl ? mpassEl.value : '';
+        if (hwUser) {
+            const streamUserEl = document.getElementById('mqtt-broker-user-input');
+            const streamPassEl = document.getElementById('mqtt-broker-pass-input');
+            if (streamUserEl) streamUserEl.value = hwUser;
+            if (streamPassEl && hwPass) streamPassEl.value = hwPass;
+            window.bioquadFeeds.setBrokerCredentials(hwUser, hwPass || window.bioquadFeeds.brokerPass || '');
+            if (typeof window.toggleMqttAuthRow === 'function') window.toggleMqttAuthRow(true);
+        }
+        const brokerInput = document.getElementById('mqtt-broker-url-input');
+        if (brokerInput) brokerInput.value = targetWss;
+        window.bioquadFeeds.switchBroker(targetWss);
+    }
+
+    const searchEl = document.getElementById('stream-dir-search');
+    const targetId = idEl ? idEl.value.trim() : '';
+    if (searchEl && targetId && searchEl.value) {
+        // Clear stale search filter if it wouldn't match this hardware feed
+        if (!targetId.toLowerCase().includes(searchEl.value.trim().toLowerCase())) {
+            searchEl.value = '';
+            if (window.streamDirectoryFilter) window.streamDirectoryFilter.query = '';
+        }
+    }
+
+    if (typeof window.openFeedsModal === 'function') {
+        window.openFeedsModal();
+    }
 };
 
 const paramTooltip = document.createElement('div');
@@ -64,6 +575,7 @@ const paramFormats = {
 
 function getParamColor(param, group, el) {
     if (el.classList.contains('slider-master')) return 'var(--cyan)';
+    if (el.id === 'fx-vol-slider' || el.classList.contains('slider-fx')) return 'var(--orange)';
     if (el.id.startsWith('ch-vol-')) {
         const ch = parseInt(el.id.replace('ch-vol-', ''));
         return window.CH_COLORS[ch];
@@ -176,6 +688,54 @@ function hydrateLoadedChannelParams(rawParams) {
     }
     return merged;
 }
+window.hydrateLoadedChannelParams = hydrateLoadedChannelParams;
+
+window.applyRemotePatchToChannel = function(chIdx, remotePatch) {
+    if (chIdx < 0 || chIdx > 3 || !remotePatch) return false;
+    if (typeof window.ensureSynths === 'function') window.ensureSynths();
+    if (!synthChannels || !synthChannels[chIdx]) return false;
+
+    window.isApplyingRemotePatch = true;
+    try {
+        const currentParams = synthChannels[chIdx].params || {};
+        const merged = (window.BioQuadCore && typeof window.BioQuadCore.mergeRemotePatchIntoLocal === 'function')
+            ? window.BioQuadCore.mergeRemotePatchIntoLocal(currentParams, remotePatch, window.defaultParams)
+            : hydrateLoadedChannelParams(Object.assign({}, currentParams, remotePatch.params || remotePatch));
+
+        if (typeof window.normalizeScaleParams === 'function') {
+            window.normalizeScaleParams(merged);
+        }
+
+        synthChannels[chIdx].params = merged;
+        synthChannels[chIdx].patchName = String(remotePatch.patchName || synthChannels[chIdx].patchName || 'INIT');
+        synthChannels[chIdx].isDirty = false;
+        synthChannels[chIdx].applyParams();
+
+        const maxScale = synthChannels[chIdx].params.threshMax || 5.0;
+        const miniT = document.getElementById(`ch-mini-thresh-${chIdx}`);
+        const miniV = document.getElementById(`ch-val-thresh-${chIdx}`);
+        const maxBtn = document.getElementById(`ch-max-btn-${chIdx}`);
+        if (miniT) {
+            miniT.max = maxScale.toString();
+            miniT.value = synthChannels[chIdx].params.threshold;
+        }
+        if (miniV) miniV.innerText = parseFloat(synthChannels[chIdx].params.threshold).toFixed(2) + 'x';
+        if (maxBtn) maxBtn.innerText = `${maxScale.toFixed(2)}x`;
+
+        const miniW = document.getElementById(`ch-window-${chIdx}`);
+        const miniWV = document.getElementById(`ch-val-window-${chIdx}`);
+        if (miniW) miniW.value = synthChannels[chIdx].params.sampleSize;
+        if (miniWV) miniWV.innerText = synthChannels[chIdx].params.sampleSize;
+
+        if (activeSynthIndex === chIdx) {
+            if (typeof updateChannelPresetDropdowns === 'function') updateChannelPresetDropdowns();
+            if (typeof syncUI === 'function') syncUI();
+        }
+        return true;
+    } finally {
+        window.isApplyingRemotePatch = false;
+    }
+};
 
 function togglePianoKey(noteIdx) {
     if(!synthChannels[activeSynthIndex]) return;
@@ -316,24 +876,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let bpmDisplay = document.getElementById('ui-bpm-display');
     if (bpmDisplay) {
-        let isDraggingBpm = false, startY = 0, startBpm = 120;
+        let isDraggingBpm = false, startX = 0, startY = 0, startBpm = 120, dragPointerType = 'mouse';
         bpmDisplay.addEventListener('pointerdown', (e) => {
-            if (window.midiClockMode === 'in') return; 
+            if (window.midiClockMode === 'in') return;
             isDraggingBpm = true;
+            dragPointerType = e.pointerType || 'mouse';
+            startX = e.clientX;
             startY = e.clientY;
             startBpm = window.masterBPM;
-            e.preventDefault();
+            if (dragPointerType !== 'touch') {
+                e.preventDefault();
+            }
         });
         window.addEventListener('pointermove', (e) => {
             if (!isDraggingBpm) return;
-            let deltaY = startY - e.clientY; 
-            let newBpm = startBpm + (deltaY * 0.5); 
+            let delta = 0;
+            if (dragPointerType === 'touch') {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+                    isDraggingBpm = false;
+                    return;
+                }
+                if (Math.abs(dx) < 4) return;
+                delta = dx;
+            } else {
+                delta = startY - e.clientY;
+            }
+            let newBpm = startBpm + (delta * 0.5);
             newBpm = Math.max(60, Math.min(240, newBpm));
+            if (window.bioClock && typeof window.bioClock.reanchorForBpmChange === 'function') {
+                window.bioClock.reanchorForBpmChange(newBpm);
+            }
             window.masterBPM = newBpm;
             window.recordPerfParam(0, 'master.bpm', newBpm, false);
-            syncUI(); 
+            syncUI();
+            if (typeof window.isHardwareConnected === 'function' && window.isHardwareConnected() && typeof window.sendHardwareCC === 'function') {
+                window.sendHardwareCC(0, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
+            }
         });
         window.addEventListener('pointerup', () => { isDraggingBpm = false; });
+        window.addEventListener('pointercancel', () => { isDraggingBpm = false; });
     }
 
     const attachSlider = (id, paramKey, labelId, formatFn) => {
@@ -393,19 +976,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if(vMin) vMin.addEventListener('input', updateVel);
     if(vMax) vMax.addEventListener('input', updateVel);
 
+    const syncQuantizeTicksUI = (val) => {
+        const ticksWrap = document.getElementById('ui-quantize-ticks');
+        const spans = ticksWrap
+            ? ticksWrap.querySelectorAll('span')
+            : (qSlider && qSlider.nextElementSibling ? qSlider.nextElementSibling.querySelectorAll('span') : []);
+        spans.forEach(s => { s.style.color = '#7d8590'; s.style.fontWeight = 'normal'; });
+        if (spans[val]) { spans[val].style.color = 'var(--cyan)'; spans[val].style.fontWeight = 'bold'; }
+    };
+
     const qSlider = document.getElementById('ui-quantize');
-    if(qSlider) {
+    if (qSlider) {
         qSlider.addEventListener('input', (e) => {
-            if(!synthChannels[activeSynthIndex]) return;
-            let val = parseInt(e.target.value);
+            if (!synthChannels[activeSynthIndex]) return;
+            let val = parseInt(e.target.value, 10);
             synthChannels[activeSynthIndex].params.quantize = val;
-            const spans = e.target.nextElementSibling.querySelectorAll('span');
-            spans.forEach(s => { s.style.color = '#666'; s.style.fontWeight = 'normal'; });
-            if(spans[val]) { spans[val].style.color = 'var(--cyan)'; spans[val].style.fontWeight = 'bold'; }
+            syncQuantizeTicksUI(val);
             window.recordPerfParam(activeSynthIndex + 1, 'quantize', val, false);
             window.debouncedHardwareSync(activeSynthIndex);
         });
     }
+
+    window.setQuantizeStep = function(stepIdx) {
+        const qs = document.getElementById('ui-quantize');
+        if (!qs) return;
+        const clamped = Math.max(0, Math.min(8, parseInt(stepIdx, 10) || 0));
+        qs.value = String(clamped);
+        qs.dispatchEvent(new Event('input', { bubbles: true }));
+    };
 
     setTimeout(makeSlidersDraggable, 500); 
     setTimeout(() => { selectTab(0); }, 100);
@@ -414,12 +1012,12 @@ document.addEventListener('DOMContentLoaded', () => {
 function buildMixerAndMidiUI() {
     for (let i = 0; i < 4; i++) {
         const select = document.getElementById(`ui-midi-ch-${i}`);
-        if(select) {
-            select.innerHTML = ''; 
+        if (select) {
+            select.innerHTML = '';
             for (let ch = 0; ch < 16; ch++) {
                 let opt = document.createElement('option');
-                opt.value = ch; opt.text = `MIDI CH ${ch + 1}`;
-                if (ch === i) opt.selected = true; 
+                opt.value = ch; opt.text = String(ch + 1);
+                if (ch === i) opt.selected = true;
                 select.appendChild(opt);
             }
         }
@@ -427,30 +1025,148 @@ function buildMixerAndMidiUI() {
 
     const mixerContent = document.getElementById('mixer-dropdown-content');
     if (!mixerContent) return;
-    
+
     let html = '';
-    for(let i=0; i<4; i++) {
+    for (let i = 0; i < 4; i++) {
+        const chColor = window.CH_COLORS ? window.CH_COLORS[i] : '#00f0ff';
         html += `
-        <div class="strip">
-            <div class="strip-label" style="color: ${window.CH_COLORS ? window.CH_COLORS[i] : '#00f0ff'}; margin-bottom: 5px;">CH ${i+1}</div>
+        <div class="strip" data-strip="ch-${i}">
+            <div class="strip-label" style="color: ${chColor};">CH ${i + 1}</div>
             <div class="strip-controls">
-                <div class="v-slider-container"><input type="range" id="ch-vol-${i}" class="v-slider slider-ch-${i}" min="0" max="1" step="0.01" value="0.5" oninput="synthChannels[${i}].setVolume(this.value)"></div>
-                <canvas class="vu ch-vu" id="vu-${i}"></canvas>
+                <div class="v-slider-container"><input type="range" id="ch-vol-${i}" aria-label="Channel ${i + 1} Level" class="v-slider slider-ch-${i}" min="0" max="1" step="0.01" value="0.5" oninput="window.setChannelMixVolume(${i}, this.value)"></div>
+                <canvas class="vu ch-vu" id="vu-${i}" width="12" height="104"></canvas>
             </div>
-            <button id="mute-btn-${i}" onclick="synthChannels[${i}].toggleMute(); this.style.backgroundColor = synthChannels[${i}].params.muted ? 'var(--red)' : 'transparent'; this.style.color = synthChannels[${i}].params.muted ? '#000' : 'var(--text)';" style="width: 100%; margin-top: 5px; padding: 4px 0; font-size: 11px; font-weight: bold; background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer; border-radius: 12px;">M</button>
+            <div id="ch-vol-val-${i}" class="strip-readout tabular-nums">50%</div>
+            <button type="button" id="mute-btn-${i}" class="strip-mute-btn" onclick="window.toggleChannelMixMute(${i})">M</button>
         </div>`;
     }
-    
+
     html += `
-        <div class="strip master" style="border-left: 1px solid var(--border); padding-left: 15px; border-right: none !important;">
-            <div class="strip-label" style="color: var(--cyan); margin-bottom: 5px;">MIX</div>
-            <div class="strip-controls" style="justify-content: center; width: 100%;">
-                <div class="v-slider-container"><input type="range" id="master-vol-slider" class="v-slider slider-master" min="0" max="1" step="0.01" value="0.75" oninput="window.masterVolumeLevel = parseFloat(this.value); if(!window.isMasterMuted) window.masterGain.gain.value = window.masterVolumeLevel; window.recordPerfParam(0, 'master.vol', window.masterVolumeLevel, false);"></div>
+        <div class="strip fx-strip" data-strip="fx">
+            <div class="strip-label" style="color: var(--orange);">FX</div>
+            <div class="strip-controls">
+                <div class="v-slider-container"><input type="range" id="fx-vol-slider" aria-label="FX Bus Level" class="v-slider slider-fx" min="0" max="1.25" step="0.01" value="0.85" oninput="window.setFxBusLevel(this.value)"></div>
+                <canvas class="vu fx-vu" id="vu-fx" width="12" height="104"></canvas>
             </div>
-            <div style="height: 25px; margin-top: 5px;"></div>
+            <div id="fx-vol-val" class="strip-readout tabular-nums">85%</div>
+            <button type="button" id="fx-mute-btn" class="strip-mute-btn" onclick="window.toggleFxBusMute()">M</button>
+        </div>
+        <div class="strip master" data-strip="main">
+            <div class="strip-label" style="color: var(--cyan);">MAIN</div>
+            <div class="strip-controls">
+                <div class="v-slider-container"><input type="range" id="master-vol-slider" aria-label="Main Mix Level" class="v-slider slider-master" min="0" max="1" step="0.01" value="0.75" oninput="window.setMasterVolume(this.value)"></div>
+                <canvas class="vu main-vu" id="master-vu-vt" width="12" height="104"></canvas>
+            </div>
+            <div id="master-vol-val" class="strip-readout tabular-nums">75%</div>
+            <button type="button" id="mixer-master-mute-btn" class="strip-mute-btn" onclick="toggleMasterMute()">M</button>
         </div>`;
     mixerContent.innerHTML = html;
+    window.syncMixerControlsUI();
 }
+
+window.setChannelMixVolume = function(chIdx, val) {
+    if (!synthChannels || !synthChannels[chIdx]) return;
+    synthChannels[chIdx].setVolume(val);
+    const lbl = document.getElementById(`ch-vol-val-${chIdx}`);
+    if (lbl) lbl.textContent = `${Math.round(parseFloat(val) * 100)}%`;
+};
+
+window.toggleChannelMixMute = function(chIdx) {
+    if (!synthChannels || !synthChannels[chIdx]) return;
+    synthChannels[chIdx].toggleMute();
+    window.syncMixerControlsUI();
+};
+
+window.setFxBusLevel = function(val) {
+    const parsed = Math.max(0, Math.min(1.25, parseFloat(val)));
+    if (isNaN(parsed)) return;
+    if (!window.globalFX) window.globalFX = { level: 0.85, muted: false, dly: { time: 0.4, feedback: 0.45, toRev: 0.35 }, rev: { size: 3.5, damp: 3500, hpf: 120 } };
+    window.globalFX.level = parsed;
+    if (window.masterFX && typeof window.masterFX.setLevel === 'function') {
+        window.masterFX.setLevel(parsed);
+    } else if (window.masterFX) {
+        window.masterFX.updateParams(window.globalFX);
+    }
+    const lbl = document.getElementById('fx-vol-val');
+    if (lbl) lbl.textContent = `${Math.round(parsed * 100)}%`;
+    window.recordPerfParam(0, 'globalFX.level', parsed, false);
+};
+
+window.toggleFxBusMute = function() {
+    if (!window.globalFX) return;
+    if (window.masterFX && typeof window.masterFX.toggleMute === 'function') {
+        window.masterFX.toggleMute();
+    } else {
+        window.globalFX.muted = !window.globalFX.muted;
+        if (window.masterFX) window.masterFX.updateParams(window.globalFX);
+    }
+    window.recordPerfParam(0, 'globalFX.muted', Boolean(window.globalFX.muted), true);
+    window.syncMixerControlsUI();
+};
+
+window.setMasterVolume = function(val) {
+    const parsed = Math.max(0, Math.min(1.0, parseFloat(val)));
+    if (isNaN(parsed)) return;
+    window.masterVolumeLevel = parsed;
+    if (!window.isMasterMuted && window.masterGain && window.audioCtx) {
+        window.masterGain.gain.setTargetAtTime(parsed, window.audioCtx.currentTime, 0.015);
+    }
+    const lbl = document.getElementById('master-vol-val');
+    if (lbl) lbl.textContent = `${Math.round(parsed * 100)}%`;
+    window.recordPerfParam(0, 'master.vol', parsed, false);
+};
+
+window.syncMixerControlsUI = function() {
+    for (let i = 0; i < 4; i++) {
+        if (!synthChannels || !synthChannels[i]) continue;
+        const p = synthChannels[i].params;
+        const volSlider = document.getElementById(`ch-vol-${i}`);
+        if (volSlider) volSlider.value = p.mixVol;
+        const volLbl = document.getElementById(`ch-vol-val-${i}`);
+        if (volLbl) volLbl.textContent = `${Math.round((p.mixVol ?? 0.5) * 100)}%`;
+        const muteBtn = document.getElementById(`mute-btn-${i}`);
+        if (muteBtn) {
+            muteBtn.classList.toggle('is-muted', Boolean(p.muted));
+            muteBtn.style.backgroundColor = p.muted ? 'var(--red)' : 'transparent';
+            muteBtn.style.color = p.muted ? '#000' : 'var(--text)';
+            muteBtn.style.borderColor = p.muted ? 'var(--red)' : 'var(--border)';
+        }
+    }
+
+    const fxLvl = (window.globalFX && typeof window.globalFX.level === 'number') ? window.globalFX.level : 0.85;
+    const fxMuted = Boolean(window.globalFX && window.globalFX.muted);
+    const fxSlider = document.getElementById('fx-vol-slider');
+    if (fxSlider) fxSlider.value = fxLvl;
+    const fxLbl = document.getElementById('fx-vol-val');
+    if (fxLbl) fxLbl.textContent = `${Math.round(fxLvl * 100)}%`;
+    const fxMuteBtn = document.getElementById('fx-mute-btn');
+    if (fxMuteBtn) {
+        fxMuteBtn.classList.toggle('is-muted', fxMuted);
+        fxMuteBtn.style.backgroundColor = fxMuted ? 'var(--red)' : 'transparent';
+        fxMuteBtn.style.color = fxMuted ? '#000' : 'var(--text)';
+        fxMuteBtn.style.borderColor = fxMuted ? 'var(--red)' : 'var(--border)';
+    }
+
+    const mVol = typeof window.masterVolumeLevel === 'number' ? window.masterVolumeLevel : 0.75;
+    const mMuted = Boolean(window.isMasterMuted);
+    const mSlider = document.getElementById('master-vol-slider');
+    if (mSlider) mSlider.value = mVol;
+    const mLbl = document.getElementById('master-vol-val');
+    if (mLbl) mLbl.textContent = `${Math.round(mVol * 100)}%`;
+
+    const toolbarMuteBtn = document.getElementById('btn-master-mute');
+    if (toolbarMuteBtn) {
+        toolbarMuteBtn.style.backgroundColor = mMuted ? 'var(--red)' : 'transparent';
+        toolbarMuteBtn.style.color = mMuted ? '#000' : 'var(--red)';
+    }
+    const mixerMasterMuteBtn = document.getElementById('mixer-master-mute-btn');
+    if (mixerMasterMuteBtn) {
+        mixerMasterMuteBtn.classList.toggle('is-muted', mMuted);
+        mixerMasterMuteBtn.style.backgroundColor = mMuted ? 'var(--red)' : 'transparent';
+        mixerMasterMuteBtn.style.color = mMuted ? '#000' : 'var(--text)';
+        mixerMasterMuteBtn.style.borderColor = mMuted ? 'var(--red)' : 'var(--border)';
+    }
+};
 
 function updateMidiChannel(synthCh, midiCh) { 
     if (synthChannels[synthCh]) {
@@ -462,41 +1178,39 @@ function updateMidiChannel(synthCh, midiCh) {
 
 function toggleMasterMute() {
     window.isMasterMuted = !window.isMasterMuted;
-    if(window.masterGain) window.masterGain.gain.value = window.isMasterMuted ? 0 : window.masterVolumeLevel;
+    if (window.masterGain) window.masterGain.gain.value = window.isMasterMuted ? 0 : window.masterVolumeLevel;
     window.recordPerfParam(0, 'master.muted', window.isMasterMuted, true);
-    const btn = document.getElementById('btn-master-mute');
-    if(btn) {
-        btn.style.backgroundColor = window.isMasterMuted ? 'var(--red)' : 'transparent';
-        btn.style.color = window.isMasterMuted ? '#000' : 'var(--red)';
-    }
+    window.syncMixerControlsUI();
 }
 
 function tapTempo() {
     if (window.midiClockMode === 'in') return;
     const now = performance.now();
     if (!window.tapTimes) window.tapTimes = [];
+    if (window.tapTimes.length > 0 && (now - window.tapTimes[window.tapTimes.length - 1]) > 2200) {
+        window.tapTimes = [];
+    }
+    if (window.tapTimes.length === 0 && window.bioClock && typeof window.bioClock.resetToBeatOne === 'function') {
+        window.bioClock.resetToBeatOne(true);
+    }
     window.tapTimes.push(now);
     if (window.tapTimes.length > 4) window.tapTimes.shift();
     if (window.tapTimes.length >= 2) {
         let intervals = [];
-        for(let i=1; i<window.tapTimes.length; i++) intervals.push(window.tapTimes[i] - window.tapTimes[i-1]);
-        let avg = intervals.reduce((a,b)=>a+b)/intervals.length;
+        for (let i = 1; i < window.tapTimes.length; i++) intervals.push(window.tapTimes[i] - window.tapTimes[i - 1]);
+        let avg = intervals.reduce((a, b) => a + b) / intervals.length;
         let newBpm = 60000 / avg;
-        if(newBpm >= 60 && newBpm <= 240) { 
-            window.masterBPM = newBpm; 
+        if (newBpm >= 60 && newBpm <= 240) {
+            if (window.bioClock && typeof window.bioClock.reanchorForBpmChange === 'function') {
+                window.bioClock.reanchorForBpmChange(newBpm);
+            }
+            window.masterBPM = newBpm;
             window.recordPerfParam(0, 'master.bpm', newBpm, true);
-            syncUI(); 
-            if (window.bleTxCharacteristic && typeof window.sendHardwareCC === 'function') {
-                for (let i=0; i<4; i++) window.sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
+            syncUI();
+            if ((typeof window.isHardwareConnected === 'function' ? window.isHardwareConnected() : window.bleTxCharacteristic) && typeof window.sendHardwareCC === 'function') {
+                for (let i = 0; i < 4; i++) window.sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
             }
         }
-    }
-    
-    let bpmLed = document.getElementById('top-bpm-led');
-    if(bpmLed) {
-        bpmLed.style.backgroundColor = 'var(--red)';
-        bpmLed.style.boxShadow = '0 0 10px var(--red)';
-        setTimeout(() => { bpmLed.style.backgroundColor = '#222'; bpmLed.style.boxShadow = 'none'; }, 50);
     }
 }
 
@@ -534,30 +1248,65 @@ function initPiano() {
     });
 }
 
-function selectTab(index) { 
-    activeSynthIndex = index; 
+function selectTab(index) {
+    const clamped = Math.max(0, Math.min(3, parseInt(index, 10) || 0));
+    activeSynthIndex = clamped;
+    window.activeSynthIndex = clamped;
+
+    const synthInspector = document.getElementById('synth-inspector');
+    if (synthInspector) {
+        synthInspector.setAttribute('data-ch', String(clamped));
+    }
+
     document.querySelectorAll('.synth-tab').forEach((t, i) => {
-        t.classList.toggle('active', i === index);
-        let led = t.querySelector('.led');
-        if (led) {
-            if (i === index) {
-                led.style.backgroundColor = window.CH_COLORS[i];
-                led.style.boxShadow = `0 0 8px ${window.CH_COLORS[i]}`;
-            } else {
-                led.style.backgroundColor = '#222';
-                led.style.boxShadow = 'inset 0px 2px 4px rgba(0,0,0,0.8)';
-            }
-        }
-    }); 
-    syncUI(); 
+        t.classList.toggle('active', i === clamped);
+    });
+
+    if (typeof window.toggleChannelNewPresetRow === 'function') {
+        window.toggleChannelNewPresetRow(clamped, false);
+    }
+    if (typeof updateChannelPresetDropdowns === 'function') {
+        updateChannelPresetDropdowns();
+    }
+    syncUI();
+    if (typeof window.updateSynthFeedAutoBar === 'function') {
+        window.updateSynthFeedAutoBar();
+    }
+    if (typeof window.applyDashboardViewMode === 'function') {
+        window.applyDashboardViewMode();
+    }
 }
+window.selectTab = selectTab;
+
+const channelLedTimers = {};
+window.triggerChannelLED = function(index) {
+    const ch = parseInt(index, 10);
+    if (isNaN(ch) || ch < 0 || ch > 3) return;
+
+    const tabLed = document.getElementById(`led-${ch}`);
+    const focusLed = document.getElementById(`focus-led-${ch}`);
+    const cardLed = document.getElementById(`card-led-${ch}`);
+    const focusPill = document.getElementById(`focus-ch-btn-${ch}`);
+    const synthTab = document.querySelector(`.synth-tab[data-ch="${ch}"]`);
+
+    if (tabLed) tabLed.classList.add('active');
+    if (focusLed) focusLed.classList.add('active');
+    if (cardLed) cardLed.classList.add('active');
+    if (focusPill) focusPill.classList.add('note-flash');
+    if (synthTab) synthTab.classList.add('note-flash');
+
+    clearTimeout(channelLedTimers[ch]);
+    channelLedTimers[ch] = setTimeout(() => {
+        if (tabLed) tabLed.classList.remove('active');
+        if (focusLed) focusLed.classList.remove('active');
+        if (cardLed) cardLed.classList.remove('active');
+        if (focusPill) focusPill.classList.remove('note-flash');
+        if (synthTab) synthTab.classList.remove('note-flash');
+    }, 115);
+};
 
 function triggerLED(index) { 
-    const led = document.getElementById(`led-${index}`); 
-    if (led) { 
-        led.classList.add('active'); 
-        setTimeout(() => led.classList.remove('active'), 100); 
-    } 
+    window.triggerChannelLED(index);
 }
 
 // --- ADDITIVE HARDWARE SYNC PROTOCOL ---
@@ -606,10 +1355,14 @@ window.syncParamsToHardware = function(chIdx) {
 function updateActiveSynth(param, value) {
     if (param === 'bpm') {
         if (window.midiClockMode === 'in') return;
-        window.masterBPM = isNaN(value) ? window.masterBPM : parseFloat(value);
+        const parsedBpm = isNaN(value) ? window.masterBPM : parseFloat(value);
+        if (window.bioClock && typeof window.bioClock.reanchorForBpmChange === 'function') {
+            window.bioClock.reanchorForBpmChange(parsedBpm);
+        }
+        window.masterBPM = parsedBpm;
         window.recordPerfParam(0, 'master.bpm', window.masterBPM, false);
         syncUI();
-        if (window.bleTxCharacteristic && typeof window.sendHardwareCC === 'function') {
+        if ((typeof window.isHardwareConnected === 'function' ? window.isHardwareConnected() : window.bleTxCharacteristic) && typeof window.sendHardwareCC === 'function') {
             for (let i=0; i<4; i++) window.sendHardwareCC(i, 92, Math.min(127, Math.max(0, ((window.masterBPM - 60) / 180) * 127)));
         }
         return;
@@ -674,6 +1427,14 @@ function normalizePresetEntry(presetData) {
             if (channelData[i]) channelData[i] = hydrateLoadedChannelParams(channelData[i]);
         }
     }
+    if (presetData.globalFX && typeof presetData.globalFX === 'object') {
+        if (typeof presetData.globalFX.level !== 'number' || isNaN(presetData.globalFX.level)) {
+            presetData.globalFX.level = 0.85;
+        }
+        if (typeof presetData.globalFX.muted !== 'boolean') {
+            presetData.globalFX.muted = false;
+        }
+    }
     return presetData;
 }
 
@@ -701,6 +1462,8 @@ function clearActiveChannelPresetOverrides() {
 }
 
 function loadPresetsFromStorage() {
+    window.isBootstrappingPresets = true;
+    try {
     let storedPresets = {};
     try {
         const stored = localStorage.getItem('biodataPresets');
@@ -767,6 +1530,9 @@ function loadPresetsFromStorage() {
     if (typeof selectTab === 'function') {
         selectTab(0);
     }
+    } finally {
+        window.isBootstrappingPresets = false;
+    }
 }
 
 function updatePresetDropdown() {
@@ -786,16 +1552,63 @@ function updatePresetDropdown() {
     select.value = globalPresets[currentVal] ? currentVal : "";
 }
 
+window.toggleGlobalNewPresetRow = function(forceState) {
+    const row = document.getElementById('global-new-preset-row');
+    const inp = document.getElementById('new-preset-name-input');
+    if (!row) return;
+    const isCurrentlyOpen = row.style.display !== 'none';
+    const next = forceState !== undefined ? Boolean(forceState) : !isCurrentlyOpen;
+    row.style.display = next ? 'flex' : 'none';
+    if (next) {
+        if (inp) setTimeout(() => inp.focus(), 20);
+        const widget = row.closest('.dropdown-widget');
+        if (widget && typeof window.positionDropdownPanel === 'function') window.positionDropdownPanel(widget);
+    } else if (inp) {
+        inp.value = '';
+    }
+};
+
+window.toggleChannelNewPresetRow = function(ch, forceState) {
+    const row = document.getElementById('ui-voice-new-preset-row') || document.getElementById(`ch-new-preset-row-${ch}`);
+    const inp = document.getElementById('ui-voice-new-preset-input') || document.getElementById(`ch-new-preset-input-${ch}`);
+    if (!row) return;
+    const isCurrentlyOpen = row.style.display !== 'none';
+    const next = forceState !== undefined ? Boolean(forceState) : !isCurrentlyOpen;
+    row.style.display = next ? 'flex' : 'none';
+    if (next) {
+        if (inp) setTimeout(() => inp.focus(), 20);
+        const widget = row.closest('.dropdown-widget');
+        if (widget && typeof window.positionDropdownPanel === 'function') window.positionDropdownPanel(widget);
+    } else if (inp) {
+        inp.value = '';
+    }
+};
+
+window.collapseAllNewPresetRows = function() {
+    window.toggleGlobalNewPresetRow(false);
+    window.toggleChannelNewPresetRow(activeSynthIndex, false);
+};
+
 function savePreset(forceNew = false) {
-    if(typeof ensureSynths === 'function') ensureSynths();
+    if (typeof ensureSynths === 'function') ensureSynths();
     const select = document.getElementById('preset-select');
+    const nameInput = document.getElementById('new-preset-name-input');
     let name = select ? select.value : "";
 
     if (forceNew || !name || name === "") {
-        name = prompt("Enter a name for this preset:");
-        if (!name || name.trim() === "") return;
+        const typed = nameInput ? nameInput.value.trim() : "";
+        if (typed) {
+            name = typed;
+            window.toggleGlobalNewPresetRow(false);
+        } else {
+            window.toggleGlobalNewPresetRow(true);
+            window.showHardwareNotice("Enter a name for the new preset, then press Enter or SAVE.");
+            return;
+        }
+    } else {
+        window.toggleGlobalNewPresetRow(false);
     }
-    
+
     const presetData = {
         channels: synthChannels.map(ch => {
             let p = hydrateLoadedChannelParams(ch.params);
@@ -806,32 +1619,34 @@ function savePreset(forceNew = false) {
         master: { vol: window.masterVolumeLevel, muted: window.isMasterMuted, bpm: window.masterBPM },
         viz: chData.map(ch => JSON.parse(JSON.stringify(ch.config))),
         globalFX: window.globalFX ? JSON.parse(JSON.stringify(window.globalFX)) : null
-    }; 
-    
+    };
+
     globalPresets[name] = presetData;
     localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
-    try { localStorage.setItem('biodataActivePreset', name); } catch(e) {}
+    try { localStorage.setItem('biodataActivePreset', name); } catch (e) {}
     clearActiveChannelPresetOverrides();
     updatePresetDropdown();
-    if(select) select.value = name;
+    if (select) select.value = name;
+    window.showHardwareNotice(`Saved global preset "${name}".`, 2200);
 }
 
 function deleteCurrentPreset() {
     const select = document.getElementById('preset-select');
     let name = select ? select.value : "";
-    if (!name || name === "") return alert("No preset selected to delete.");
-    
-    if(confirm(`Are you sure you want to delete the preset "${name}"?`)) {
-        delete globalPresets[name];
-        localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
-        try {
-            if (localStorage.getItem('biodataActivePreset') === name) {
-                localStorage.removeItem('biodataActivePreset');
-            }
-        } catch(e) {}
-        updatePresetDropdown();
-        if(select) select.value = "";
+    if (!name || name === "") {
+        window.showHardwareNotice("Select a preset first to delete.");
+        return;
     }
+    delete globalPresets[name];
+    localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
+    try {
+        if (localStorage.getItem('biodataActivePreset') === name) {
+            localStorage.removeItem('biodataActivePreset');
+        }
+    } catch(e) {}
+    updatePresetDropdown();
+    if(select) select.value = "";
+    window.showHardwareNotice(`Deleted preset "${name}".`, 2200);
 }
 
 function loadPreset(name, options = {}) {
@@ -852,8 +1667,9 @@ function loadPreset(name, options = {}) {
             synthChannels[i].applyParams();
             synthChannels[i].patchName = synthChannels[i].params.savedPatchName || "INIT";
             
-            if (synthChannels[i].channelOut) {
-                synthChannels[i].channelOut.gain.value = synthChannels[i].params.muted ? 0 : synthChannels[i].params.mixVol;
+            if (synthChannels[i].channelOut && window.audioCtx) {
+                const targetG = synthChannels[i].params.muted ? 0 : synthChannels[i].params.mixVol;
+                synthChannels[i].channelOut.gain.setTargetAtTime(targetG, window.audioCtx.currentTime, 0.015);
             }
             
             let volSlider = document.getElementById(`ch-vol-${i}`);
@@ -909,7 +1725,10 @@ function loadPreset(name, options = {}) {
     if (presetData.master) {
         window.masterVolumeLevel = presetData.master.vol;
         window.isMasterMuted = presetData.master.muted;
-        if(window.masterGain) window.masterGain.gain.value = window.isMasterMuted ? 0 : window.masterVolumeLevel;
+        if (window.masterGain && window.audioCtx) {
+            const targetM = window.isMasterMuted ? 0 : window.masterVolumeLevel;
+            window.masterGain.gain.setTargetAtTime(targetM, window.audioCtx.currentTime, 0.015);
+        }
         
         let mSlider = document.getElementById('master-vol-slider');
         if (mSlider) mSlider.value = window.masterVolumeLevel;
@@ -920,16 +1739,23 @@ function loadPreset(name, options = {}) {
             btn.style.color = window.isMasterMuted ? '#000' : 'var(--red)';
         }
         
-        if (presetData.master.bpm) { 
-            window.masterBPM = presetData.master.bpm; 
+        if (presetData.master.bpm) {
+            if (window.bioClock && typeof window.bioClock.reanchorForBpmChange === 'function') {
+                window.bioClock.reanchorForBpmChange(presetData.master.bpm);
+            }
+            window.masterBPM = presetData.master.bpm;
         }
     }
 
     if (presetData.globalFX && window.globalFX) {
-        window.globalFX = JSON.parse(JSON.stringify(presetData.globalFX));
+        const nextFx = JSON.parse(JSON.stringify(presetData.globalFX));
+        if (typeof nextFx.level !== 'number' || isNaN(nextFx.level)) nextFx.level = 0.85;
+        if (typeof nextFx.muted !== 'boolean') nextFx.muted = false;
+        window.globalFX = nextFx;
         if (window.masterFX) window.masterFX.updateParams(window.globalFX);
     }
-    
+
+    if (typeof window.syncMixerControlsUI === 'function') window.syncMixerControlsUI();
     if (typeof updateChannelPresetDropdowns === 'function') updateChannelPresetDropdowns();
     syncUI();
     window.recordPerfSnapshotDelta(null);
@@ -940,7 +1766,7 @@ function loadPreset(name, options = {}) {
 }
 
 function exportPresets() {
-    if (Object.keys(globalPresets).length === 0) { alert("No presets to export."); return; }
+    if (Object.keys(globalPresets).length === 0) { window.showHardwareNotice("No presets to export."); return; }
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(globalPresets, null, 2));
     const downloadNode = document.createElement('a');
     downloadNode.setAttribute("href", dataStr);
@@ -962,23 +1788,29 @@ function importPresets(event) {
                 globalPresets = { ...globalPresets, ...imported };
                 localStorage.setItem('biodataPresets', JSON.stringify(globalPresets));
                 updatePresetDropdown();
-                alert("Presets imported successfully!");
-            } else alert("Invalid preset file format.");
-        } catch(err) { alert("Error parsing preset file."); }
+                window.showHardwareNotice("Presets imported.");
+            } else window.showHardwareNotice("Invalid preset file format.");
+        } catch(err) { window.showHardwareNotice("Error parsing preset JSON file."); }
         event.target.value = "";
     };
     reader.readAsText(file);
 }
 
+let clearPresetsArmed = false;
 function clearAllPresets() {
-    if(confirm("Are you sure you want to delete all saved presets? This cannot be undone.")) {
-        localStorage.removeItem('biodataPresets');
-        localStorage.removeItem('biodataActivePreset');
-        clearActiveChannelPresetOverrides();
-        globalPresets = {};
-        updatePresetDropdown();
-        alert("All presets have been cleared.");
+    if (!clearPresetsArmed) {
+        clearPresetsArmed = true;
+        window.showHardwareNotice("Click ALL again within 4s to confirm resetting user presets.", 4000);
+        setTimeout(() => { clearPresetsArmed = false; }, 4000);
+        return;
     }
+    clearPresetsArmed = false;
+    localStorage.removeItem('biodataPresets');
+    localStorage.removeItem('biodataActivePreset');
+    clearActiveChannelPresetOverrides();
+    globalPresets = {};
+    loadPresetsFromStorage();
+    window.showHardwareNotice("Presets reset to factory defaults.");
 }
 
 let activeLfoView = 'pitchLfo';
@@ -1234,6 +2066,16 @@ function syncUI() {
     
     let bpmDisplay = document.getElementById('ui-bpm-display');
     if (bpmDisplay) bpmDisplay.innerText = Math.round(window.masterBPM).toString().padStart(3, '0');
+
+    let midiClockSelect = document.getElementById('midi-clock-dir');
+    if (midiClockSelect && window.midiClockMode) {
+        midiClockSelect.value = window.midiClockMode;
+    }
+
+    const synthInspector = document.getElementById('synth-inspector');
+    if (synthInspector) {
+        synthInspector.setAttribute('data-ch', String(activeSynthIndex));
+    }
     
     if (p[activeLfoView]) {
         let rateMode = p[activeLfoView].rateMode || 'lo';
@@ -1256,9 +2098,12 @@ function syncUI() {
     
     let qSlider = document.getElementById('ui-quantize');
     if (qSlider) {
-        const spans = qSlider.nextElementSibling.querySelectorAll('span');
-        spans.forEach(s => { s.style.color = '#666'; s.style.fontWeight = 'normal'; });
-        if(spans[p.quantize]) { spans[p.quantize].style.color = 'var(--cyan)'; spans[p.quantize].style.fontWeight = 'bold'; }
+        const ticksWrap = document.getElementById('ui-quantize-ticks');
+        const spans = ticksWrap
+            ? ticksWrap.querySelectorAll('span')
+            : (qSlider.nextElementSibling ? qSlider.nextElementSibling.querySelectorAll('span') : []);
+        spans.forEach(s => { s.style.color = '#7d8590'; s.style.fontWeight = 'normal'; });
+        if (spans[p.quantize]) { spans[p.quantize].style.color = 'var(--cyan)'; spans[p.quantize].style.fontWeight = 'bold'; }
     }
 
     setV('ui-note-min', p.minNote); setV('ui-note-max', p.maxNote);
@@ -1323,6 +2168,9 @@ function syncUI() {
     let revHpfEl = document.getElementById('ui-fx-rev-hpf');
     if (revHpfEl && window.globalFX) revHpfEl.value = window.globalFX.rev.hpf;
 
+    if (typeof updateChannelPresetDropdowns === 'function') {
+        updateChannelPresetDropdowns();
+    }
     syncPianoUI();
 }
 
@@ -1357,189 +2205,201 @@ function loadChannelPresetsFromStorage() {
 }
 
 function updateChannelPresetDropdowns() {
-    for(let i=0; i<4; i++) {
-        const select = document.getElementById(`ch-preset-select-${i}`);
-        if(!select) continue;
-        
-        select.onchange = (e) => {
-            loadChannelPreset(i, e.target.value);
-        };
+    const activeCh = Math.max(0, Math.min(3, parseInt(activeSynthIndex, 10) || 0));
+    const voiceSelect = document.getElementById('ui-voice-preset-select');
+    const voiceBtn = document.getElementById('ui-voice-preset-btn');
+    const activePatchName = (synthChannels[activeCh] && synthChannels[activeCh].patchName)
+        ? synthChannels[activeCh].patchName
+        : 'INIT';
 
-        const currentVal = select.value;
-        const patchName = (synthChannels[i] && synthChannels[i].patchName) ? synthChannels[i].patchName : "INIT";
-        select.innerHTML = '<option value="">-- Select --</option>';
+    if (voiceSelect) {
+        const currentVal = voiceSelect.value;
+        voiceSelect.innerHTML = '<option value="">-- Select Patch --</option>';
         Object.keys(globalChannelPresets).forEach(name => {
-            let opt = document.createElement('option');
-            opt.value = name; opt.text = name; 
-            select.appendChild(opt);
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.text = name;
+            voiceSelect.appendChild(opt);
         });
-        select.value = globalChannelPresets[patchName] ? patchName : (globalChannelPresets[currentVal] ? currentVal : "");
-        
-        const btn = document.getElementById(`ch-preset-btn-${i}`);
-        if (btn) {
-            let dirtyStar = (synthChannels[i] && synthChannels[i].isDirty && patchName !== "INIT") ? "*" : "";
-            btn.innerHTML = `${patchName}${dirtyStar} ▼`;
-            
-            btn.onpointerdown = (e) => { 
-                selectTab(i); 
-                e.stopPropagation(); 
-            };
-        }
+        voiceSelect.value = globalChannelPresets[activePatchName]
+            ? activePatchName
+            : (globalChannelPresets[currentVal] ? currentVal : '');
+    }
+
+    if (voiceBtn) {
+        const dirtyStar = (synthChannels[activeCh] && synthChannels[activeCh].isDirty && activePatchName !== 'INIT') ? '*' : '';
+        voiceBtn.textContent = `${activePatchName}${dirtyStar} ▼`;
     }
 }
 
 function saveChannelPreset(ch, forceNew = false) {
-    if(typeof ensureSynths === 'function') ensureSynths();
-    selectTab(ch);
-    
-    const select = document.getElementById(`ch-preset-select-${ch}`);
+    if (typeof ensureSynths === 'function') ensureSynths();
+    const targetCh = Math.max(0, Math.min(3, parseInt(ch ?? activeSynthIndex, 10) || 0));
+    if (activeSynthIndex !== targetCh) selectTab(targetCh);
+
+    const select = document.getElementById('ui-voice-preset-select') || document.getElementById(`ch-preset-select-${targetCh}`);
     let name = select ? select.value : "";
-    
-    if (synthChannels[ch].patchName && !forceNew) {
-        name = synthChannels[ch].patchName;
+
+    if (!forceNew && synthChannels[targetCh].patchName && synthChannels[targetCh].patchName !== "INIT") {
+        name = synthChannels[targetCh].patchName;
     }
 
-    if (forceNew || !name || name === "") {
-        name = prompt(`Enter a name for Channel ${ch + 1} voice patch:`);
-        if (!name || name.trim() === "") return;
+    if (forceNew || !name || name === "" || name === "INIT") {
+        const chInput = document.getElementById('ui-voice-new-preset-input') || document.getElementById(`ch-new-preset-input-${targetCh}`);
+        const typed = chInput ? chInput.value.trim() : "";
+        if (typed) {
+            name = typed;
+            window.toggleChannelNewPresetRow(targetCh, false);
+        } else {
+            window.toggleChannelNewPresetRow(targetCh, true);
+            window.showHardwareNotice(`Enter a name for CH ${targetCh + 1} patch, then press Enter or SAVE.`);
+            return;
+        }
+    } else {
+        window.toggleChannelNewPresetRow(targetCh, false);
     }
-    
-    const normalizedParams = hydrateLoadedChannelParams(synthChannels[ch].params);
-    synthChannels[ch].params = hydrateLoadedChannelParams(normalizedParams);
+
+    const normalizedParams = hydrateLoadedChannelParams(synthChannels[targetCh].params);
+    synthChannels[targetCh].params = hydrateLoadedChannelParams(normalizedParams);
     const presetData = {
         params: normalizedParams,
-        config: chData[ch] && chData[ch].config ? JSON.parse(JSON.stringify(chData[ch].config)) : null
+        config: chData[targetCh] && chData[targetCh].config ? JSON.parse(JSON.stringify(chData[targetCh].config)) : null
     };
-    
+
     globalChannelPresets[name] = presetData;
     localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
-    setActiveChannelPresetOverride(ch, name);
-    
-    synthChannels[ch].patchName = name;
-    synthChannels[ch].isDirty = false;
+    setActiveChannelPresetOverride(targetCh, name);
+
+    synthChannels[targetCh].patchName = name;
+    synthChannels[targetCh].isDirty = false;
     updateChannelPresetDropdowns();
     if (select) select.value = name;
-    
+    window.showHardwareNotice(`Saved CH ${targetCh + 1} patch "${name}".`, 2200);
+
     setTimeout(() => {
-        let btn = document.getElementById(`ch-preset-btn-${ch}`);
-        if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+        const widget = document.getElementById('active-voice-preset-widget');
+        if (widget) widget.classList.remove('show');
     }, 150);
 }
 
 function loadChannelPreset(ch, name, options = {}) {
     if (!name || !globalChannelPresets[name]) return;
-    if(typeof ensureSynths === 'function') ensureSynths();
-    
+    if (typeof ensureSynths === 'function') ensureSynths();
+    const targetCh = Math.max(0, Math.min(3, parseInt(ch ?? activeSynthIndex, 10) || 0));
+
     const presetData = globalChannelPresets[name];
-    
-    if (presetData.params && synthChannels[ch]) {
-        synthChannels[ch].params = hydrateLoadedChannelParams(presetData.params);
-        synthChannels[ch].applyParams();
-        
-        if (synthChannels[ch].channelOut) {
-            synthChannels[ch].channelOut.gain.value = synthChannels[ch].params.muted ? 0 : synthChannels[ch].params.mixVol;
+
+    if (presetData.params && synthChannels[targetCh]) {
+        synthChannels[targetCh].params = hydrateLoadedChannelParams(presetData.params);
+        synthChannels[targetCh].applyParams();
+
+        if (synthChannels[targetCh].channelOut) {
+            synthChannels[targetCh].channelOut.gain.value = synthChannels[targetCh].params.muted ? 0 : synthChannels[targetCh].params.mixVol;
         }
-        
-        let volSlider = document.getElementById(`ch-vol-${ch}`);
-        if (volSlider) volSlider.value = synthChannels[ch].params.mixVol;
-        let muteBtn = document.getElementById(`mute-btn-${ch}`);
+
+        let volSlider = document.getElementById(`ch-vol-${targetCh}`);
+        if (volSlider) volSlider.value = synthChannels[targetCh].params.mixVol;
+        let muteBtn = document.getElementById(`mute-btn-${targetCh}`);
         if (muteBtn) {
-            muteBtn.style.backgroundColor = synthChannels[ch].params.muted ? 'var(--red)' : 'transparent';
-            muteBtn.style.color = synthChannels[ch].params.muted ? '#000' : 'var(--text)';
+            muteBtn.style.backgroundColor = synthChannels[targetCh].params.muted ? 'var(--red)' : 'transparent';
+            muteBtn.style.color = synthChannels[targetCh].params.muted ? '#000' : 'var(--text)';
         }
-        
-        let midiSel = document.getElementById(`ui-midi-ch-${ch}`);
-        if (midiSel) midiSel.value = synthChannels[ch].params.midiOutCh;
-        
-        let maxScale = synthChannels[ch].params.threshMax || 5.0;
-        let miniT = document.getElementById(`ch-mini-thresh-${ch}`);
-        let miniV = document.getElementById(`ch-val-thresh-${ch}`);
-        let maxBtn = document.getElementById(`ch-max-btn-${ch}`);
+
+        let midiSel = document.getElementById(`ui-midi-ch-${targetCh}`);
+        if (midiSel) midiSel.value = synthChannels[targetCh].params.midiOutCh;
+
+        let maxScale = synthChannels[targetCh].params.threshMax || 5.0;
+        let miniT = document.getElementById(`ch-mini-thresh-${targetCh}`);
+        let miniV = document.getElementById(`ch-val-thresh-${targetCh}`);
+        let maxBtn = document.getElementById(`ch-max-btn-${targetCh}`);
         if (miniT) {
             miniT.max = maxScale.toString();
-            miniT.value = synthChannels[ch].params.threshold;
+            miniT.value = synthChannels[targetCh].params.threshold;
         }
-        if (miniV) miniV.innerText = parseFloat(synthChannels[ch].params.threshold).toFixed(2) + 'x';
+        if (miniV) miniV.innerText = parseFloat(synthChannels[targetCh].params.threshold).toFixed(2) + 'x';
         if (maxBtn) maxBtn.innerText = `${maxScale.toFixed(2)}x`;
-        
-        let miniW = document.getElementById(`ch-window-${ch}`);
-        let miniWV = document.getElementById(`ch-val-window-${ch}`);
-        if (miniW) miniW.value = synthChannels[ch].params.sampleSize;
-        if (miniWV) miniWV.innerText = synthChannels[ch].params.sampleSize;
+
+        let miniW = document.getElementById(`ch-window-${targetCh}`);
+        let miniWV = document.getElementById(`ch-val-window-${targetCh}`);
+        if (miniW) miniW.value = synthChannels[targetCh].params.sampleSize;
+        if (miniWV) miniWV.innerText = synthChannels[targetCh].params.sampleSize;
     }
-    
-    if (presetData.config && chData[ch]) {
-        chData[ch].config = JSON.parse(JSON.stringify(presetData.config));
-        let z = document.getElementById(`ch-zoom-${ch}`);
-        let s = document.getElementById(`ch-smooth-${ch}`);
-        let zVal = document.getElementById(`ch-val-zoom-${ch}`);
-        let sVal = document.getElementById(`ch-val-smooth-${ch}`);
-        
-        if(z) { 
+
+    if (presetData.config && chData[targetCh]) {
+        chData[targetCh].config = JSON.parse(JSON.stringify(presetData.config));
+        let z = document.getElementById(`ch-zoom-${targetCh}`);
+        let s = document.getElementById(`ch-smooth-${targetCh}`);
+        let zVal = document.getElementById(`ch-val-zoom-${targetCh}`);
+        let sVal = document.getElementById(`ch-val-smooth-${targetCh}`);
+
+        if (z) {
             let minL = Math.log(50), maxL = Math.log(120000);
-            z.value = ((Math.log(chData[ch].config.zoom) - minL) / (maxL - minL)) * 1000;
+            z.value = ((Math.log(chData[targetCh].config.zoom) - minL) / (maxL - minL)) * 1000;
         }
-        if(s) s.value = chData[ch].config.smooth;
-        if(zVal) zVal.innerText = Math.round(chData[ch].config.zoom);
-        if(sVal) sVal.innerText = chData[ch].config.smooth.toFixed(2);
+        if (s) s.value = chData[targetCh].config.smooth;
+        if (zVal) zVal.innerText = Math.round(chData[targetCh].config.zoom);
+        if (sVal) sVal.innerText = chData[targetCh].config.smooth.toFixed(2);
     }
-    
-    synthChannels[ch].patchName = name;
-    synthChannels[ch].isDirty = false;
+
+    synthChannels[targetCh].patchName = name;
+    synthChannels[targetCh].isDirty = false;
     if (!options || !options.skipPersistOverride) {
-        setActiveChannelPresetOverride(ch, name);
+        setActiveChannelPresetOverride(targetCh, name);
     }
-    updateChannelPresetDropdowns();
-    
-    let select = document.getElementById(`ch-preset-select-${ch}`);
-    if(select) select.value = name;
-    
+
     if (!options || !options.skipTabSelect) {
-        selectTab(ch);
+        selectTab(targetCh);
+    } else {
+        updateChannelPresetDropdowns();
     }
-    window.recordPerfSnapshotDelta(ch);
-    
+    if (typeof window.syncMixerControlsUI === 'function') window.syncMixerControlsUI();
+    window.recordPerfSnapshotDelta(targetCh);
+
     setTimeout(() => {
-        let btn = document.getElementById(`ch-preset-btn-${ch}`);
-        if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
+        const widget = document.getElementById('active-voice-preset-widget');
+        if (widget) widget.classList.remove('show');
     }, 150);
-    
-    window.debouncedHardwareSync(ch);
+
+    window.debouncedHardwareSync(targetCh);
 }
 
 function deleteChannelPreset(ch) {
-    selectTab(ch); 
-    const select = document.getElementById(`ch-preset-select-${ch}`);
+    const targetCh = Math.max(0, Math.min(3, parseInt(ch ?? activeSynthIndex, 10) || 0));
+    if (activeSynthIndex !== targetCh) selectTab(targetCh);
+    const select = document.getElementById('ui-voice-preset-select') || document.getElementById(`ch-preset-select-${targetCh}`);
     let name = select ? select.value : "";
-    if (!name || name === "") return alert("No channel preset selected to delete.");
-    
-    if(confirm(`Are you sure you want to delete the channel preset "${name}"?`)) {
-        delete globalChannelPresets[name];
-        localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
-        const overrides = getActiveChannelPresetMap();
-        Object.keys(overrides).forEach(k => {
-            if (overrides[k] === name) setActiveChannelPresetOverride(parseInt(k, 10), null);
-        });
-        if (synthChannels[ch].patchName === name) {
-            synthChannels[ch].patchName = "INIT";
-            synthChannels[ch].isDirty = false;
-        }
-        updateChannelPresetDropdowns();
-        if(select) select.value = "";
-        
-        setTimeout(() => {
-            let btn = document.getElementById(`ch-preset-btn-${ch}`);
-            if(btn && btn.parentElement) btn.parentElement.classList.remove('show');
-        }, 150);
+    if (!name || name === "") {
+        window.showHardwareNotice("Select a channel voice preset to delete.");
+        return;
     }
+    delete globalChannelPresets[name];
+    localStorage.setItem('biodataChannelPresets', JSON.stringify(globalChannelPresets));
+    const overrides = getActiveChannelPresetMap();
+    Object.keys(overrides).forEach(k => {
+        if (overrides[k] === name) setActiveChannelPresetOverride(parseInt(k, 10), null);
+    });
+    if (synthChannels[targetCh].patchName === name) {
+        synthChannels[targetCh].patchName = "INIT";
+        synthChannels[targetCh].isDirty = false;
+    }
+    updateChannelPresetDropdowns();
+    if (select) select.value = "";
+    window.showHardwareNotice(`Deleted voice preset "${name}".`, 2200);
+
+    setTimeout(() => {
+        const widget = document.getElementById('active-voice-preset-widget');
+        if (widget) widget.classList.remove('show');
+    }, 150);
 }
 
 window.markChannelDirty = function(ch) {
     if (!synthChannels[ch] || synthChannels[ch].patchName === "INIT" || !synthChannels[ch].patchName) return;
     if (!synthChannels[ch].isDirty) {
         synthChannels[ch].isDirty = true;
-        let btn = document.getElementById(`ch-preset-btn-${ch}`);
-        if (btn) btn.innerHTML = `${synthChannels[ch].patchName}* ▼`;
+        if (ch === activeSynthIndex) {
+            const btn = document.getElementById('ui-voice-preset-btn');
+            if (btn) btn.textContent = `${synthChannels[ch].patchName}* ▼`;
+        }
     }
 };
 
@@ -1605,11 +2465,32 @@ window.toggleDropdownWidget = function(widget, event) {
     document.querySelectorAll('.dropdown-widget.show').forEach(w => {
         if (w !== widget) w.classList.remove('show');
     });
+    if (typeof window.collapseAllNewPresetRows === 'function') {
+        window.collapseAllNewPresetRows();
+    }
     widget.classList.toggle('show', willShow);
     if (willShow) {
         window.positionDropdownPanel(widget);
     }
 };
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown-widget')) {
+        document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
+        if (typeof window.collapseAllNewPresetRows === 'function') {
+            window.collapseAllNewPresetRows();
+        }
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
+        if (typeof window.collapseAllNewPresetRows === 'function') {
+            window.collapseAllNewPresetRows();
+        }
+    }
+});
 
 window.addEventListener('resize', () => {
     document.querySelectorAll('.dropdown-widget.show').forEach(w => {

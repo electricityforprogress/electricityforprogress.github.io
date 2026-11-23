@@ -1,6 +1,6 @@
 /**
  * js/bleMidi.js
- * bioQuad Web Bluetooth GATT, Web MIDI In/Out & Telemetry Engine
+ * bioQuad Web Bluetooth GATT, USB Hardware Routing, Web MIDI In/Out & Telemetry Engine
  */
 
 // --- WEB MIDI ACCESS (INPUTS & OUTPUTS) ---
@@ -12,33 +12,33 @@ function setupWebMidi() {
     if (!navigator.requestMIDIAccess) return;
     navigator.requestMIDIAccess({ sysex: false }).then(access => {
         window.midiAccess = access;
-        
+
         const updateMidiPorts = () => {
             const inSelect = document.getElementById('midi-in-select');
             const outSelect = document.getElementById('midi-out-select');
-            
+
             // 1. Populate MIDI Inputs
             if (inSelect) {
                 const currentIn = inSelect.value || 'none';
-                inSelect.innerHTML = '<option value="none">None</option><option value="all">All Inputs</option>';
-                
+                inSelect.innerHTML = '<option value="none">None</option><option value="all">All</option>';
+
                 access.inputs.forEach((input, key) => {
-                    let opt = document.createElement('option');
+                    const opt = document.createElement('option');
                     opt.value = key;
-                    opt.text = input.name || `MIDI In (${key})`;
+                    opt.text = input.name || `In (${key})`;
                     if (key === currentIn) opt.selected = true;
                     inSelect.appendChild(opt);
-                    
+
                     input.onmidimessage = handleIncomingMidi;
                 });
             }
-            
+
             // 2. Populate MIDI Outputs
             if (outSelect) {
                 const currentOut = outSelect.value;
-                outSelect.innerHTML = '<option value="none">No Output</option>';
+                outSelect.innerHTML = '<option value="none">None</option>';
                 access.outputs.forEach((output, key) => {
-                    let opt = document.createElement('option');
+                    const opt = document.createElement('option');
                     opt.value = key;
                     opt.text = output.name || `MIDI Out (${key})`;
                     if (key === currentOut) opt.selected = true;
@@ -47,10 +47,10 @@ function setupWebMidi() {
                 window.midiOutput = access.outputs.get(outSelect.value) || null;
             }
         };
-        
+
         updateMidiPorts();
         access.onstatechange = updateMidiPorts;
-        
+
         const outSelect = document.getElementById('midi-out-select');
         if (outSelect) {
             outSelect.addEventListener('change', (e) => {
@@ -66,17 +66,32 @@ function setupWebMidi() {
 function handleIncomingMidi(event) {
     const inSelect = document.getElementById('midi-in-select');
     const selectedId = inSelect ? inSelect.value : 'none';
-         
+
+    const data = event.data;
+    if (!data || data.length === 0) return;
+
+    // 1-Byte System Real-Time MIDI Clock Messages (0xF8 Tick, 0xFA Start -> Beat 1, 0xFB Continue, 0xFC Stop)
+    const rawStatus = data[0];
+    if (rawStatus === 0xF8 || rawStatus === 0xFA || rawStatus === 0xFB || rawStatus === 0xFC) {
+        if (window.midiClockMode === 'in') {
+            if (selectedId === 'none' || selectedId === 'all' || (event.target && event.target.id === selectedId)) {
+                if (window.bioClock && typeof window.bioClock.onMidiRealTime === 'function') {
+                    window.bioClock.onMidiRealTime(rawStatus, event.timeStamp || performance.now());
+                }
+            }
+        }
+        return;
+    }
+
     if (selectedId === 'none') return;
     if (selectedId !== 'all' && event.target && event.target.id !== selectedId) return;
-    const data = event.data;
-    if (!data || data.length < 2) return;
-    
-    const status = data[0] & 0xF0;
-    const channel = data[0] & 0x0F; 
+    if (data.length < 2) return;
+
+    const status = rawStatus & 0xF0;
+    const channel = rawStatus & 0x0F;
     const d1 = data[1];
     const d2 = data.length > 2 ? data[2] : 0;
-    
+
     let synthCh = channel % 4;
     for (let i = 0; i < 4; i++) {
         if (window.synthChannels[i] && window.synthChannels[i].params.midiOutCh === channel) {
@@ -87,11 +102,10 @@ function handleIncomingMidi(event) {
 
     // Note On
     if (status === 0x90 && d2 > 0) {
-        let p = window.synthChannels[synthCh].params;
-        let minN = p.minNote || 0;
-        let maxN = p.maxNote || 127;
-        
-        // Quantize incoming MIDI note through the channel's scale so notes sound in key
+        const p = window.synthChannels[synthCh].params;
+        const minN = p.minNote || 0;
+        const maxN = p.maxNote || 127;
+
         let targetNote = d1;
         if (typeof window.scaleNote === 'function') {
             targetNote = window.scaleNote(d1, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN);
@@ -99,33 +113,32 @@ function handleIncomingMidi(event) {
             targetNote = Math.max(minN, Math.min(maxN, d1));
         }
 
-        let durMs = 500; 
-        window.processBiodata({ type: 'note', ch: synthCh, n: targetNote, v: d2, d: durMs });
+        window.processBiodata({ type: 'note', ch: synthCh, n: targetNote, v: d2, d: 500, ts: Date.now() }, 'midi');
     }
     // Control Change (CC)
     else if (status === 0xB0) {
         const ccNum = d1;
         const ccVal = d2;
-                 
+
         if (window.synthChannels[synthCh]) {
             const p = window.synthChannels[synthCh].params;
             if (ccNum === 81) {
-                let base = 0.05 + (ccVal / 127) * 4.95;
-                let boost = Math.max(0, p.threshold - 5.0);
+                const base = 1.0 + (ccVal / 127) * 4.0;
+                const boost = Math.max(0, p.threshold - 5.0);
                 p.threshold = parseFloat((base + boost).toFixed(2));
-                let tEl = document.getElementById(`ch-mini-thresh-${synthCh}`);
-                let vEl = document.getElementById(`ch-val-thresh-${synthCh}`);
+                const tEl = document.getElementById(`ch-mini-thresh-${synthCh}`);
+                const vEl = document.getElementById(`ch-val-thresh-${synthCh}`);
                 if (tEl) tEl.value = p.threshold;
                 if (vEl) vEl.innerText = p.threshold.toFixed(2) + 'x';
             }
             else if (ccNum === 80) {
-                let maxScale = p.threshMax || 5.0;
-                let boostRange = Math.max(5.0, maxScale - 5.0);
-                let boost = (ccVal / 127) * boostRange;
-                let base = Math.min(5.0, p.threshold);
+                const maxScale = p.threshMax || 5.0;
+                const boostRange = Math.max(5.0, maxScale - 5.0);
+                const boost = (ccVal / 127) * boostRange;
+                const base = Math.min(5.0, p.threshold);
                 p.threshold = parseFloat((base + boost).toFixed(2));
-                let tEl = document.getElementById(`ch-mini-thresh-${synthCh}`);
-                let vEl = document.getElementById(`ch-val-thresh-${synthCh}`);
+                const tEl = document.getElementById(`ch-mini-thresh-${synthCh}`);
+                const vEl = document.getElementById(`ch-val-thresh-${synthCh}`);
                 if (tEl) tEl.value = p.threshold;
                 if (vEl) vEl.innerText = p.threshold.toFixed(2) + 'x';
             }
@@ -133,201 +146,301 @@ function handleIncomingMidi(event) {
     }
 }
 
-// --- UART SYNC COMMANDS WITH BUFFER QUEUE ---
+// --- UNIFIED HARDWARE TX ROUTING (USB SERIAL PRIORITY -> BLE GATT FALLBACK) ---
 window.bleTxQueue = [];
 window.bleIsSending = false;
 
+window.bleMaxChunkBytes = 120;
+
+window.writeBleBytes = async function(chunk) {
+    if (typeof window.bleTxCharacteristic.writeValueWithResponse === 'function') {
+        try {
+            await window.bleTxCharacteristic.writeValueWithResponse(chunk);
+            return;
+        } catch (writeRespErr) {
+            if (typeof window.bleTxCharacteristic.writeValueWithoutResponse === 'function') {
+                await window.bleTxCharacteristic.writeValueWithoutResponse(chunk);
+                return;
+            }
+            if (typeof window.bleTxCharacteristic.writeValue === 'function') {
+                await window.bleTxCharacteristic.writeValue(chunk);
+                return;
+            }
+            throw writeRespErr;
+        }
+    }
+    if (typeof window.bleTxCharacteristic.writeValueWithoutResponse === 'function') {
+        await window.bleTxCharacteristic.writeValueWithoutResponse(chunk);
+        return;
+    }
+    await window.bleTxCharacteristic.writeValue(chunk);
+};
+
 window.processBleQueue = async function() {
     if (window.bleIsSending || window.bleTxQueue.length === 0 || !window.bleTxCharacteristic) return;
-    
-    // Clear queue if the device drops offline
-    if (window.activeBleDevice && !window.activeBleDevice.gatt.connected) {
+
+    if (window.activeBleDevice && (!window.activeBleDevice.gatt || !window.activeBleDevice.gatt.connected)) {
         window.bleTxQueue = [];
         return;
     }
-    
+
     window.bleIsSending = true;
-    let cmd = window.bleTxQueue[0]; 
-    
+    const cmd = window.bleTxQueue[0];
+
     try {
-        let encoder = new TextEncoder();
-        if (window.bleTxCharacteristic.writeValueWithResponse) {
-            await window.bleTxCharacteristic.writeValueWithResponse(encoder.encode(cmd));
-        } else {
-            await window.bleTxCharacteristic.writeValue(encoder.encode(cmd));
+        const encoded = new TextEncoder().encode(cmd);
+        let maxSlice = window.bleMaxChunkBytes || 120;
+        for (let offset = 0; offset < encoded.length; offset += maxSlice) {
+            const slice = encoded.subarray(offset, Math.min(encoded.length, offset + maxSlice));
+            try {
+                await window.writeBleBytes(slice);
+            } catch (sliceErr) {
+                if (slice.length > 20) {
+                    // Fallback to universal 20-byte ATT MTU slices if adapter negotiated default MTU
+                    window.bleMaxChunkBytes = 20;
+                    maxSlice = 20;
+                    for (let sub = offset; sub < encoded.length; sub += 20) {
+                        await window.writeBleBytes(encoded.subarray(sub, Math.min(encoded.length, sub + 20)));
+                    }
+                    break;
+                }
+                throw sliceErr;
+            }
         }
-        
+
         window.bleTxQueue.shift();
         window.bleIsSending = false;
-        
+
         if (window.bleTxQueue.length > 0) {
-            setTimeout(window.processBleQueue, 20); 
+            setTimeout(window.processBleQueue, 20);
         }
-        
-    } catch (e) { 
-        console.warn("BLE TX Busy (Retrying):", e.message); 
+    } catch (e) {
+        console.warn("BLE TX Busy (Retrying):", e.message);
         window.bleIsSending = false;
-        setTimeout(window.processBleQueue, 100); 
+        setTimeout(window.processBleQueue, 100);
     }
-}
+};
+
+window.markHardwarePendingNvs = function() {
+    if (!window.hwNvsState) return;
+    if (typeof window.isHardwareConnected === 'function' && window.isHardwareConnected()) {
+        window.hwNvsState.status = 'pending_nvs';
+        window.hwNvsState.transport = (window.usbHardware && window.usbHardware.isConnected) ? 'usb' : 'ble';
+        clearTimeout(window.hwNvsState.nvsCommitTimer);
+        // Firmware auto-commits dirty NVS after 3000ms of inactivity
+        window.hwNvsState.nvsCommitTimer = setTimeout(() => {
+            if (window.hwNvsState && window.hwNvsState.status === 'pending_nvs') {
+                window.hwNvsState.status = 'saved';
+                window.hwNvsState.lastSavedAt = Date.now();
+                if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+            }
+        }, 3200);
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+    }
+};
+
+window.sendHardwareCommand = function(cmd) {
+    const normalized = cmd.endsWith('\n') ? cmd : (cmd + '\n');
+    if (window.usbHardware && window.usbHardware.isConnected) {
+        window.usbHardware.sendCommand(normalized);
+        return true;
+    }
+    if (window.bleTxCharacteristic) {
+        window.bleTxQueue.push(normalized);
+        window.processBleQueue();
+        return true;
+    }
+    return false;
+};
 
 window.sendHardwareCC = function(ch, cc, val) {
-    if (window.bleTxCharacteristic) {
-        window.bleTxQueue.push(`C:${ch},${cc},${Math.round(val)}\n`);
-        window.processBleQueue();
+    if (window.sendHardwareCommand(`C:${ch},${cc},${Math.round(val)}\n`)) {
+        window.markHardwarePendingNvs();
     }
-}
+};
 
 window.sendHardwareScale = function(ch, mask) {
-    if (window.bleTxCharacteristic) {
-        window.bleTxQueue.push(`S:${ch},${mask}\n`);
-        window.processBleQueue();
+    if (window.sendHardwareCommand(`S:${ch},${mask}\n`)) {
+        window.markHardwarePendingNvs();
     }
-}
+};
+
+window.saveHardwareNVS = function() {
+    if (!window.isHardwareConnected || !window.isHardwareConnected()) {
+        if (typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice('Connect your bioQuad ESP32 via USB Serial or BLE GATT first to commit parameters to hardware NVS.');
+        }
+        return false;
+    }
+    for (let ch = 0; ch < 4; ch++) {
+        if (typeof window.syncParamsToHardware === 'function') {
+            window.syncParamsToHardware(ch);
+        }
+    }
+    window.sendHardwareCommand('SAVE\n');
+    if (window.hwNvsState) {
+        window.hwNvsState.status = 'saved';
+        window.hwNvsState.lastSavedAt = Date.now();
+        clearTimeout(window.hwNvsState.nvsCommitTimer);
+    }
+    if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+    return true;
+};
 
 // --- MIDI OUT ---
 window.sendMidiNote = function(channel, pitch, velocity, duration, playTimeAudioCtx) {
+    const hasSynth = Boolean(window.synthChannels && window.synthChannels[channel]);
     let played = false;
-    if (window.synthChannels[channel]) {
+    if (hasSynth) {
         played = window.synthChannels[channel].play(pitch, velocity, duration, playTimeAudioCtx);
     }
-    
-    if (played && typeof midiOutput !== 'undefined' && midiOutput) {
-        let midiCh = window.synthChannels[channel]?.params.midiOutCh ?? channel;
-        let nowAudio = window.audioCtx.currentTime;
-        let delayMs = Math.max(0, (playTimeAudioCtx - nowAudio) * 1000);
-        let sysTime = window.performance.now() + delayMs;
-        
-        midiOutput.send([0x90 + midiCh, pitch, velocity], sysTime);
-        setTimeout(() => { 
-            if (midiOutput) midiOutput.send([0x80 + midiCh, pitch, 0]); 
-        }, duration + delayMs);
+
+    if ((played || !hasSynth) && typeof window.midiOutput !== 'undefined' && window.midiOutput) {
+        const rawMidiCh = hasSynth && window.synthChannels[channel].params.midiOutCh !== undefined
+            ? window.synthChannels[channel].params.midiOutCh
+            : channel;
+        const midiCh = Math.max(0, Math.min(15, parseInt(rawMidiCh, 10) || 0));
+        const nowAudio = window.audioCtx ? window.audioCtx.currentTime : 0;
+        const delayMs = (typeof playTimeAudioCtx === 'number' && isFinite(playTimeAudioCtx) && window.audioCtx)
+            ? Math.max(0, (playTimeAudioCtx - nowAudio) * 1000)
+            : 0;
+        const sysTime = window.performance.now() + delayMs;
+        const safePitch = Math.max(0, Math.min(127, Math.round(pitch)));
+        const safeVel = Math.max(1, Math.min(127, Math.round(velocity)));
+        const safeDur = Math.max(15, Number(duration) || 200);
+
+        try {
+            window.midiOutput.send([0x90 + midiCh, safePitch, safeVel], sysTime);
+            setTimeout(() => {
+                try {
+                    if (window.midiOutput) window.midiOutput.send([0x80 + midiCh, safePitch, 0]);
+                } catch (e) {}
+            }, safeDur + delayMs);
+        } catch (e) {}
     }
-    return played;
-}
+    return played || !hasSynth;
+};
 
 window.sendMidiCC = function(channel, ccNumber, val) {
-    if (typeof midiOutput !== 'undefined' && midiOutput) {
-        let midiCh = window.synthChannels[channel] ? (window.synthChannels[channel].params.midiOutCh || channel) : channel;
-        let sysTime = window.performance.now();
-        midiOutput.send([0xB0 + midiCh, ccNumber, val], sysTime);
+    if (typeof window.midiOutput !== 'undefined' && window.midiOutput) {
+        const midiCh = window.synthChannels[channel] ? (window.synthChannels[channel].params.midiOutCh || channel) : channel;
+        const sysTime = window.performance.now();
+        window.midiOutput.send([0xB0 + midiCh, ccNumber, val], sysTime);
+    }
+};
+
+// --- WEB BLUETOOTH CONNECTION ---
+window.bleStatusState = 'idle';
+window.bleLastError = '';
+window.bleNeedsStandaloneTab = false;
+
+function isBleEmbeddedFrame() {
+    try {
+        return window.self !== window.top;
+    } catch (e) {
+        return true;
     }
 }
 
-// --- WEB BLUETOOTH CONNECTION ---
-window.showBlePermissionModal = function(msg) {
-    window.dispatchEvent(new CustomEvent('bioquad_ble_error', { 
-        detail: { 
-            message: msg || "Web Bluetooth is disallowed by the browser iframe's permissions policy.",
-            isPermissionsPolicy: true
-        } 
+window.showBlePermissionModal = function(msg, options = {}) {
+    const needsStandaloneTab = Boolean(options && options.needsStandaloneTab);
+    if (typeof window.showHardwareNotice === 'function') {
+        window.showHardwareNotice(msg, 7000, { needsStandaloneTab });
+    }
+    window.dispatchEvent(new CustomEvent('bioquad_ble_error', {
+        detail: {
+            message: msg || 'BLE connection error.',
+            isPermissionsPolicy: needsStandaloneTab
+        }
     }));
 };
 
 window.connectBLE = async function() {
-    const btn = document.getElementById('btn-ble');
-    const label = document.getElementById('ble-label');
-    const statusDot = document.getElementById('ble-status');
-    
     // 1. If active and connected, clicking cleanly disconnects
     if (window.activeBleDevice && window.activeBleDevice.gatt && window.activeBleDevice.gatt.connected) {
-        try { window.activeBleDevice.gatt.disconnect(); } catch(e){}
+        try { window.activeBleDevice.gatt.disconnect(); } catch (e) {}
         window.activeBleDevice = null;
         window.bleTxCharacteristic = null;
         window.bleIsConnecting = false;
-        if (label) label.innerText = 'CONNECT';
-        if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
-        return; 
+        window.bleStatusState = 'idle';
+        window.bleLastError = '';
+        window.bleNeedsStandaloneTab = false;
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+        return false;
     }
 
-    if (window.bleIsConnecting) {
-        console.warn("BLE connection already in progress. Please wait...");
-        return;
-    }
-    window.bleIsConnecting = true;
+    if (window.bleIsConnecting) return false;
 
     // 2. Check if Web Bluetooth API is supported
-    if (!navigator.bluetooth || !navigator.bluetooth.requestDevice) {
+    if (!navigator.bluetooth || typeof navigator.bluetooth.requestDevice !== 'function') {
+        const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+        const isIOS = /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const msg = isIOS
+            ? 'Safari/WebKit on iOS does not expose Web Bluetooth. Open this site in Bluefy on iOS/iPadOS, or use USB MIDI / Feeds.'
+            : 'Web Bluetooth requires Chrome, Edge, or Opera on Desktop or Android.';
         window.bleIsConnecting = false;
-        window.showBlePermissionModal("Web Bluetooth is not supported in this browser. Please use Google Chrome, Microsoft Edge, or a Web Bluetooth-enabled browser on desktop/Android.");
-        if (label) label.innerText = 'NO BLE';
-        setTimeout(() => { if (label) label.innerText = 'CONNECT'; }, 3000);
-        return;
+        window.bleStatusState = 'error';
+        window.bleLastError = msg;
+        window.bleNeedsStandaloneTab = false;
+        window.showBlePermissionModal(msg, { needsStandaloneTab: false });
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+        return false;
     }
 
-    // 3. Check Permissions Policy if available
-    if (typeof document !== 'undefined') {
-        const docWithPolicy = document;
-        const isPolicyBlocked = (
-            (docWithPolicy.permissionsPolicy && typeof docWithPolicy.permissionsPolicy.allowsFeature === 'function' && !docWithPolicy.permissionsPolicy.allowsFeature('bluetooth')) ||
-            (docWithPolicy.featurePolicy && typeof docWithPolicy.featurePolicy.allowsFeature === 'function' && !docWithPolicy.featurePolicy.allowsFeature('bluetooth'))
-        );
-        if (isPolicyBlocked) {
-            window.bleIsConnecting = false;
-            window.showBlePermissionModal("Web Bluetooth access is disallowed inside this embedded preview iframe by the browser permissions policy. To connect your hardware device via Bluetooth, launch this app in a standalone tab, or use the File Portal to stream or playback recorded plant biodata.");
-            if (label) label.innerText = 'BLOCKED';
-            if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
-            setTimeout(() => { if (label) label.innerText = 'CONNECT'; }, 3000);
-            return;
-        }
+    // Resume Web Audio non-blockingly so transient user activation stays intact for requestDevice()
+    if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
+        window.audioCtx.resume().catch(() => {});
     }
+
+    window.bleIsConnecting = true;
+    window.bleStatusState = 'scanning';
+    window.bleLastError = '';
+    window.bleNeedsStandaloneTab = false;
+    if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+
+    const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+    const MIDI_SERVICE = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
 
     try {
-        if (typeof window.audioCtx !== 'undefined' && window.audioCtx.state === 'suspended') {
-            await window.audioCtx.resume();
-        }
-        if (typeof ensureSynths === 'function') ensureSynths();  
-                
-        if (label) label.innerText = 'SCAN';
-                 
         let device = null;
         try {
-            device = await navigator.bluetooth.requestDevice({ 
-                 filters: [
-                    { namePrefix: "biodata" }, { namePrefix: "Biodata" },
-                    { namePrefix: "bioQuad" }, { namePrefix: "BioQuad" },
-                    { namePrefix: "esp32" }, { namePrefix: "ESP32" }
-                ], 
-                 optionalServices: [
-                    "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
-                    "03b80e5a-ede8-4b33-a751-6ce34ec4c700" 
-                ] 
-             });
-        } catch (filterErr) {
-            if (filterErr.name === 'SecurityError' || (filterErr.message && filterErr.message.toLowerCase().includes('permissions policy'))) {
-                window.bleIsConnecting = false;
-                window.showBlePermissionModal("Web Bluetooth access is disallowed inside this embedded preview iframe by the browser permissions policy. To connect your hardware device via Bluetooth, launch this app in a standalone tab, or use the File Portal.");
-                if (label) label.innerText = 'BLOCKED';
-                if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
-                setTimeout(() => { if (label) label.innerText = 'CONNECT'; }, 3000);
-                return;
-            }
-            if (filterErr.name === 'NotFoundError' || (filterErr.message && filterErr.message.includes('User cancelled')) || filterErr.name === 'AbortError') {
-                window.bleIsConnecting = false;
-                if (label) label.innerText = 'CONNECT';
-                return;
-            }
-            // Fallback: acceptAllDevices
+            // Must be the very first await on the click call-stack to preserve user activation
             device = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: [
-                    "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
-                    "03b80e5a-ede8-4b33-a751-6ce34ec4c700"
-                ]
+                filters: [
+                    { services: [UART_SERVICE] },
+                    { services: [MIDI_SERVICE] },
+                    { namePrefix: "Biodata" }, { namePrefix: "biodata" }, { namePrefix: "BioData" },
+                    { namePrefix: "bioQuad" }, { namePrefix: "BioQuad" },
+                    { namePrefix: "esp32" }, { namePrefix: "ESP32" },
+                    { namePrefix: "eforp" }, { namePrefix: "Eforp" }
+                ],
+                optionalServices: [UART_SERVICE, MIDI_SERVICE]
             });
+        } catch (filterErr) {
+            // Only fall back to acceptAllDevices if the browser rejected the filter syntax (TypeError)
+            if (filterErr && filterErr.name === 'TypeError') {
+                device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [UART_SERVICE, MIDI_SERVICE]
+                });
+            } else {
+                throw filterErr;
+            }
         }
 
         if (!device) {
             window.bleIsConnecting = false;
-            if (label) label.innerText = 'CONNECT';
-            return;
+            window.bleStatusState = 'idle';
+            if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+            return false;
         }
-        
-        window.activeBleDevice = device;
-        if (label) label.innerText = 'LINKING';
-        if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = '#ffaa00'; }
 
-        // Helper timeout promise
+        if (typeof ensureSynths === 'function') ensureSynths();
+
+        window.activeBleDevice = device;
+        window.bleStatusState = 'linking';
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+
         const withTimeout = (promise, ms, desc) => {
             let timer;
             const timeout = new Promise((_, reject) => {
@@ -336,130 +449,295 @@ window.connectBLE = async function() {
             return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
         };
 
-        // 4. Connect to GATT server (with 10-second timeout)
         let server = null;
         if (device.gatt && device.gatt.connected) {
             server = device.gatt;
         } else {
             server = await withTimeout(
                 device.gatt.connect(),
-                10000,
-                "GATT connection timed out. If previously connected, reset/power-cycle your bioQuad device."
+                12000,
+                "GATT link timed out. Power-cycle or reset your bioQuad ESP32 and try again."
             );
         }
 
-        // 5. Discover Service (try Nordic UART first, then fallback to BLE MIDI)
         let service = null;
         let rxChar = null;
         let isBleMidiMode = false;
 
         try {
-            service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+            service = await server.getPrimaryService(UART_SERVICE);
             window.bleTxCharacteristic = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
             rxChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
         } catch (uartErr) {
-            console.warn("Nordic UART service not found, trying BLE MIDI service:", uartErr);
             try {
-                service = await server.getPrimaryService("03b80e5a-ede8-4b33-a751-6ce34ec4c700");
+                service = await server.getPrimaryService(MIDI_SERVICE);
                 rxChar = await service.getCharacteristic("7772e5db-3868-4112-a1a9-f2669d106bf3");
                 window.bleTxCharacteristic = rxChar;
                 isBleMidiMode = true;
             } catch (midiErr) {
-                throw new Error("Connected to device, but neither Nordic UART nor BLE MIDI service was found.");
+                throw new Error("Connected to BLE device, but neither Nordic UART nor BLE MIDI service was found.");
             }
         }
-                 
-        device.addEventListener('gattserverdisconnected', () => { 
-            if (label) label.innerText = 'CONNECT';
-            if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
+
+        device.addEventListener('gattserverdisconnected', () => {
             window.activeBleDevice = null;
             window.bleTxCharacteristic = null;
             window.bleIsConnecting = false;
+            window.bleStatusState = 'idle';
+            if (!window.usbHardware || !window.usbHardware.isConnected) {
+                window.hwNetStatus = null;
+                window.localHwEnvSensor = null;
+                if (window.chData) {
+                    for (let c = 0; c < 4; c++) {
+                        if (window.chData[c]) window.chData[c].localEnvSensor = null;
+                    }
+                }
+            }
+            if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+            if (typeof window.refreshAllSensorHUDs === 'function') window.refreshAllSensorHUDs();
         });
-                 
+
+        const bleLineParser = (window.BioQuadCore && window.BioQuadCore.LineStreamParser)
+            ? new window.BioQuadCore.LineStreamParser()
+            : null;
+
         await rxChar.startNotifications();
 
-        // 6. Handle characteristic notifications
         rxChar.addEventListener('characteristicvaluechanged', (e) => {
             if (isBleMidiMode) {
-                // Parse standard BLE MIDI stream
                 const dv = e.target.value;
                 if (!dv || dv.byteLength < 3) return;
-                let idx = 1; // skip header byte
+                let idx = 1;
                 while (idx < dv.byteLength) {
-                    let b = dv.getUint8(idx++);
-                    if (b & 0x80) { // timestamp low or status
-                        let status = b;
-                        let ch = (status & 0x0F) % 4;
-                        let d1 = idx < dv.byteLength ? dv.getUint8(idx++) : 60;
-                        let d2 = idx < dv.byteLength ? dv.getUint8(idx++) : 0;
-                        let msgType = status & 0xF0;
+                    const b = dv.getUint8(idx++);
+                    if (b & 0x80) {
+                        const status = b;
+                        const ch = (status & 0x0F) % 4;
+                        const d1 = idx < dv.byteLength ? dv.getUint8(idx++) : 60;
+                        const d2 = idx < dv.byteLength ? dv.getUint8(idx++) : 0;
+                        const msgType = status & 0xF0;
                         if (msgType === 0x90 && d2 > 0) {
-                            window.processBiodata({ ch: ch, type: 'note', n: d1, v: d2, d: 200 });
+                            window.processBiodata({ ch, type: 'note', n: d1, v: d2, d: 200, ts: Date.now() }, 'ble');
                         } else if (msgType === 0xB0) {
                             if (typeof window.sendMidiCC === 'function') window.sendMidiCC(ch, d1, d2);
                         }
                     }
                 }
             } else {
-                // Parse Nordic UART JSON stream
-                if (typeof window.bleBuffer === 'undefined') window.bleBuffer = '';
-                window.bleBuffer += new TextDecoder().decode(e.target.value);
-                let lines = window.bleBuffer.split('\n'); 
-                window.bleBuffer = lines.pop(); 
-                for (let line of lines) { 
-                    let trimmed = line.trim();
-                    if (trimmed.startsWith('{')) { 
-                        try { window.processBiodata(JSON.parse(trimmed)); } catch(err){} 
-                    } 
+                const dv = e.target.value;
+                if (!dv) return;
+                const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+                if (bleLineParser) {
+                    const lines = bleLineParser.push(bytes);
+                    for (let i = 0; i < lines.length; i++) {
+                        const trimmed = lines[i];
+                        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                            try { window.processBiodata(JSON.parse(trimmed), 'ble'); } catch (err) {}
+                        }
+                    }
+                } else {
+                    if (typeof window.bleBuffer === 'undefined') window.bleBuffer = '';
+                    window.bleBuffer += new TextDecoder().decode(bytes);
+                    const lines = window.bleBuffer.split(/\r?\n/);
+                    window.bleBuffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('{')) {
+                            try { window.processBiodata(JSON.parse(trimmed), 'ble'); } catch (err) {}
+                        }
+                    }
                 }
             }
         });
-        
-        if (label) label.innerText = 'CLOSE';
-        if (statusDot) { statusDot.className = 'status-online'; statusDot.style.color = 'var(--green)'; }
+
         window.bleIsConnecting = false;
-                 
-        // Hardware-first handshake request for bioQuad firmware
-        setTimeout(() => { 
+        window.bleStatusState = 'connected';
+        window.bleLastError = '';
+        window.bleNeedsStandaloneTab = false;
+        if (window.hwNvsState) {
+            window.hwNvsState.status = 'saved';
+            window.hwNvsState.transport = (window.usbHardware && window.usbHardware.isConnected) ? 'usb' : 'ble';
+        }
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+        if (typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice(`Connected to ${device.name || 'Biodata-Q4'} over BLE GATT.`, 3200);
+        }
+
+        window._hwNetInitialSynced = false;
+        setTimeout(() => {
             if (window.bleTxCharacteristic && !isBleMidiMode) {
+                window.bleTxQueue.push(`EPOCH:${Date.now()}\n`);
                 window.bleTxQueue.push("SYNC\n");
+                window.bleTxQueue.push("NETGET\n");
                 window.processBleQueue();
             }
-        }, 1000);
-        
-    } catch (error) { 
+        }, 650);
+        return true;
+
+    } catch (error) {
         window.bleIsConnecting = false;
-        console.warn("BLE Connect result:", error.message || error);
-        
-        if (error.name === 'SecurityError' || (error.message && error.message.toLowerCase().includes('permissions policy'))) {
-            window.showBlePermissionModal("Web Bluetooth access is disallowed inside this embedded preview iframe by the browser permissions policy. To connect hardware BLE devices directly, launch this app in a standalone tab, or use the File Portal.");
-            if (label) label.innerText = 'BLOCKED';
-        } else if (error.name === 'NotFoundError' || (error.message && error.message.includes('User cancelled')) || error.name === 'AbortError') {
-            if (label) label.innerText = 'CONNECT';
+        window.activeBleDevice = null;
+        window.bleTxCharacteristic = null;
+        console.warn("BLE Connect result:", error && (error.message || error));
+
+        const Core = window.BioQuadCore;
+        const classified = (Core && typeof Core.classifyHardwareError === 'function')
+            ? Core.classifyHardwareError(error, 'Bluetooth LE', isBleEmbeddedFrame())
+            : { kind: 'error', message: (error && error.message) ? error.message : 'BLE connection failed.', needsStandaloneTab: false };
+
+        if (classified.kind === 'cancelled') {
+            window.bleStatusState = 'idle';
+            window.bleLastError = '';
+            window.bleNeedsStandaloneTab = false;
         } else {
-            if (label) label.innerText = 'RETRY';
-            if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
+            window.bleStatusState = classified.needsStandaloneTab ? 'blocked' : 'error';
+            window.bleLastError = classified.message;
+            window.bleNeedsStandaloneTab = Boolean(classified.needsStandaloneTab);
+            window.showBlePermissionModal(classified.message, {
+                needsStandaloneTab: window.bleNeedsStandaloneTab
+            });
         }
-        
-        setTimeout(() => { 
-             if (!window.activeBleDevice || !window.activeBleDevice.gatt || !window.activeBleDevice.gatt.connected) { 
-                 if (label) label.innerText = 'CONNECT'; 
-                 if (statusDot) { statusDot.className = 'status-offline'; statusDot.style.color = 'var(--red)'; }
-             } 
-         }, 3000);
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+        return false;
     }
-}
+};
 
 // --- TELEMETRY & NOTE PROCESSOR ---
-window.processBiodata = function(payload) {
-    if (!payload || typeof payload.ch !== 'number') return;
-    let chIdx = payload.ch;
-    let ch = window.chData[chIdx];
+window.processBiodata = function(payload, source = 'ble') {
+    if (!payload) return;
+
+    // Handle explicit NVS save confirmation, WiFi/MQTT status, or USB/link handshake acks from firmware v008/v009+
+    if (payload.type === 'nvs_saved') {
+        if (window.hwNvsState) {
+            window.hwNvsState.status = 'saved';
+            window.hwNvsState.lastSavedAt = Date.now();
+            clearTimeout(window.hwNvsState.nvsCommitTimer);
+        }
+        if (payload.net && typeof window.showHardwareNotice === 'function') {
+            window.showHardwareNotice('Saved WiFi & Cloud MQTT settings to ESP32 NVS.', 3600);
+        }
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+        return;
+    }
+    if (payload.type === 'net_status') {
+        window.hwNetStatus = Object.assign({}, payload, {
+            receivedAt: Date.now(),
+            transport: source
+        });
+        const explicitRead = Boolean(window._hwNetPendingSync);
+        const shouldSyncFields = Boolean(!window._hwNetInitialSynced || explicitRead);
+        window._hwNetInitialSynced = true;
+        window._hwNetPendingSync = false;
+        if (typeof window.refreshHardwareNetUI === 'function') {
+            window.refreshHardwareNetUI(shouldSyncFields, explicitRead);
+        }
+        return;
+    }
+    if (payload.type === 'env_cfg') {
+        if (payload.envMs !== undefined && window.BioQuadCore && typeof window.BioQuadCore.normalizeEnvRateMs === 'function') {
+            window.envSensorRateMs = window.BioQuadCore.normalizeEnvRateMs(payload.envMs);
+            try { localStorage.setItem('bioquad_env_rate_ms', String(window.envSensorRateMs)); } catch (e) {}
+        }
+        if (typeof window.refreshHardwareNetUI === 'function') window.refreshHardwareNetUI(false);
+        return;
+    }
+    if (payload.type === 'usb_mode' || payload.type === 'pong') {
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+        return;
+    }
+
+    // Handle periodic or On-Change I2C environmental sensor readings (e.g. SHT4x °F / °C / %RH)
+    if (payload.type === 'env') {
+        if (source === 'ble' && window.usbHardware && window.usbHardware.isConnected) {
+            return;
+        }
+        const Core = window.BioQuadCore;
+        const nowEnvMs = Date.now();
+        const envObj = (Core && typeof Core.normalizeEnvSensorPayload === 'function')
+            ? Core.normalizeEnvSensorPayload(payload, nowEnvMs)
+            : null;
+        if (!envObj) return;
+
+        if (source === 'mqtt') {
+            if (envObj.ch !== null && window.chData && window.chData[envObj.ch]) {
+                window.chData[envObj.ch].mqttEnvSensor = envObj;
+            }
+        } else {
+            const rateMode = (window.envSensorRateMs !== undefined) ? Number(window.envSensorRateMs) : 15000;
+            if (rateMode === 0) {
+                return; // Local I2C sensor polling explicitly turned OFF
+            }
+            if (rateMode < 0 && Core && typeof Core.shouldEmitEnvOnChange === 'function') {
+                // Enforce anti-jitter ON CHANGE deadband even if connected board runs older periodic firmware
+                if (!Core.shouldEmitEnvOnChange(window.lastEmittedLocalEnv, envObj, nowEnvMs)) {
+                    return;
+                }
+            } else if (rateMode > 0 && window.lastEmittedLocalEnv && window.lastEmittedLocalEnv.emittedAt) {
+                // Enforce minimum interval if older firmware streams faster than selected rate (with 15% clock slack)
+                if ((nowEnvMs - window.lastEmittedLocalEnv.emittedAt) < (rateMode * 0.85)) {
+                    return;
+                }
+            }
+
+            window.lastEmittedLocalEnv = Object.assign({}, envObj, { emittedAt: nowEnvMs });
+            if (envObj.ch !== null && window.chData && window.chData[envObj.ch]) {
+                window.chData[envObj.ch].localEnvSensor = envObj;
+            } else {
+                window.localHwEnvSensor = envObj;
+            }
+            if (window.bioquadFeeds && window.bioquadFeeds.isPublishing) {
+                window.bioquadFeeds.broadcastTelemetryEvent(payload);
+            }
+            if (typeof window.refreshHardwareNetUI === 'function') {
+                window.refreshHardwareNetUI(false);
+            }
+        }
+        if (typeof window.refreshAllSensorHUDs === 'function') {
+            window.refreshAllSensorHUDs();
+        }
+        return;
+    }
+
+    if (typeof payload.ch !== 'number') return;
+
+    // Deduplicate raw packets: if USB Serial is actively connected, ignore BLE GATT raw telemetry
+    if (source === 'ble' && payload.type === 'raw' && window.usbHardware && window.usbHardware.isConnected) {
+        return;
+    }
+
+    const chIdx = payload.ch;
+    const ch = window.chData[chIdx];
     if (!ch) return;
 
-    // Record live biodata if recorder is active and not currently playing back a stream
-    if (window.biodataRecorder && window.biodataRecorder.isRecording && !window.biodataRecorder.isPaused && (!window.dataStreamer || !window.dataStreamer.isPlaying)) {
+    // 1. Isolate channels actively playing back a recorded session or file in DataStreamer
+    // so live USB, BLE, MIDI, or Cloud MQTT/Sim feeds never double-trigger on top of playback.
+    if (source !== 'stream' && window.dataStreamer && typeof window.dataStreamer.isChannelPlayingStream === 'function' && window.dataStreamer.isChannelPlayingStream(chIdx)) {
+        return;
+    }
+
+    // 2. Isolate channels actively routed to an incoming MQTT stream (e.g., CH 3 <- Stream 1, CH 4 <- Stream 2)
+    // from floating hardware pins or stray local events, unless intentionally self-looping the exact same channel.
+    if (source !== 'mqtt' && source !== 'stream' && window.bioquadFeeds && window.bioquadFeeds.channelRoutes) {
+        const activeRoute = window.bioquadFeeds.channelRoutes[chIdx];
+        if (activeRoute) {
+            const isSameChSelfLoop = Boolean(
+                window.bioquadFeeds.isPublishing &&
+                activeRoute.feedId === window.bioquadFeeds.publishFeedId &&
+                activeRoute.remoteCh === chIdx
+            );
+            if (!isSameChSelfLoop) {
+                return;
+            }
+        }
+    }
+
+    // Forward local live telemetry (USB, BLE, MIDI, or local File Stream) to Cloud MQTT if user enabled Broadcast
+    if (source !== 'mqtt' && window.bioquadFeeds && window.bioquadFeeds.isPublishing && (payload.type === 'raw' || payload.type === 'note')) {
+        window.bioquadFeeds.broadcastTelemetryEvent(payload);
+    }
+
+    // Record live biodata if recorder is active and not currently playing back a saved file stream
+    if (window.biodataRecorder && window.biodataRecorder.isRecording && !window.biodataRecorder.isPaused && (!window.dataStreamer || !window.dataStreamer.isPlaying || source !== 'stream')) {
         if (payload.type === 'note') {
             window.biodataRecorder.recordNote(chIdx, payload.n, payload.v, payload.d);
         } else if (payload.type === 'raw' && Array.isArray(payload.p)) {
@@ -468,67 +746,106 @@ window.processBiodata = function(payload) {
     }
 
     if (payload.type === 'note') {
-        let playTime = window.audioCtx.currentTime + 0.015;
-        window.sendMidiNote(chIdx, payload.n, payload.v, payload.d, playTime);
-        
-        if (!ch.notes) ch.notes = [];
-        ch.notes.push({ n: payload.n, t: Date.now(), dur: payload.d, v: payload.v });
-        
-        let tabLed = document.getElementById(`led-${chIdx}`);
-        if (tabLed) {
-            tabLed.classList.add('active');
-            setTimeout(() => tabLed.classList.remove('active'), 100);
-        }
-        
-        if (ch.waveBuffer && ch.waveBuffer.length > 0) {
-            let lastIdx = ch.waveBuffer.length - 1;
-            ch.waveBuffer[lastIdx].evt = 1;
-            ch.waveBuffer[lastIdx].n = payload.n;
-        }
-        
-        if (typeof window.triggerDensityVisualizer === 'function') {
-            window.triggerDensityVisualizer(chIdx, 'pass');
+        const synthCh = window.synthChannels ? window.synthChannels[chIdx] : null;
+        const p = (synthCh && synthCh.params) ? synthCh.params : (window.defaultParams || {});
+        const nowAudio = window.audioCtx ? window.audioCtx.currentTime : 0;
+        let playTime = nowAudio + 0.015;
+        let quantDelayMs = 0;
+
+        if (!payload._audioAlreadyScheduled) {
+            const quantStep = Math.round(Number(p.quantize) || 0);
+            if (quantStep > 0 && window.bioClock && typeof window.bioClock.quantizeAudioTime === 'function') {
+                playTime = window.bioClock.quantizeAudioTime(playTime, quantStep);
+                // Prevent identical pitch stacking onto the exact same quantized grid slot on one channel
+                if (
+                    ch._lastQuantSlotTime !== undefined &&
+                    Math.abs(playTime - ch._lastQuantSlotTime) < 0.004 &&
+                    ch._lastQuantPitch === payload.n
+                ) {
+                    return;
+                }
+                ch._lastQuantSlotTime = playTime;
+                ch._lastQuantPitch = payload.n;
+                quantDelayMs = Math.max(0, (playTime - nowAudio) * 1000);
+            }
+            window.sendMidiNote(chIdx, payload.n, payload.v, payload.d, playTime);
         }
 
-        // INJECT VISUAL METER SPIKE
-        if (window.synthChannels[chIdx]) {
-            let p = window.synthChannels[chIdx].params;
-            let maxM = Math.max(1.0, Math.min(10.0, p.threshMax || 5.0));
-            let tVal = Math.max(1.0, Math.min(maxM, p.threshold));
-            let tPct = Math.max(0, Math.min(1, (tVal - 1.0) / Math.max(0.01, maxM - 1.0)));
-            
-            ch.vizDeltaPct = Math.min(1.0, tPct + 0.05 + (payload.v / 127) * 0.1); 
-            if (!ch.peak) ch.peak = { val: 0, time: 0, vel: 0 };
-            ch.peak.val = ch.vizDeltaPct;
-            ch.peak.time = Date.now();
-            ch.peak.vel = 0;
+        const commitNoteVisuals = () => {
+            if (!ch.notes) ch.notes = [];
+            ch.notes.push({ n: payload.n, t: Date.now(), dur: payload.d, v: payload.v });
+
+            if (typeof window.triggerChannelLED === 'function') {
+                window.triggerChannelLED(chIdx);
+            } else {
+                ['led-', 'focus-led-', 'card-led-'].forEach(prefix => {
+                    const el = document.getElementById(`${prefix}${chIdx}`);
+                    if (el) {
+                        el.classList.add('active');
+                        setTimeout(() => el.classList.remove('active'), 115);
+                    }
+                });
+            }
+
+            if (ch.waveBuffer && ch.waveBuffer.length > 0) {
+                const lastIdx = ch.waveBuffer.length - 1;
+                ch.waveBuffer[lastIdx].evt = 1;
+                ch.waveBuffer[lastIdx].n = payload.n;
+            }
+
+            if (typeof window.triggerDensityVisualizer === 'function') {
+                window.triggerDensityVisualizer(chIdx, 'pass', payload.n, payload.v, payload.d);
+            }
+
+            // Inject visual meter spike
+            if (window.synthChannels[chIdx]) {
+                const pNow = window.synthChannels[chIdx].params;
+                const maxM = Math.max(1.0, Math.min(10.0, pNow.threshMax || 5.0));
+                const tVal = Math.max(1.0, Math.min(maxM, pNow.threshold));
+                const tPct = Math.max(0, Math.min(1, (tVal - 1.0) / Math.max(0.01, maxM - 1.0)));
+
+                ch.vizDeltaPct = Math.min(1.0, tPct + 0.05 + (payload.v / 127) * 0.1);
+                if (!ch.peak) ch.peak = { val: 0, time: 0, vel: 0 };
+                ch.peak.val = ch.vizDeltaPct;
+                ch.peak.time = Date.now();
+                ch.peak.vel = 0;
+            }
+        };
+
+        if (quantDelayMs > 30) {
+            setTimeout(commitNoteVisuals, Math.min(4000, Math.round(quantDelayMs)));
+        } else {
+            commitNoteVisuals();
         }
-        
         return;
     }
 
     if (payload.type === 'raw' && Array.isArray(payload.p)) {
+        if (!ch.metricMeta || ch.metricMeta.isBiodata !== true) {
+            ch.metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+        }
         if (!ch.waveBuffer) ch.waveBuffer = [];
         if (!ch.vizBuffer) ch.vizBuffer = [];
         if (!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
-        let pConfig = window.synthChannels[chIdx] ? window.synthChannels[chIdx].params : window.defaultParams;
-        const CALIBRATION_FACTOR = 10000000; 
-        
-        let nowMs = Date.now();
+        const pConfig = window.synthChannels[chIdx] ? window.synthChannels[chIdx].params : window.defaultParams;
+        const CALIBRATION_FACTOR = 10000000;
+
+        const nowMs = Date.now();
         payload.p.forEach(rawTicks => {
-            let rVal = CALIBRATION_FACTOR / rawTicks;
-            ch.acc.sum += rVal; 
+            if (!rawTicks || rawTicks <= 0) return;
+            const rVal = CALIBRATION_FACTOR / rawTicks;
+            ch.acc.sum += rVal;
             ch.acc.count++;
             if (rVal < ch.acc.min) ch.acc.min = rVal;
             if (rVal > ch.acc.max) ch.acc.max = rVal;
-            
+
             ch.waveBuffer.push({ r: rVal, ticks: rawTicks, evt: 0 });
             ch.vizBuffer.push(rVal);
-            
+
             while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
             if (ch.vizBuffer.length > (pConfig.sampleSize || 40)) ch.vizBuffer.shift();
         });
-        
+
         let maxim = 0, minim = 1000000, averg = 0, stdevi = 0;
         ch.vizBuffer.forEach(v => {
             if (v > maxim) maxim = v;
@@ -536,40 +853,40 @@ window.processBiodata = function(payload) {
             averg += v;
         });
         if (ch.vizBuffer.length > 0) averg /= ch.vizBuffer.length;
-        
+
         let maxDev = 0;
         ch.vizBuffer.forEach(v => {
             stdevi += (v - averg) * (v - averg);
-            let dev = Math.abs(v - averg);
+            const dev = Math.abs(v - averg);
             if (dev > maxDev) maxDev = dev;
         });
-        
-        let variance = ch.vizBuffer.length > 0 ? (stdevi / ch.vizBuffer.length) : 0;
-        
+
+        const variance = ch.vizBuffer.length > 0 ? (stdevi / ch.vizBuffer.length) : 0;
+
         ch.lastStdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
         if (ch.lastStdevi < 0.1) ch.lastStdevi = 1.0;
-        ch.lastMaxDev = maxDev; // Exactly mirrors hardware threshold check
+        ch.lastMaxDev = maxDev;
         ch.lastBlockTime = nowMs;
-        
+
         if (nowMs - ch.acc.lastSec >= 1000) {
             if (!ch.history) ch.history = [];
             if (ch.acc.count > 0) ch.history.push({ avg: ch.acc.sum / ch.acc.count, min: ch.acc.min, max: ch.acc.max });
-            if (ch.history.length > 300) ch.history.shift(); 
+            if (ch.history.length > 300) ch.history.shift();
             ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
         }
+        return;
     }
-    
+
     // --- PARSE HARDWARE STATE SYNC ---
-    if (payload.type === 'state') {
-        let p = window.synthChannels[chIdx].params;
+    if (payload.type === 'state' && window.synthChannels[chIdx]) {
+        const p = window.synthChannels[chIdx].params;
         p.threshold = payload.thr;
-        
-        // Auto-expand the UI slider scale if hardware threshold exceeds current max
+
         if (p.threshold > (p.threshMax || 5.0)) {
             p.threshMax = Math.ceil(p.threshold);
             if (typeof window.setThresholdMax === 'function') window.setThresholdMax(chIdx, p.threshMax);
         }
-        
+
         p.sampleSize = payload.win;
         p.density = payload.den;
         p.minNote = payload.nMin;
@@ -583,13 +900,13 @@ window.processBiodata = function(payload) {
         window.masterBPM = payload.bpm;
         p.voices = payload.poly;
         p.legato = payload.leg;
-        
+
         if (payload.stl === 0) p.stealMode = 'oldest';
         else if (payload.stl === 1) p.stealMode = 'lowest';
         else if (payload.stl === 2) p.stealMode = 'highest';
         else if (payload.stl === 3) p.stealMode = 'env';
         p.steal = p.stealMode;
-        
+
         const decodedBits = typeof window.decodeScaleBits === 'function' ? window.decodeScaleBits(payload.scl) : null;
         if (decodedBits) {
             p.activeScaleBits = decodedBits;
@@ -607,8 +924,24 @@ window.processBiodata = function(payload) {
             p.scaleType = detected.scaleType;
             p.scaleRoot = detected.scaleRoot;
         }
-        
+
         window.synthChannels[chIdx].applyParams();
+
+        const miniT = document.getElementById(`ch-mini-thresh-${chIdx}`);
+        const miniV = document.getElementById(`ch-val-thresh-${chIdx}`);
+        const miniW = document.getElementById(`ch-window-${chIdx}`);
+        const miniWV = document.getElementById(`ch-val-window-${chIdx}`);
+        if (miniT) miniT.value = p.threshold;
+        if (miniV) miniV.innerText = parseFloat(p.threshold).toFixed(2) + 'x';
+        if (miniW) miniW.value = p.sampleSize;
+        if (miniWV) miniWV.innerText = p.sampleSize;
+
+        if (window.hwNvsState) {
+            window.hwNvsState.status = 'saved';
+            window.hwNvsState.transport = source === 'usb' ? 'usb' : 'ble';
+        }
+        if (typeof window.refreshHardwareStatusUI === 'function') window.refreshHardwareStatusUI();
+
         if (typeof window.recordPerfSnapshotDelta === 'function') {
             window.recordPerfSnapshotDelta(chIdx);
         }
@@ -619,9 +952,55 @@ window.processBiodata = function(payload) {
             window.syncUI();
             if (typeof window.syncPianoUI === 'function') window.syncPianoUI();
         }
-        return;
     }
 };
+
+// --- 24-PPQN MIDI CLOCK OUT & BEAT-1 LISTENER SCHEDULER ---
+(function startBioClockTicker() {
+    setInterval(() => {
+        const clk = window.bioClock;
+        if (!clk) return;
+        const st = clk.getState();
+        const nowAudio = clk._nowAudio();
+        const secPerBeat = 60 / st.bpm;
+        const secPerTick = secPerBeat / clk.ppqn;
+
+        // 1. Transmit 24-PPQN 0xF8 MIDI Timing Clock when in 'out' mode and an output port is selected
+        if (window.midiClockMode === 'out' && window.midiOutput) {
+            const lookaheadSec = 0.05;
+            const horizonState = clk.getState(nowAudio + lookaheadSec);
+            const targetTick = horizonState.tickCount;
+            if (clk.lastMidiTickSentTotal < st.tickCount - 4) {
+                clk.lastMidiTickSentTotal = st.tickCount - 1;
+            }
+            while (clk.lastMidiTickSentTotal < targetTick) {
+                clk.lastMidiTickSentTotal++;
+                const tickBeats = clk.lastMidiTickSentTotal / clk.ppqn;
+                const tickAudioTime = clk.anchorAudioTime + (tickBeats - clk.anchorTotalBeats) * secPerBeat;
+                const delayMs = Math.max(0, (tickAudioTime - nowAudio) * 1000);
+                const sendTs = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) + delayMs;
+                try {
+                    window.midiOutput.send([0xF8], sendTs);
+                } catch (e) {
+                    try { window.midiOutput.send([0xF8]); } catch (e2) {}
+                }
+            }
+        } else {
+            clk.lastMidiTickSentTotal = st.tickCount;
+        }
+
+        // 2. Dispatch Beat-1..4 callbacks for pattern / Strudel engines
+        const curWholeBeat = Math.floor(st.totalBeats);
+        if (curWholeBeat !== clk.lastDispatchedBeatTotal) {
+            clk.lastDispatchedBeatTotal = curWholeBeat;
+            if (Array.isArray(clk.beatListeners) && clk.beatListeners.length > 0) {
+                for (let i = 0; i < clk.beatListeners.length; i++) {
+                    try { clk.beatListeners[i](st); } catch (err) {}
+                }
+            }
+        }
+    }, 20);
+})();
 
 // Initialize Web MIDI on page load
 setupWebMidi();

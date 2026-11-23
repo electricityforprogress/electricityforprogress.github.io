@@ -369,7 +369,11 @@
          * Merges telemetry rows and inline PERF_PARAM automation rows in chronological order.
          */
         async exportTakeCsvBlob(takeId, onProgress) {
-            const headers = 'timestamp_iso,sensor_id,conductance_uS,channel,raw_ticks,note_event,velocity,param_attr,param_value\n';
+            const preMeta = await this.getTakeMeta(takeId);
+            const includeAutoCols = Boolean(preMeta && (preMeta.hasAutomation || (preMeta.automationCount || 0) > 0));
+            const headers = includeAutoCols
+                ? 'timestamp_iso,sensor_id,conductance_uS,channel,raw_ticks,note_event,velocity,param_attr,param_value\n'
+                : 'timestamp_iso,sensor_id,conductance_uS,channel,raw_ticks,note_event,velocity\n';
             const blobParts = [headers];
             let recordCount = 0;
             let automationCount = 0;
@@ -378,7 +382,8 @@
                 const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
                 const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
                 const condVal = r.conductance_uS !== undefined ? r.conductance_uS : (r.value !== undefined ? r.value : 50);
-                return `${csvEscape(r.timestamp || '')},${csvEscape(r.sensor_id || ('CH_' + (r.channel || 1) + '_Sensor'))},${condVal},${r.channel || 1},${r.ticks || ''},${noteVal},${velVal},,`;
+                const baseRow = `${csvEscape(r.timestamp || '')},${csvEscape(r.sensor_id || ('CH_' + (r.channel || 1) + '_Sensor'))},${condVal},${r.channel || 1},${r.ticks || ''},${noteVal},${velVal}`;
+                return includeAutoCols ? `${baseRow},,` : baseRow;
             };
 
             const formatParamRow = (ev) => {
@@ -389,7 +394,9 @@
 
             const takeMeta = await this.iterateTakeChunks(takeId, async (chunk) => {
                 const recs = chunk.records || [];
-                const pevs = (chunk.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0));
+                const pevs = includeAutoCols
+                    ? (chunk.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0))
+                    : [];
                 const lines = [];
 
                 let ri = 0;
@@ -507,6 +514,19 @@
                 byteSize: zipBlob.size,
                 takeMeta
             };
+        }
+
+        async renameTake(id, rawNewName) {
+            if (!id) return null;
+            const takeMeta = await this.getTakeMeta(id);
+            if (!takeMeta) return null;
+            const cleanName = (window.BioQuadCore && typeof window.BioQuadCore.sanitizeSessionFilename === 'function')
+                ? window.BioQuadCore.sanitizeSessionFilename(rawNewName, 'bioQuad')
+                : (String(rawNewName || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || takeMeta.name);
+            takeMeta.name = cleanName;
+            await this.saveTakeMeta(takeMeta);
+            window.dispatchEvent(new CustomEvent('bioquad_takes_updated', { detail: takeMeta }));
+            return takeMeta;
         }
 
         async deleteTake(id) {
@@ -643,6 +663,8 @@
         pushEv(0, 'master.bpm', window.masterBPM ?? 120);
 
         if (window.globalFX) {
+            pushEv(0, 'globalFX.level', window.globalFX.level ?? 0.85);
+            pushEv(0, 'globalFX.muted', !!window.globalFX.muted);
             if (window.globalFX.dly) {
                 ['time', 'feedback', 'tone', 'toRev'].forEach(k => pushEv(0, `globalFX.dly.${k}`, window.globalFX.dly[k]));
             }
@@ -760,7 +782,24 @@
             }
             if (attr.startsWith('globalFX.') && window.globalFX) {
                 const parts = attr.split('.');
-                if (parts.length === 3 && window.globalFX[parts[1]]) {
+                if (parts.length === 2) {
+                    if (parts[1] === 'level') {
+                        const num = parseFloat(val);
+                        if (!isNaN(num)) {
+                            window.globalFX.level = Math.max(0, Math.min(1.25, num));
+                            const fxS = document.getElementById('fx-vol-slider');
+                            if (fxS) fxS.value = window.globalFX.level;
+                            const fxV = document.getElementById('fx-vol-val');
+                            if (fxV) fxV.textContent = `${Math.round(window.globalFX.level * 100)}%`;
+                            touched.globalFx = true;
+                        }
+                    } else if (parts[1] === 'muted') {
+                        window.globalFX.muted = parseBoolParam(val);
+                        if (typeof window.syncMixerControlsUI === 'function') window.syncMixerControlsUI();
+                        touched.globalFx = true;
+                    }
+                    touched.ui = true;
+                } else if (parts.length === 3 && window.globalFX[parts[1]]) {
                     const num = parseFloat(val);
                     window.globalFX[parts[1]][parts[2]] = isNaN(num) ? val : num;
                     touched.globalFx = true;
@@ -1020,12 +1059,13 @@
             this.lastUiEmitTime = 0;
 
             // Channel streams data buffers
-            // Each channel has: { data: [ { value, rawTime, tMs, id, note, velocity, ticks } ], index: 0, label, sourceFile }
+            // Each channel has: { data: [ { value, rawTime, tMs, id, note, velocity, ticks } ], index: 0, label, sourceFile, metricMeta }
+            const defaultBioMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
             this.channelFeeds = [
-                { data: [], index: 0, label: 'Unassigned', sourceFile: '' },
-                { data: [], index: 0, label: 'Unassigned', sourceFile: '' },
-                { data: [], index: 0, label: 'Unassigned', sourceFile: '' },
-                { data: [], index: 0, label: 'Unassigned', sourceFile: '' }
+                { data: [], index: 0, label: 'Unassigned', sourceFile: '', metricMeta: Object.assign({}, defaultBioMeta) },
+                { data: [], index: 0, label: 'Unassigned', sourceFile: '', metricMeta: Object.assign({}, defaultBioMeta) },
+                { data: [], index: 0, label: 'Unassigned', sourceFile: '', metricMeta: Object.assign({}, defaultBioMeta) },
+                { data: [], index: 0, label: 'Unassigned', sourceFile: '', metricMeta: Object.assign({}, defaultBioMeta) }
             ];
 
             // Listeners for UI updates
@@ -1043,6 +1083,17 @@
                 try { fn(eventType, state); } catch (e) { console.error('DataStreamer listener error:', e); }
             });
             window.dispatchEvent(new CustomEvent('bioquad_stream_update', { detail: { type: eventType, state } }));
+        }
+
+        isChannelPlayingStream(chIdx) {
+            return Boolean(
+                this.isPlaying &&
+                chIdx >= 0 &&
+                chIdx < 4 &&
+                this.channelFeeds[chIdx] &&
+                Array.isArray(this.channelFeeds[chIdx].data) &&
+                this.channelFeeds[chIdx].data.length > 0
+            );
         }
 
         getState() {
@@ -1067,6 +1118,9 @@
                     index: f.index,
                     label: f.label,
                     sourceFile: f.sourceFile,
+                    metricMeta: f.metricMeta || { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' },
+                    isBiodata: !f.metricMeta || f.metricMeta.isBiodata !== false,
+                    unit: f.metricMeta ? (f.metricMeta.unit ?? '\u00B5S') : '\u00B5S',
                     currentVal: f.data[f.index] ? f.data[f.index].value : null
                 })),
                 loadedFile: this.loadedFile ? {
@@ -1083,7 +1137,7 @@
 
         // --- UNIVERSAL FILE PARSER & AUTO-GUESSING PORTAL ---
         parseFileContent(rawText, fileName = 'stream_data.csv') {
-            const trimmed = rawText.trim();
+            const trimmed = String(rawText || '').replace(/^\uFEFF/, '').trim();
             if (!trimmed) throw new Error('File content is empty');
 
             let rows = [];
@@ -1125,7 +1179,10 @@
 
             // 2. Delimited text parsing (CSV, TSV, semicolon, whitespace)
             if (rows.length === 0) {
-                const lines = trimmed.split(/\r?\n/).filter(line => line.trim().length > 0);
+                const lines = trimmed.split(/\r?\n/).filter(line => {
+                    const t = line.trim();
+                    return t.length > 0 && !t.startsWith('#') && !t.startsWith('//');
+                });
                 if (lines.length === 0) throw new Error('No valid data lines found in file');
 
                 const firstLine = lines[0];
@@ -1365,6 +1422,10 @@
         applyMappingConfig(config) {
             if (!this.loadedFile) throw new Error('No file loaded to apply mapping');
 
+            if (this.isPlaying) {
+                this.pause();
+            }
+
             this.automationEvents = [];
             this.automationCursor = 0;
             this.followAutomation = false;
@@ -1373,13 +1434,41 @@
             const { rows, recommendedWindow, recommendedZoom, name } = this.loadedFile;
             const autoRows = this.loadedFile.automationRows || [];
             const mode = config.mode || 'multi_sensor_id';
-            const cadenceRps = config.cadenceRps || this.targetCadenceRps || 30;
+            const cadenceRps = Math.max(1, Math.min(500, Number(config.cadenceRps || this.targetCadenceRps) || 30));
             this.targetCadenceRps = cadenceRps;
             const timeCol = config.timestampCol !== undefined ? config.timestampCol : this.loadedFile.guesses.timestampCol;
 
+            const Core = window.BioQuadCore;
+            const fileCols = this.loadedFile.columns || [];
+            const resolveColMeta = (colName) => {
+                if (Core && typeof Core.inferColumnMetricMeta === 'function') {
+                    return Core.inferColumnMetricMeta(colName, fileCols);
+                }
+                const isBio = /conductance|admittance|_us$|_µs$|biometric_us/i.test(String(colName || ''));
+                return isBio
+                    ? { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' }
+                    : { isBiodata: false, unit: '', heading: String(colName || 'RAW DATA').toUpperCase().slice(0, 16) };
+            };
+
+            // In multi-channel modes, clear all 4 slots first so switching from a 4-ch dataset
+            // (e.g. NASA/Forest) to a 2-ch or 3-ch dataset (e.g. EKG/Crypto) never leaves stale
+            // channels playing or corrupts timestamp alignment.
+            if (mode === 'multi_sensor_id' || mode === 'multi_value_cols') {
+                for (let ch = 0; ch < 4; ch++) {
+                    this.channelFeeds[ch] = {
+                        data: [],
+                        index: 0,
+                        label: 'Unassigned',
+                        sourceFile: '',
+                        metricMeta: { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' }
+                    };
+                }
+            }
+
             if (mode === 'single_channel') {
-                const targetCh = config.targetChannel !== undefined ? config.targetChannel : 0;
+                const targetCh = Math.max(0, Math.min(3, config.targetChannel !== undefined ? config.targetChannel : 0));
                 const valCol = config.valueCol || this.loadedFile.guesses.primaryValueCol;
+                const metricMeta = resolveColMeta(valCol);
                 
                 const channelData = [];
                 for (let i = 0; i < rows.length; i++) {
@@ -1406,7 +1495,8 @@
                     index: 0,
                     label: `${name} (${valCol})`,
                     sourceFile: name,
-                    hasRecordedNotes: hasNotes
+                    hasRecordedNotes: hasNotes,
+                    metricMeta
                 };
 
                 if (config.autoApplyWindow !== false && window.synthChannels && window.synthChannels[targetCh]) {
@@ -1420,6 +1510,7 @@
                 const idCol = config.identifierCol || this.loadedFile.guesses.identifierCol;
                 const valCol = config.valueCol || this.loadedFile.guesses.primaryValueCol;
                 const sensorMap = config.sensorToChannelMap || {};
+                const baseMetricMeta = resolveColMeta(valCol);
 
                 // Scan all unique sensor IDs from rows if not explicitly provided
                 if (Object.keys(sensorMap).length === 0) {
@@ -1476,12 +1567,16 @@
                     if (partitioned[ch].length > 0) {
                         const matchedSensor = Object.keys(sensorMap).find(s => sensorMap[s] === ch) || `CH ${ch+1}`;
                         const hasNotes = partitioned[ch].some(pt => pt.note !== null);
+                        const chHeading = (!baseMetricMeta.isBiodata && matchedSensor)
+                            ? String(matchedSensor).replace(/[_\s-]+/g, ' ').trim().toUpperCase().slice(0, 16)
+                            : baseMetricMeta.heading;
                         this.channelFeeds[ch] = {
                             data: partitioned[ch],
                             index: 0,
                             label: `${matchedSensor} (${valCol})`,
                             sourceFile: name,
-                            hasRecordedNotes: hasNotes
+                            hasRecordedNotes: hasNotes,
+                            metricMeta: Object.assign({}, baseMetricMeta, { heading: chHeading || baseMetricMeta.heading })
                         };
 
                         if (config.autoApplyWindow !== false && window.synthChannels && window.synthChannels[ch]) {
@@ -1506,6 +1601,7 @@
                 assignedChannels.forEach(ch => {
                     const targetCol = Object.keys(colMap).find(c => colMap[c] === ch);
                     if (targetCol) {
+                        const metricMeta = resolveColMeta(targetCol);
                         const channelData = [];
                         for (let i = 0; i < rows.length; i++) {
                             const row = rows[i];
@@ -1530,7 +1626,8 @@
                             index: 0,
                             label: `${name} [${targetCol}]`,
                             sourceFile: name,
-                            hasRecordedNotes: hasNotes
+                            hasRecordedNotes: hasNotes,
+                            metricMeta
                         };
 
                         if (config.autoApplyWindow !== false && window.synthChannels && window.synthChannels[ch]) {
@@ -1545,7 +1642,9 @@
 
             // --- NORMALIZE TIMESTAMPS FOR EXACT DELTA PLAYBACK ---
             let minTimeMs = Infinity;
+            let maxStartMs = -Infinity;
             let validTimeCount = 0;
+            const chMinTimeMs = [Infinity, Infinity, Infinity, Infinity];
 
             for (let ch = 0; ch < 4; ch++) {
                 const feed = this.channelFeeds[ch];
@@ -1556,10 +1655,14 @@
                         const ms = parseRawTimeToMs(pt.rawTime);
                         if (ms !== null && isFinite(ms)) {
                             pt.parsedMs = ms;
+                            if (ms < chMinTimeMs[ch]) chMinTimeMs[ch] = ms;
                             if (ms < minTimeMs) minTimeMs = ms;
                             validTimeCount++;
                         }
                     }
+                }
+                if (chMinTimeMs[ch] !== Infinity && chMinTimeMs[ch] > maxStartMs) {
+                    maxStartMs = chMinTimeMs[ch];
                 }
             }
 
@@ -1582,6 +1685,9 @@
                 });
             }
 
+            // If channels loaded individually come from disjoint epochs (> 1 hour apart, e.g. 2024 sample + 2026 recording),
+            // normalize each channel against its own t=0 so totalDurationMs doesn't explode to multi-year spans.
+            const usePerChannelOrigin = (minTimeMs !== Infinity && maxStartMs !== -Infinity && (maxStartMs - minTimeMs) > 3600000);
             const hasRealTimestamps = validTimeCount >= 2 && minTimeMs !== Infinity;
             this.hasRealTimestamps = hasRealTimestamps;
 
@@ -1590,12 +1696,13 @@
             for (let ch = 0; ch < 4; ch++) {
                 const feed = this.channelFeeds[ch];
                 if (!feed || feed.data.length === 0) continue;
+                const originMs = (usePerChannelOrigin && chMinTimeMs[ch] !== Infinity) ? chMinTimeMs[ch] : minTimeMs;
 
                 let lastTMs = 0;
                 for (let i = 0; i < feed.data.length; i++) {
                     const pt = feed.data[i];
                     if (hasRealTimestamps && pt.parsedMs !== undefined) {
-                        let tOffset = Math.max(0, pt.parsedMs - minTimeMs);
+                        let tOffset = Math.max(0, pt.parsedMs - originMs);
                         if (tOffset < lastTMs) tOffset = lastTMs;
                         pt.tMs = tOffset;
                         lastTMs = tOffset;
@@ -1630,18 +1737,27 @@
             // Sync total length
             const lengths = this.channelFeeds.map(f => f.data.length).filter(len => len > 0);
             this.totalRecords = lengths.length > 0 ? Math.max(...lengths) : 0;
-            this.totalDurationMs = maxDurationMs > 0 ? maxDurationMs : ((this.totalRecords / cadenceRps) * 1000);
+            this.totalDurationMs = (maxDurationMs > 0 && isFinite(maxDurationMs))
+                ? maxDurationMs
+                : ((this.totalRecords / cadenceRps) * 1000);
             this.playbackElapsedMs = 0;
             this.currentIndex = 0;
 
-            // Pre-warm visualizers with clean bounds
+            // Pre-warm visualizers with clean bounds & metric metadata
             for (let ch = 0; ch < 4; ch++) {
                 const feed = this.channelFeeds[ch];
                 const chVisual = window.chData ? window.chData[ch] : null;
                 if (feed && feed.data.length > 0 && chVisual) {
+                    const isBio = !feed.metricMeta || feed.metricMeta.isBiodata !== false;
+                    chVisual.metricMeta = feed.metricMeta || { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
                     let dMin = Infinity, dMax = -Infinity;
                     for (let k = 0; k < feed.data.length; k++) {
-                        const val = feed.data[k].value;
+                        let val = feed.data[k].value;
+                        if (isBio) {
+                            val = Math.abs(val);
+                            if (val < 0.1) val = 0.1;
+                            if (val > 10000) val = 10000000 / val;
+                        }
                         if (val < dMin) dMin = val;
                         if (val > dMax) dMax = val;
                     }
@@ -1652,15 +1768,31 @@
                     chVisual.waveBuffer = [];
                     chVisual.vizBuffer = [];
                     chVisual.history = [];
-                    chVisual.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
+                    chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: Date.now() };
 
                     const preWarmCount = Math.min(25, feed.data.length);
                     for (let p = 0; p < preWarmCount; p++) {
-                        const rVal = feed.data[p].value;
-                        const ticks = Math.round(10000000 / (rVal || 1));
+                        let rVal = feed.data[p].value;
+                        let ticks = 0;
+                        if (isBio) {
+                            rVal = Math.abs(rVal);
+                            if (rVal < 0.1) rVal = 0.1;
+                            if (rVal > 10000) rVal = 10000000 / rVal;
+                            ticks = feed.data[p].ticks || Math.round(10000000 / rVal);
+                        } else {
+                            ticks = Number(feed.data[p].ticks) || 0;
+                        }
                         chVisual.waveBuffer.push({ r: rVal, ticks: ticks, evt: 0 });
                         chVisual.vizBuffer.push(rVal);
                     }
+                } else if (chVisual && (mode === 'multi_sensor_id' || mode === 'multi_value_cols')) {
+                    chVisual.metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                    chVisual.waveBuffer = [];
+                    chVisual.vizBuffer = [];
+                    chVisual.history = [];
+                    chVisual.lastMaxDev = 0;
+                    chVisual.lastStdevi = 1.0;
+                    chVisual.rawStdev = 0;
                 }
             }
 
@@ -1729,8 +1861,10 @@
             for (let i = 0; i < 4; i++) {
                 if (this.channelFeeds[i]) {
                     this.channelFeeds[i].index = 0;
+                    this.channelFeeds[i].lastNoteTime = 0;
+                    this.channelFeeds[i].lastCandidateTime = 0;
                     if (this.channelFeeds[i].data.length > 0) {
-                        this.processChannelRecord(i, this.channelFeeds[i].data[0]);
+                        this.processChannelRecord(i, this.channelFeeds[i].data[0], { silent: true });
                     }
                 }
             }
@@ -1738,11 +1872,18 @@
         }
 
         seek(targetIndex) {
-            targetIndex = Math.max(0, Math.min(this.totalRecords - 1, Math.round(targetIndex)));
+            if (this.totalRecords <= 0) {
+                this.currentIndex = 0;
+                this.playbackElapsedMs = 0;
+                this.emitChange('seek');
+                return;
+            }
+            const safeIdx = Number.isFinite(Number(targetIndex)) ? Math.round(Number(targetIndex)) : 0;
+            targetIndex = Math.max(0, Math.min(this.totalRecords - 1, safeIdx));
             this.currentIndex = targetIndex;
             
             const ratio = this.totalRecords > 1 ? targetIndex / (this.totalRecords - 1) : 0;
-            this.playbackElapsedMs = ratio * this.totalDurationMs;
+            this.playbackElapsedMs = ratio * (this.totalDurationMs || 0);
 
             if (this.automationEvents.length > 0) {
                 if (this.followAutomation) {
@@ -1765,7 +1906,7 @@
                         }
                     }
                     feed.index = targetIdx;
-                    this.processChannelRecord(ch, feed.data[targetIdx]);
+                    this.processChannelRecord(ch, feed.data[targetIdx], { silent: true });
                 }
             }
             this.emitChange('seek');
@@ -1854,9 +1995,30 @@
                 this.channelFeeds[ch].index = 0;
                 this.channelFeeds[ch].label = 'Unassigned';
                 this.channelFeeds[ch].sourceFile = '';
+                this.channelFeeds[ch].metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                if (window.chData && window.chData[ch]) {
+                    window.chData[ch].metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                    window.chData[ch].waveBuffer = [];
+                    window.chData[ch].vizBuffer = [];
+                    window.chData[ch].history = [];
+                }
                 
                 const lengths = this.channelFeeds.map(f => f.data.length).filter(len => len > 0);
                 this.totalRecords = lengths.length > 0 ? Math.max(...lengths) : 0;
+                if (this.totalRecords === 0) {
+                    this.stop();
+                    this.totalDurationMs = 0;
+                } else {
+                    let maxDur = 0;
+                    for (let i = 0; i < 4; i++) {
+                        const f = this.channelFeeds[i];
+                        if (f && f.data.length > 0) {
+                            const lastT = f.data[f.data.length - 1].tMs || 0;
+                            if (lastT > maxDur) maxDur = lastT;
+                        }
+                    }
+                    this.totalDurationMs = maxDur > 0 ? maxDur : ((this.totalRecords / (this.targetCadenceRps || 30)) * 1000);
+                }
                 this.emitChange('channel_cleared');
             }
         }
@@ -1864,7 +2026,19 @@
         clearAll() {
             this.stop();
             for (let i = 0; i < 4; i++) {
-                this.channelFeeds[i] = { data: [], index: 0, label: 'Unassigned', sourceFile: '' };
+                this.channelFeeds[i] = {
+                    data: [],
+                    index: 0,
+                    label: 'Unassigned',
+                    sourceFile: '',
+                    metricMeta: { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' }
+                };
+                if (window.chData && window.chData[i]) {
+                    window.chData[i].metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                    window.chData[i].waveBuffer = [];
+                    window.chData[i].vizBuffer = [];
+                    window.chData[i].history = [];
+                }
             }
             this.totalRecords = 0;
             this.currentIndex = 0;
@@ -1881,17 +2055,26 @@
         // --- REAL-TIME DELTA TIMESTAMP STREAM LOOP ---
         runStreamLoop() {
             if (!this.isPlaying) return;
+            if (this.totalRecords <= 0 || !isFinite(this.totalDurationMs) || this.totalDurationMs <= 0) {
+                this.pause();
+                return;
+            }
 
             const now = performance.now();
             let deltaMs = now - this.lastFrameTime;
             this.lastFrameTime = now;
+            if (!isFinite(deltaMs) || deltaMs < 0) deltaMs = 0;
             if (deltaMs > 250) deltaMs = 250;
 
             this.playbackElapsedMs += deltaMs * this.playbackRate;
 
             if (this.playbackElapsedMs >= this.totalDurationMs) {
                 if (this.isLooping) {
-                    this.rewind();
+                    try {
+                        this.rewind();
+                    } catch (err) {
+                        console.warn('[DataStreamer] Rewind error:', err);
+                    }
                     this.lastFrameTime = performance.now();
                     this.timerId = requestAnimationFrame(() => this.runStreamLoop());
                     return;
@@ -1903,72 +2086,137 @@
                 }
             }
 
-            if (this.followAutomation && this.automationEvents.length > 0) {
-                const touched = { channels: new Set(), scaleBitsChannels: new Set(), scaleMetaChannels: new Set(), lastScaleSourceByCh: {}, globalFx: false, ui: false, piano: false, patchNames: false };
-                let appliedAny = false;
-                while (this.automationCursor < this.automationEvents.length &&
-                       this.automationEvents[this.automationCursor].tMs <= this.playbackElapsedMs) {
-                    applyPerfEvent(this.automationEvents[this.automationCursor], touched);
-                    this.automationCursor++;
-                    appliedAny = true;
+            try {
+                if (this.followAutomation && this.automationEvents.length > 0) {
+                    const touched = { channels: new Set(), scaleBitsChannels: new Set(), scaleMetaChannels: new Set(), lastScaleSourceByCh: {}, globalFx: false, ui: false, piano: false, patchNames: false };
+                    let appliedAny = false;
+                    while (this.automationCursor < this.automationEvents.length &&
+                           this.automationEvents[this.automationCursor].tMs <= this.playbackElapsedMs) {
+                        applyPerfEvent(this.automationEvents[this.automationCursor], touched);
+                        this.automationCursor++;
+                        appliedAny = true;
+                    }
+                    if (appliedAny) {
+                        commitPerfBatch(touched);
+                    }
                 }
-                if (appliedAny) {
-                    commitPerfBatch(touched);
+
+                for (let chIdx = 0; chIdx < 4; chIdx++) {
+                    const feed = this.channelFeeds[chIdx];
+                    if (!feed || feed.data.length === 0) continue;
+
+                    let stepsThisFrame = 0;
+                    while (feed.index < feed.data.length - 1 && feed.data[feed.index + 1].tMs <= this.playbackElapsedMs && stepsThisFrame < 100) {
+                        feed.index++;
+                        stepsThisFrame++;
+                        try {
+                            this.processChannelRecord(chIdx, feed.data[feed.index]);
+                        } catch (recErr) {
+                            if (!this._lastLoopErrTime || now - this._lastLoopErrTime > 2000) {
+                                this._lastLoopErrTime = now;
+                                console.warn('[DataStreamer] Record playback error on CH', chIdx + 1, recErr);
+                            }
+                        }
+                    }
+
+                    if (window.bioquadFeeds && window.bioquadFeeds.isPublishing && this.mqttRawBatch && this.mqttRawBatch[chIdx] && this.mqttRawBatch[chIdx].length > 0) {
+                        const nowMs = Date.now();
+                        if (nowMs - (this.mqttRawLastFlush ? this.mqttRawLastFlush[chIdx] : 0) >= 75) {
+                            const batch = this.mqttRawBatch[chIdx].slice();
+                            this.mqttRawBatch[chIdx].length = 0;
+                            this.mqttRawLastFlush[chIdx] = nowMs;
+                            window.bioquadFeeds.broadcastTelemetryEvent({
+                                type: 'raw',
+                                ch: chIdx,
+                                p: batch,
+                                ts: nowMs
+                            });
+                        }
+                    }
+                }
+
+                const primaryFeed = this.channelFeeds.find(f => f.data.length === this.totalRecords) || this.channelFeeds[0];
+                if (primaryFeed && primaryFeed.data.length > 0) {
+                    this.currentIndex = primaryFeed.index;
+                }
+
+                if (now - this.lastUiEmitTime > 35) {
+                    this.lastUiEmitTime = now;
+                    this.emitChange('tick');
+                }
+            } catch (loopErr) {
+                if (!this._lastLoopErrTime || now - this._lastLoopErrTime > 2000) {
+                    this._lastLoopErrTime = now;
+                    console.warn('[DataStreamer] Stream loop recovered from error:', loopErr);
                 }
             }
 
-            for (let chIdx = 0; chIdx < 4; chIdx++) {
-                const feed = this.channelFeeds[chIdx];
-                if (!feed || feed.data.length === 0) continue;
-
-                let stepsThisFrame = 0;
-                while (feed.index < feed.data.length - 1 && feed.data[feed.index + 1].tMs <= this.playbackElapsedMs && stepsThisFrame < 100) {
-                    feed.index++;
-                    stepsThisFrame++;
-                    this.processChannelRecord(chIdx, feed.data[feed.index]);
-                }
+            if (this.isPlaying) {
+                this.timerId = requestAnimationFrame(() => this.runStreamLoop());
             }
-
-            const primaryFeed = this.channelFeeds.find(f => f.data.length === this.totalRecords) || this.channelFeeds[0];
-            if (primaryFeed && primaryFeed.data.length > 0) {
-                this.currentIndex = primaryFeed.index;
-            }
-
-            if (now - this.lastUiEmitTime > 35) {
-                this.lastUiEmitTime = now;
-                this.emitChange('tick');
-            }
-
-            this.timerId = requestAnimationFrame(() => this.runStreamLoop());
         }
 
-        processChannelRecord(chIdx, record) {
+        processChannelRecord(chIdx, record, opts = {}) {
             const CALIBRATION_FACTOR = 10000000;
             const nowMs = Date.now();
+            const silent = Boolean(opts && opts.silent);
 
             if (!record || record.value === undefined || record.value === null) return;
 
-            let rawVal = record.value;
-            let rVal = Math.abs(rawVal);
-            if (rVal < 0.1) rVal = 0.1;
-            if (rVal > 10000) {
-                rVal = CALIBRATION_FACTOR / rVal;
+            let rawVal = Number(record.value);
+            if (!isFinite(rawVal)) return;
+
+            const feed = this.channelFeeds[chIdx];
+            const metricMeta = (feed && feed.metricMeta) ? feed.metricMeta : { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+            const isBiodata = metricMeta.isBiodata !== false;
+
+            let rVal;
+            if (isBiodata) {
+                rVal = Math.abs(rawVal);
+                if (rVal < 0.1) rVal = 0.1;
+                if (rVal > 10000) {
+                    rVal = CALIBRATION_FACTOR / rVal;
+                }
+            } else {
+                // Uploaded raw data file: preserve exact signed & large/small datapoint values without 555-timer tick inversion
+                rVal = rawVal;
             }
 
             const synthCh = window.synthChannels ? window.synthChannels[chIdx] : null;
             const p = synthCh ? synthCh.params : window.defaultParams;
-            const sampleWindow = p.sampleSize || 40;
+            const sampleWindow = Math.max(2, Math.min(2000, Math.round(Number(p.sampleSize) || 40)));
 
             const chVisual = window.chData ? window.chData[chIdx] : null;
             if (!chVisual) return;
 
+            chVisual.metricMeta = metricMeta;
             if (!chVisual.waveBuffer) chVisual.waveBuffer = [];
             if (!chVisual.vizBuffer) chVisual.vizBuffer = [];
             if (!chVisual.acc || chVisual.acc.lastSec === undefined) {
-                chVisual.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
+                chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: nowMs };
             }
 
-            const ticks = record.ticks || Math.round(CALIBRATION_FACTOR / rVal);
+            const ticks = isBiodata
+                ? (record.ticks || Math.round(CALIBRATION_FACTOR / rVal))
+                : (Number(record.ticks) || 0);
+
+            if (!silent && window.bioquadFeeds && window.bioquadFeeds.isPublishing) {
+                if (!this.mqttRawBatch) this.mqttRawBatch = [[], [], [], []];
+                if (!this.mqttRawLastFlush) this.mqttRawLastFlush = [0, 0, 0, 0];
+                const mqttTicks = ticks > 0 ? ticks : Math.round(CALIBRATION_FACTOR / Math.max(0.1, Math.abs(rVal)));
+                this.mqttRawBatch[chIdx].push(mqttTicks);
+                if (this.mqttRawBatch[chIdx].length >= 4 || (nowMs - this.mqttRawLastFlush[chIdx]) >= 75) {
+                    const batch = this.mqttRawBatch[chIdx].slice();
+                    this.mqttRawBatch[chIdx].length = 0;
+                    this.mqttRawLastFlush[chIdx] = nowMs;
+                    window.bioquadFeeds.broadcastTelemetryEvent({
+                        type: 'raw',
+                        ch: chIdx,
+                        p: batch,
+                        ts: nowMs
+                    });
+                }
+            }
             
             chVisual.acc.sum += rVal;
             chVisual.acc.count++;
@@ -1992,7 +2240,7 @@
                     });
                 }
                 if (chVisual.history.length > 300) chVisual.history.shift();
-                chVisual.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
+                chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: nowMs };
             }
 
             if (chVisual.vizBuffer.length > 1) {
@@ -2000,9 +2248,9 @@
                 chVisual.slew = chVisual.vizBuffer[vLen - 1] - chVisual.vizBuffer[vLen - 2];
             }
 
-            // Biodata Rolling Mean and Standard Deviation
+            // Rolling Mean and Standard Deviation
             const bufferLen = chVisual.vizBuffer.length;
-            let sum = 0, maxim = 0, minim = 1000000;
+            let sum = 0, maxim = -Infinity, minim = Infinity;
             for (let j = 0; j < bufferLen; j++) {
                 const v = chVisual.vizBuffer[j];
                 sum += v;
@@ -2019,31 +2267,30 @@
             }
 
             const variance = bufferLen > 0 ? (sumSqDev / bufferLen) : 0;
-            let stdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
-            if (stdevi < 0.1) stdevi = 1.0;
+            const rawStdev = variance > 0 ? Math.sqrt(variance) : 0;
+            const stdevi = isBiodata
+                ? (rawStdev >= 0.1 ? rawStdev : 1.0)
+                : (rawStdev > 1e-6 ? rawStdev : 1.0);
 
+            // Keep chVisual.lastMaxDev & lastStdevi intact for the zero-parallax Threshold VU meter
+            chVisual.rawStdev = rawStdev;
             chVisual.lastStdevi = stdevi;
             chVisual.lastMaxDev = maxDev;
             chVisual.lastBlockTime = nowMs;
 
-            const threshold = p.threshold || 2.0;
-            const currentRatio = maxDev / stdevi;
-            const isOverThreshold = currentRatio >= threshold;
+            if (silent) return;
 
-            const feed = this.channelFeeds[chIdx];
-            const hasRecordedNotes = feed ? !!feed.hasRecordedNotes : false;
-
+            const isMidiOnly = Boolean(feed && feed.isMidiOnly);
             const hasNote = record.note !== null && record.note !== undefined && record.note !== '' && !isNaN(parseInt(record.note));
 
-            // 1. Playback exact recorded note event if present
-            if (hasNote) {
-                const n = parseInt(record.note);
-                const v = (record.velocity !== null && record.velocity !== undefined && record.velocity !== '') ? parseInt(record.velocity) : 80;
-                const d = (record.duration !== null && record.duration !== undefined && record.duration !== '') ? parseInt(record.duration) : 260;
-                
-                // processBiodata handles MIDI output, synth play, note roll visualizer, tab LED, and VU spike
+            // 1. Pure MIDI-only recordings (zero raw conductance sensors): replay stored MIDI event
+            if (isMidiOnly && hasNote) {
+                const n = parseInt(record.note, 10);
+                const v = (record.velocity !== null && record.velocity !== undefined && record.velocity !== '') ? parseInt(record.velocity, 10) : 80;
+                const d = (record.duration !== null && record.duration !== undefined && record.duration !== '') ? parseInt(record.duration, 10) : 260;
+
                 if (typeof window.processBiodata === 'function') {
-                    window.processBiodata({ type: 'note', ch: chIdx, n: n, v: v, d: d });
+                    window.processBiodata({ type: 'note', ch: chIdx, n, v, d }, 'stream');
                 } else if (synthCh && typeof synthCh.play === 'function') {
                     synthCh.play(n, v, d);
                 }
@@ -2052,59 +2299,74 @@
                     chVisual.waveBuffer[chVisual.waveBuffer.length - 1].evt = 1;
                     chVisual.waveBuffer[chVisual.waveBuffer.length - 1].n = n;
                 }
-            } 
-            // 2. Fallback software threshold sonification ONLY for external datasets without recorded notes
-            else if (!hasRecordedNotes && isOverThreshold && bufferLen >= Math.min(10, sampleWindow)) {
+                return;
+            }
+
+            // 2. Real-time sonification from rolling window deviation (matches ESP32 biodata_quad.ino):
+            //    Tests CURRENT sample deviation against rolling window (abs(rVal - mean) > threshold * std_dev,
+            //    std_dev > abs(mean) * 0.005) with a 150ms refractory period so spikes never machine-gun re-trigger.
+            const threshold = p.threshold || 2.0;
+            const minStdDev = isBiodata
+                ? Math.max(0.015, mean * 0.005)
+                : Math.max(1e-5, Math.abs(mean) * 0.005);
+            const sampleDev = Math.abs(rVal - mean);
+            const isOverThreshold = (rawStdev > minStdDev) && (sampleDev > (threshold * rawStdev));
+
+            if (isOverThreshold && bufferLen >= Math.min(10, sampleWindow)) {
+                const refractoryMs = Math.max(45, Math.round(150 / Math.max(1, this.playbackRate || 1)));
+                const pastRefractory = !feed || !feed.lastCandidateTime || (nowMs - feed.lastCandidateTime >= refractoryMs);
+                if (!pastRefractory) return;
+
+                if (feed) feed.lastCandidateTime = nowMs;
+
+                const minN = p.minNote ?? 36;
+                const maxN = p.maxNote ?? 84;
+                const span = Math.max(isBiodata ? 0.5 : 1e-5, maxim - minim);
+                let normPitch = Math.max(0, Math.min(1, (rVal - minim) / span));
+
+                if (typeof window.applySpreadCurve === 'function') {
+                    normPitch = window.applySpreadCurve(normPitch, p.spread ?? 75);
+                }
+
+                const rawNote = Math.round(minN + normPitch * (maxN - minN));
+                let scaledNote = rawNote;
+                if (typeof window.scaleNote === 'function') {
+                    scaledNote = window.scaleNote(rawNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN);
+                }
+                scaledNote = Math.max(0, Math.min(127, Math.round(isFinite(scaledNote) ? scaledNote : 60)));
+
+                const velMin = p.velMin ?? 60;
+                const velMax = p.velMax ?? 110;
+                const normalized = (threshold * rawStdev) > 0 ? (sampleDev / (threshold * rawStdev)) : 1.0;
+                const normPct = Math.max(1.0, Math.min(2.0, normalized)) - 1.0;
+                const vel = Math.max(1, Math.min(127, Math.round(velMin + normPct * (velMax - velMin))));
+                const durMult = p.durMult || 1.0;
+                const dur = Math.round((160 + Math.random() * 300) * durMult);
+
                 const density = p.density !== undefined ? p.density : 100;
                 const passesDensity = (Math.random() * 100) <= density;
 
                 if (passesDensity) {
-                    if (!this.channelFeeds[chIdx].lastNoteTime || (nowMs - this.channelFeeds[chIdx].lastNoteTime > 45)) {
-                        this.channelFeeds[chIdx].lastNoteTime = nowMs;
+                    if (feed) feed.lastNoteTime = nowMs;
 
-                        const minN = p.minNote || 36;
-                        const maxN = p.maxNote || 84;
-                        const span = Math.max(1.0, maxim - minim);
-                        let normPitch = Math.max(0, Math.min(1, (rVal - minim) / span));
-
-                        if (typeof window.applySpreadCurve === 'function') {
-                            normPitch = window.applySpreadCurve(normPitch, p.spread || 75);
-                        }
-
-                        const rawNote = Math.round(minN + normPitch * (maxN - minN));
-                        let scaledNote = rawNote;
-                        if (typeof window.scaleNote === 'function') {
-                            scaledNote = window.scaleNote(rawNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN);
-                        }
-
-                        const velMin = p.velMin || 60;
-                        const velMax = p.velMax || 110;
-                        const devOver = Math.min(3.0, (currentRatio - threshold) / threshold);
-                        const vel = Math.round(velMin + devOver * (velMax - velMin));
-                        const durMult = p.durMult || 1.0;
-                        const dur = Math.round((140 + Math.random() * 300) * durMult);
-
-                        if (typeof window.processBiodata === 'function') {
-                            window.processBiodata({
-                                type: 'note',
-                                ch: chIdx,
-                                n: scaledNote,
-                                v: vel,
-                                d: dur
-                            });
-                        } else if (synthCh && typeof synthCh.play === 'function') {
-                            synthCh.play(scaledNote, vel, dur);
-                        }
-
-                        if (chVisual.waveBuffer.length > 0) {
-                            chVisual.waveBuffer[chVisual.waveBuffer.length - 1].evt = 1;
-                            chVisual.waveBuffer[chVisual.waveBuffer.length - 1].n = scaledNote;
-                        }
+                    if (typeof window.processBiodata === 'function') {
+                        window.processBiodata({
+                            type: 'note',
+                            ch: chIdx,
+                            n: scaledNote,
+                            v: vel,
+                            d: dur
+                        }, 'stream');
+                    } else if (synthCh && typeof synthCh.play === 'function') {
+                        synthCh.play(scaledNote, vel, dur);
                     }
-                } else {
-                    if (typeof window.triggerDensityVisualizer === 'function') {
-                        window.triggerDensityVisualizer(chIdx, 'drop');
+
+                    if (chVisual.waveBuffer.length > 0) {
+                        chVisual.waveBuffer[chVisual.waveBuffer.length - 1].evt = 1;
+                        chVisual.waveBuffer[chVisual.waveBuffer.length - 1].n = scaledNote;
                     }
+                } else if (typeof window.triggerDensityVisualizer === 'function') {
+                    window.triggerDensityVisualizer(chIdx, 'drop', scaledNote, vel, dur);
                 }
             }
         }
@@ -2183,8 +2445,12 @@
                 }
 
                 if (preset.globalFX && window.globalFX) {
-                    window.globalFX = JSON.parse(JSON.stringify(preset.globalFX));
+                    const nextFx = JSON.parse(JSON.stringify(preset.globalFX));
+                    if (nextFx.level === undefined) nextFx.level = 0.85;
+                    if (nextFx.muted === undefined) nextFx.muted = false;
+                    window.globalFX = nextFx;
                     if (window.masterFX) window.masterFX.updateParams(window.globalFX);
+                    if (typeof window.syncMixerControlsUI === 'function') window.syncMixerControlsUI();
                 }
 
                 if (!skipSyncUI) {
@@ -2251,6 +2517,7 @@
                             velocity: !isNaN(velRaw) ? velRaw : null,
                             duration: r.duration || null,
                             ticks: r.ticks || null,
+                            isMidiOnly: Boolean(r.isMidiOnly || String(r.sensor_id || '').endsWith('_MIDI')),
                             index: partitioned[ch].length
                         });
                     }
@@ -2276,34 +2543,29 @@
                 this.basePresetSnapshot = window.biodataRecorder.captureCurrentPreset();
             }
 
-            // O(N + M) sorted two-pointer note backfill when midiNotes need attaching to channel feeds
-            if (collectedMidiNotes.length > 0 && firstRecTime !== null) {
-                const cursors = [0, 0, 0, 0];
+            // Only synthesize note timeline entries from collectedMidiNotes if a channel had ZERO raw conductance records
+            // (e.g., pure MIDI-Input recording with no plant sensor). Never backfill onto raw conductance streams!
+            if (collectedMidiNotes.length > 0) {
+                const originMs = firstRecTime !== null ? firstRecTime : (takeMeta?.timestamp || Date.now());
                 collectedMidiNotes.sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
-                for (let i = 0; i < collectedMidiNotes.length; i++) {
-                    const m = collectedMidiNotes[i];
-                    const ch = Math.max(0, Math.min(3, m.channel !== undefined ? m.channel : 0));
-                    const arr = partitioned[ch];
-                    if (!arr || arr.length === 0) continue;
-
-                    const targetAbsMs = firstRecTime + (m.timeMs || 0);
-                    let idx = cursors[ch];
-                    while (idx < arr.length - 1 && (arr[idx + 1].parsedMs || 0) <= targetAbsMs) {
-                        idx++;
-                    }
-                    cursors[ch] = idx;
-
-                    // Pick closer of idx or idx+1 within 500ms tolerance
-                    let bestIdx = idx;
-                    const diffCurr = Math.abs((arr[idx].parsedMs || 0) - targetAbsMs);
-                    if (idx + 1 < arr.length) {
-                        const diffNext = Math.abs((arr[idx + 1].parsedMs || 0) - targetAbsMs);
-                        if (diffNext < diffCurr) bestIdx = idx + 1;
-                    }
-                    if (Math.abs((arr[bestIdx].parsedMs || 0) - targetAbsMs) < 500 && arr[bestIdx].note === null) {
-                        arr[bestIdx].note = m.pitch;
-                        arr[bestIdx].velocity = m.velocity || 80;
-                        arr[bestIdx].duration = m.durationMs || 260;
+                for (let ch = 0; ch < 4; ch++) {
+                    if (partitioned[ch].length > 0) continue;
+                    const chNotes = collectedMidiNotes.filter(m => Math.max(0, Math.min(3, m.channel ?? 0)) === ch);
+                    for (let i = 0; i < chNotes.length; i++) {
+                        const m = chNotes[i];
+                        const absMs = originMs + (m.timeMs || 0);
+                        partitioned[ch].push({
+                            value: 50,
+                            rawTime: new Date(absMs).toISOString(),
+                            parsedMs: absMs,
+                            id: `CH_${ch + 1}_MIDI`,
+                            note: m.pitch,
+                            velocity: m.velocity || 80,
+                            duration: m.durationMs || 260,
+                            ticks: 200000,
+                            isMidiOnly: true,
+                            index: partitioned[ch].length
+                        });
                     }
                 }
             }
@@ -2339,7 +2601,16 @@
             for (let ch = 0; ch < 4; ch++) {
                 const arr = partitioned[ch];
                 if (arr.length === 0) {
-                    this.channelFeeds[ch] = { data: [], index: 0, label: 'Unassigned', sourceFile: '' };
+                    this.channelFeeds[ch] = {
+                        data: [],
+                        index: 0,
+                        label: 'Unassigned',
+                        sourceFile: '',
+                        metricMeta: { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' }
+                    };
+                    if (window.chData && window.chData[ch]) {
+                        window.chData[ch].metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                    }
                     continue;
                 }
 
@@ -2360,16 +2631,23 @@
                 }
 
                 const hasNotes = arr.some(pt => pt.note !== null);
+                const isMidiOnly = arr.length > 0 && arr.every(pt => Boolean(pt.isMidiOnly));
+                const takeMetricMeta = isMidiOnly
+                    ? { isBiodata: false, unit: '', heading: 'MIDI EVENTS' }
+                    : { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
                 this.channelFeeds[ch] = {
                     data: arr,
                     index: 0,
                     label: `CH ${ch + 1} Recorded`,
                     sourceFile: fname,
-                    hasRecordedNotes: hasNotes
+                    hasRecordedNotes: hasNotes,
+                    isMidiOnly,
+                    metricMeta: takeMetricMeta
                 };
 
                 const chVisual = window.chData ? window.chData[ch] : null;
                 if (chVisual) {
+                    chVisual.metricMeta = takeMetricMeta;
                     let dMin = Infinity, dMax = -Infinity;
                     for (let k = 0; k < arr.length; k++) {
                         if (arr[k].value < dMin) dMin = arr[k].value;
@@ -2382,7 +2660,7 @@
                     chVisual.waveBuffer = [];
                     chVisual.vizBuffer = [];
                     chVisual.history = [];
-                    chVisual.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
+                    chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: Date.now() };
                     const preWarm = Math.min(25, arr.length);
                     for (let p = 0; p < preWarm; p++) {
                         const rVal = arr[p].value;
@@ -2436,30 +2714,24 @@
             }
             if (take.preset) this.restorePresetSnapshot(take.preset);
 
-            // Fast linear backfill if needed
-            if (Array.isArray(take.midiNotes) && take.midiNotes.length > 0) {
-                const firstRecTime = take.records[0].timestamp_ms || (take.records[0].timestamp ? new Date(take.records[0].timestamp).getTime() : 0);
+            // Only synthesize records from midiNotes if take.records had zero raw conductance samples
+            if (Array.isArray(take.midiNotes) && take.midiNotes.length > 0 && take.records.length === 0) {
+                const originMs = take.timestamp || Date.now();
                 take.midiNotes.forEach(m => {
-                    const noteAbsTime = firstRecTime + (m.timeMs || 0);
+                    const absMs = originMs + (m.timeMs || 0);
                     const ch = (m.channel !== undefined ? m.channel : 0) + 1;
-                    let closest = null;
-                    let minDiff = Infinity;
-                    for (let i = 0; i < take.records.length; i++) {
-                        const r = take.records[i];
-                        if (r.channel === ch) {
-                            const rTime = r.timestamp_ms || (r.timestamp ? new Date(r.timestamp).getTime() : 0);
-                            const diff = Math.abs(rTime - noteAbsTime);
-                            if (diff < minDiff) {
-                                minDiff = diff;
-                                closest = r;
-                            }
-                        }
-                    }
-                    if (closest && minDiff < 500 && (!closest.note || closest.note === '')) {
-                        closest.note = m.pitch;
-                        closest.velocity = m.velocity || 80;
-                        closest.duration = m.durationMs || 260;
-                    }
+                    take.records.push({
+                        timestamp: new Date(absMs).toISOString(),
+                        timestamp_ms: absMs,
+                        sensor_id: `CH_${ch}_MIDI`,
+                        channel: ch,
+                        conductance_uS: 50,
+                        ticks: 200000,
+                        note: m.pitch,
+                        velocity: m.velocity || 80,
+                        duration: m.durationMs || 260,
+                        isMidiOnly: true
+                    });
                 });
             }
 
@@ -2501,7 +2773,13 @@
         constructor() {
             this.isRecording = false;
             this.isPaused = false;
-            this.sessionName = 'take';
+            this.recordAutomation = false; // Default OFF so student/novice CSVs stay clean unless toggled ON
+            this.hasCapturedAutomationBaseline = false;
+            this.sessionName = (window.BioQuadCore && typeof window.BioQuadCore.makeTimestampSlug === 'function')
+                ? window.BioQuadCore.makeTimestampSlug('bioQuad')
+                : 'bioQuad_session';
+            this.customNameSet = false;
+            this.lastSavedTakeId = null;
             this.activeTakeId = null;
             this.startTimeMs = 0;
             this.pauseTimeAccumulatedMs = 0;
@@ -2521,6 +2799,7 @@
             this.listeners = new Set();
             this.latestChannelValues = [0, 0, 0, 0];
             this.lastPacketTimeByCh = [0, 0, 0, 0];
+            this.hasReceivedRawByCh = [false, false, false, false];
 
             // Crash / app-suspend protection on iOS iPadOS WebViews (Blueify)
             if (typeof window !== 'undefined') {
@@ -2563,7 +2842,10 @@
             return {
                 isRecording: this.isRecording,
                 isPaused: this.isPaused,
+                recordAutomation: this.recordAutomation,
                 sessionName: this.sessionName,
+                customNameSet: this.customNameSet,
+                lastSavedTakeId: this.lastSavedTakeId,
                 activeTakeId: this.activeTakeId,
                 recordCount: totalPts,
                 totalPointsRecorded: totalPts,
@@ -2574,6 +2856,75 @@
                 elapsedFormatted: this.formatElapsed(elapsedMs),
                 hasData: totalPts > 0
             };
+        }
+
+        setRecordAutomation(enabled) {
+            const next = Boolean(enabled);
+            if (this.recordAutomation === next) return this.recordAutomation;
+
+            if (!next) {
+                this.clearPendingParamTimers();
+                this.recordAutomation = false;
+                this.emitChange('record_automation_toggle');
+                return false;
+            }
+
+            this.recordAutomation = true;
+            if (this.isRecording && !this.isPaused) {
+                const nowMs = Date.now();
+                if (!this.hasCapturedAutomationBaseline) {
+                    const baseline = extractFullStateEvents(nowMs);
+                    for (let i = 0; i < baseline.length; i++) {
+                        const ev = baseline[i];
+                        this.lastParamValues[`${ev.channel}:${ev.attr}`] = ev.value;
+                        this.paramEvents.push(ev);
+                        this.totalParamEventsRecorded++;
+                    }
+                    this.hasCapturedAutomationBaseline = true;
+                } else {
+                    this.recordSnapshotDelta(null);
+                }
+            }
+            this.emitChange('record_automation_toggle');
+            return true;
+        }
+
+        toggleRecordAutomation() {
+            return this.setRecordAutomation(!this.recordAutomation);
+        }
+
+        async setSessionName(rawName, renameLastIfIdle = false) {
+            const clean = (window.BioQuadCore && typeof window.BioQuadCore.sanitizeSessionFilename === 'function')
+                ? window.BioQuadCore.sanitizeSessionFilename(rawName, 'bioQuad')
+                : (String(rawName || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'bioQuad_session');
+            this.sessionName = clean;
+            this.customNameSet = true;
+
+            if (this.isRecording && this.activeTakeId && window.bioquadStorage) {
+                try {
+                    const meta = await window.bioquadStorage.getTakeMeta(this.activeTakeId);
+                    if (meta) {
+                        meta.name = clean;
+                        await window.bioquadStorage.saveTakeMeta(meta);
+                    }
+                } catch (e) {}
+            } else if (renameLastIfIdle && this.lastSavedTakeId && window.bioquadStorage) {
+                try {
+                    await window.bioquadStorage.renameTake(this.lastSavedTakeId, clean);
+                } catch (e) {}
+            }
+
+            this.emitChange('session_name_change');
+            return clean;
+        }
+
+        resetSessionNameToTimestamp() {
+            this.sessionName = (window.BioQuadCore && typeof window.BioQuadCore.makeTimestampSlug === 'function')
+                ? window.BioQuadCore.makeTimestampSlug('bioQuad')
+                : `bioQuad_${Date.now()}`;
+            this.customNameSet = false;
+            this.emitChange('session_name_change');
+            return this.sessionName;
         }
 
         formatElapsed(ms) {
@@ -2591,7 +2942,7 @@
                 delete this.pendingParamTimers[key];
             }
             delete this.pendingParamLatest[key];
-            if (!entry || !this.isRecording || this.isPaused) return;
+            if (!entry || !this.isRecording || this.isPaused || !this.recordAutomation) return;
             if (this.lastParamValues[key] === entry.val) return;
             this.lastParamValues[key] = entry.val;
             this.paramEvents.push({
@@ -2619,7 +2970,7 @@
         }
 
         recordParam(channelOneBased, attr, value, immediate = false) {
-            if (!this.isRecording || this.isPaused || !attr) return;
+            if (!this.isRecording || this.isPaused || !this.recordAutomation || !attr) return;
             const ch = (channelOneBased === null || channelOneBased === undefined) ? 0 : parseInt(channelOneBased);
             const normVal = normalizeParamValue(attr, value);
             const key = `${ch}:${attr}`;
@@ -2653,7 +3004,7 @@
         }
 
         recordSnapshotDelta(chIdxOrNull = null) {
-            if (!this.isRecording || this.isPaused) return;
+            if (!this.isRecording || this.isPaused || !this.recordAutomation) return;
             this.flushPendingParams();
             const nowMs = Date.now();
             const all = extractFullStateEvents(nowMs);
@@ -2667,18 +3018,16 @@
         }
 
         start(sessionName = '') {
-            const now = new Date();
-            const y = now.getFullYear();
-            const mo = String(now.getMonth() + 1).padStart(2, '0');
-            const d = String(now.getDate()).padStart(2, '0');
-            const h = String(now.getHours()).padStart(2, '0');
-            const mi = String(now.getMinutes()).padStart(2, '0');
-            const sec = String(now.getSeconds()).padStart(2, '0');
-            const defaultDateName = `bioQuad_${y}${mo}${d}_${h}${mi}${sec}`;
+            const defaultDateName = (window.BioQuadCore && typeof window.BioQuadCore.makeTimestampSlug === 'function')
+                ? window.BioQuadCore.makeTimestampSlug('bioQuad')
+                : `bioQuad_${Date.now()}`;
 
             if (sessionName && sessionName.trim()) {
-                this.sessionName = sessionName.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-            } else {
+                this.sessionName = (window.BioQuadCore && typeof window.BioQuadCore.sanitizeSessionFilename === 'function')
+                    ? window.BioQuadCore.sanitizeSessionFilename(sessionName, 'bioQuad')
+                    : sessionName.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+                this.customNameSet = true;
+            } else if (!this.customNameSet || !this.sessionName) {
                 this.sessionName = defaultDateName;
             }
 
@@ -2691,6 +3040,7 @@
             this.lastParamValues = {};
             this.totalPointsRecorded = 0;
             this.totalParamEventsRecorded = 0;
+            this.hasCapturedAutomationBaseline = false;
             this.nextChunkIndex = 0;
             this.flushQueue = Promise.resolve();
 
@@ -2698,16 +3048,21 @@
             this.isPaused = false;
             this.startTimeMs = Date.now();
             this.pauseTimeAccumulatedMs = 0;
+            this.latestChannelValues = [0, 0, 0, 0];
             this.lastPacketTimeByCh = [0, 0, 0, 0];
+            this.hasReceivedRawByCh = [false, false, false, false];
 
-            // Capture t=0 baseline performance automation snapshot
-            const baseline = extractFullStateEvents(this.startTimeMs);
-            for (let i = 0; i < baseline.length; i++) {
-                const ev = baseline[i];
-                this.lastParamValues[`${ev.channel}:${ev.attr}`] = ev.value;
-                this.paramEvents.push(ev);
+            // Capture t=0 baseline performance automation snapshot ONLY if automation recording is enabled
+            if (this.recordAutomation) {
+                const baseline = extractFullStateEvents(this.startTimeMs);
+                for (let i = 0; i < baseline.length; i++) {
+                    const ev = baseline[i];
+                    this.lastParamValues[`${ev.channel}:${ev.attr}`] = ev.value;
+                    this.paramEvents.push(ev);
+                }
+                this.totalParamEventsRecorded = this.paramEvents.length;
+                this.hasCapturedAutomationBaseline = true;
             }
-            this.totalParamEventsRecorded = this.paramEvents.length;
 
             // Persist initial take metadata immediately so even crash recovery has the header
             const initialMeta = {
@@ -2885,6 +3240,8 @@
                         await window.bioquadStorage.saveChunk(takeId, chunkIdx, recBatch, noteBatch, paramBatch);
                     }
                     await window.bioquadStorage.saveTakeMeta(finalMeta);
+                    this.lastSavedTakeId = takeId;
+                    this.customNameSet = false;
                     window.dispatchEvent(new CustomEvent('bioquad_takes_updated', { detail: finalMeta }));
                 } catch(e) {
                     console.warn('Could not finalize streamed take in IndexedDB:', e);
@@ -2925,6 +3282,7 @@
             const now = Date.now();
             const sensorId = `CH_${chIdx + 1}_Sensor`;
 
+            this.hasReceivedRawByCh[chIdx] = true;
             const count = ticksArray.length;
             const lastTime = this.lastPacketTimeByCh[chIdx] || (now - 50);
             this.lastPacketTimeByCh[chIdx] = now;
@@ -2962,7 +3320,7 @@
             }
         }
 
-        // Companion MIDI note tracker and stream note associator for 1-to-1 sonification parity
+        // Companion MIDI note tracker (for .mid ZIP export & CSV metadata logging; never injects fake conductance into raw streams)
         recordNote(chIdx, note, velocity, duration) {
             if (!this.isRecording || this.isPaused) return;
             const now = Date.now();
@@ -2977,7 +3335,7 @@
                 durationMs: duration || 260
             });
 
-            // Tag note onto the active chunk buffer for this channel
+            // Tag note metadata onto the closest recent raw sample on this channel if within 150ms
             let tagged = false;
             for (let i = this.records.length - 1; i >= 0 && i >= this.records.length - 50; i--) {
                 const rec = this.records[i];
@@ -2990,20 +3348,20 @@
                 }
             }
 
-            if (!tagged) {
-                const sensorId = `CH_${chIdx + 1}_Sensor`;
-                const rVal = this.latestChannelValues[chIdx] || 50;
-                const ticks = Math.round(10000000 / (rVal || 1));
+            // Only create a synthetic MIDI-only row if this channel has NEVER received real raw conductance telemetry
+            if (!tagged && !this.hasReceivedRawByCh[chIdx]) {
+                const sensorId = `CH_${chIdx + 1}_MIDI`;
                 this.records.push({
                     timestamp: new Date(now).toISOString(),
                     timestamp_ms: now,
                     sensor_id: sensorId,
                     channel: chIdx + 1,
-                    conductance_uS: rVal,
-                    ticks: ticks,
+                    conductance_uS: 50,
+                    ticks: 200000,
                     note: note,
                     velocity: velocity || 80,
-                    duration: duration || 260
+                    duration: duration || 260,
+                    isMidiOnly: true
                 });
                 this.totalPointsRecorded = (this.totalPointsRecorded || 0) + 1;
                 if (this.records.length >= this.chunkSize) {
@@ -3014,29 +3372,34 @@
 
         generateCsv(format = 'standard') {
             this.flushPendingParams();
-            const pevs = (this.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0));
+            const pevs = this.recordAutomation
+                ? (this.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0))
+                : [];
             const recs = this.records || [];
             if (recs.length === 0 && pevs.length === 0) return '';
 
+            const includeAutoCols = pevs.length > 0;
             const delimiter = format === 'tsv' ? '\t' : ',';
             const esc = (v) => delimiter === ',' ? csvEscape(v) : String(v ?? '').replace(/\t/g, ' ');
-            const headers = ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity', 'param_attr', 'param_value'];
+            const headers = includeAutoCols
+                ? ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity', 'param_attr', 'param_value']
+                : ['timestamp_iso', 'sensor_id', 'conductance_uS', 'channel', 'raw_ticks', 'note_event', 'velocity'];
             const lines = [headers.join(delimiter)];
 
             const pushRec = (r) => {
                 const noteVal = (r.note !== null && r.note !== undefined && r.note !== '') ? r.note : (r.note_event || '');
                 const velVal = (r.velocity !== null && r.velocity !== undefined && r.velocity !== '') ? r.velocity : '';
-                lines.push([
+                const baseCols = [
                     esc(r.timestamp),
                     esc(r.sensor_id),
                     r.conductance_uS,
                     r.channel,
                     r.ticks,
                     noteVal,
-                    velVal,
-                    '',
-                    ''
-                ].join(delimiter));
+                    velVal
+                ];
+                if (includeAutoCols) baseCols.push('', '');
+                lines.push(baseCols.join(delimiter));
             };
 
             const pushParam = (ev) => {

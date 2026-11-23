@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bioQuad Stream - 4-Channel Biodata Sonification & Data Streamer</title>
-    <meta name="description" content="4-Channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, and universal time-series data file streaming engine." />
-    <meta property="og:title" content="bioQuad Stream - 4-Channel Biodata Sonification & Data Streamer" />
-    <meta property="og:description" content="4-Channel galvanic plant biodata sonification visualizer, polyphonic modular synthesizer, and universal time-series data file streaming engine." />
+    <title>bioQuad Stream</title>
+    <meta name="description" content="Multi-channel plant biodata sonification, real-time visualization, USB Serial and BLE hardware sync, MIDI synthesis, and synchronized MQTT cloud data streaming." />
+    <meta property="og:title" content="bioQuad Stream" />
+    <meta property="og:description" content="Multi-channel plant biodata sonification, real-time visualization, USB Serial and BLE hardware sync, MIDI synthesis, and synchronized MQTT cloud data streaming." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#0d1117">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="bioQuad">
-    <link rel="apple-touch-icon" href="apple-touch-icon.png">
-    <link rel="icon" href="css/bioquad-icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="css/styles.css?v=20">
+    <link rel="icon" href="./css/bioquad-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./css/styles.css?v=33">
+    <link rel="stylesheet" href="./css/flasher.css?v=1">
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
 </head>
@@ -25,386 +25,1062 @@
 
 <div class="toolbar">
     <div class="brand-group">
-        <img src="css/bioquad-icon.svg" style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,0.5);" alt="e4p bioQuad">
-        <span class="bio-brand" style="font-size: 1.25em;">bioQuad</span>
+        <img src="./css/bioquad-icon.svg" style="width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,0.5);" alt="bioQuad Stream">
+        <span class="bio-brand">bioQuad</span>
     </div>
 
-    <div class="control-group right-controls" style="gap: 6px;">
-        <button id="btn-ble" class="toolbar-pill-btn" onclick="connectBLE()"><span id="ble-status" class="status-offline">●</span><span id="ble-label">CONNECT</span></button>
-        
-        <!-- MIDI DROPDOWN WITH RESTORED INPUT -->
-        <div class="dropdown-widget">
-            <button class="toolbar-pill-btn" onclick="window.toggleDropdownWidget(this.parentElement, event);">MIDI</button>
-            <div class="dropdown-content midi-panel" onclick="event.stopPropagation();">
-			    <label>INPUT</label>
-				<select id="midi-in-select" style="width: 100%; box-sizing: border-box; margin-bottom: 6px;">
-					<option value="none" selected>None</option>
-					<option value="all">All Inputs</option>
-				</select>
-                <label>CLOCK</label>
-                <select id="midi-clock-dir" style="width: 100%; box-sizing: border-box; margin-bottom: 6px;" onchange="window.midiClockMode = this.value; syncUI();">
-                    <option value="out">OUT</option>
-                    <option value="in">IN</option>
-                </select>
-                <label>OUTPUT</label>
-                <select id="midi-out-select" style="width: 100%; box-sizing: border-box;">
-                    <option value="none">No Output</option>
-                </select>
-                <hr style="border: 0; border-top: 1px solid var(--border); margin: 6px 0;">
-                <div class="midi-ch-grid">
-                    <span>CH 1</span><select id="ui-midi-ch-0" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(0, this.value)"></select>
-                    <span>CH 2</span><select id="ui-midi-ch-1" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(1, this.value)"></select>
-                    <span>CH 3</span><select id="ui-midi-ch-2" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(2, this.value)"></select>
-                    <span>CH 4</span><select id="ui-midi-ch-3" style="width: 100%; box-sizing: border-box;" onchange="updateMidiChannel(3, this.value)"></select>
-                </div>
-            </div>
-        </div>
+    <div class="control-group right-controls">
+        <!-- HARDWARE CONNECT CARD TOGGLE -->
+        <button id="btn-hw-connect" type="button" class="toolbar-pill-btn" onclick="window.toggleConnectCard()" aria-label="Toggle Hardware Connect Card">
+            <span id="hw-conn-dot" class="status-offline">●</span>
+            <span id="hw-conn-label">CONNECT</span>
+        </button>
 
-        <!-- DATA PORTAL BUTTON (BETWEEN MIDI AND PRESETS) -->
-        <button id="toggle-portal-btn" class="toolbar-pill-btn" onclick="window.toggleDataPortalUI && window.toggleDataPortalUI()" title="Toggle Data Transport Deck">
-            <span id="file-portal-indicator" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #661111; box-shadow: none; transition: all 0.2s;"></span>
-            <span id="file-portal-text">DATA</span>
+        <!-- CLOUD MQTT STREAM CARD TOGGLE -->
+        <button id="btn-open-feeds" type="button" class="toolbar-pill-btn" onclick="window.toggleFeedsModal ? window.toggleFeedsModal() : window.openFeedsModal()" aria-label="Toggle Stream Card">
+            <span id="feeds-toolbar-dot" class="status-offline">●</span>
+            <span id="feeds-toolbar-label">STREAM</span>
+        </button>
+
+        <!-- MIDI ROUTING CARD TOGGLE -->
+        <button id="btn-midi-dropdown" type="button" class="toolbar-pill-btn" onclick="window.toggleMidiCard()" aria-label="Toggle MIDI Card">MIDI</button>
+
+        <!-- UNIFIED FILE & TRANSPORT WORKSPACE TOGGLE -->
+        <button id="toggle-portal-btn" type="button" class="toolbar-pill-btn" onclick="window.toggleDataPortalUI && window.toggleDataPortalUI()" aria-label="Toggle File Manager">
+            <span id="file-portal-indicator" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #661111;"></span>
+            <span id="file-portal-text">FILE</span>
         </button>
 
         <!-- PRESETS DROPDOWN -->
-        <div class="dropdown-widget">
-            <button class="toolbar-pill-btn" onclick="window.toggleDropdownWidget(this.parentElement, event);">PRESETS</button>
-            <div class="dropdown-content preset-panel" style="min-width: 240px; padding: 12px; gap: 6px;" onclick="event.stopPropagation();">
-                <select id="preset-select" onchange="loadPreset(this.value)" style="width: 100%; margin-bottom: 4px;"><option value="">-- Select --</option></select>
+        <div class="dropdown-widget" id="presets-dropdown-widget">
+            <button id="btn-presets-dropdown" type="button" class="toolbar-pill-btn" onclick="window.toggleDropdownWidget(this.parentElement, event);">PRESETS</button>
+            <div class="dropdown-content preset-panel" style="min-width: 245px; padding: 12px; gap: 6px;" onclick="event.stopPropagation();">
+                <select id="preset-select" aria-label="Global Preset" onchange="loadPreset(this.value)" style="width: 100%;"><option value="">-- Select --</option></select>
                 <div style="display: flex; gap: 4px;">
-                    <button onclick="savePreset(false)" style="flex: 1;">SAVE</button>
-                    <button onclick="savePreset(true)" style="flex: 0 0 auto; width: 55px;">NEW</button>
+                    <button type="button" onclick="savePreset(false)" style="flex: 1;">SAVE</button>
+                    <button type="button" onclick="window.toggleGlobalNewPresetRow()" style="flex: 0 0 auto; width: 62px;">+ NEW</button>
+                </div>
+                <div id="global-new-preset-row" class="inline-new-preset-row" style="display: none;">
+                    <input type="text" id="new-preset-name-input" class="dropdown-text-input" placeholder="Preset name..." aria-label="New global preset name" onkeydown="if(event.key==='Enter'){event.preventDefault();savePreset(true);}else if(event.key==='Escape'){window.toggleGlobalNewPresetRow(false);}">
+                    <button type="button" class="inline-preset-confirm-btn" onclick="savePreset(true)">SAVE</button>
+                    <button type="button" class="inline-preset-cancel-btn" onclick="window.toggleGlobalNewPresetRow(false)" aria-label="Cancel new preset">✕</button>
                 </div>
                 <div style="display: flex; gap: 4px;">
-                    <button onclick="exportPresets()" style="flex: 1; font-size: 11px;">↓ EXPORT</button>
-                    <button onclick="document.getElementById('import-file').click()" style="flex: 1; font-size: 11px;">↑ IMPORT</button>
+                    <button type="button" onclick="exportPresets()" style="flex: 1; font-size: 10px;">↓ EXPORT</button>
+                    <button type="button" onclick="document.getElementById('import-file').click()" style="flex: 1; font-size: 10px;">↑ IMPORT</button>
                     <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importPresets(event)">
                 </div>
                 <div style="display: flex; gap: 4px;">
-                    <button class="danger" onclick="deleteCurrentPreset()" style="flex: 1;">DELETE</button>
-                    <button class="danger" onclick="clearAllPresets()" style="flex: 0 0 auto; width: 55px;">ALL</button>
+                    <button type="button" class="danger" onclick="deleteCurrentPreset()" style="flex: 1;">DELETE</button>
+                    <button type="button" class="danger" onclick="clearAllPresets()" style="flex: 0 0 auto; width: 60px;">ALL</button>
                 </div>
             </div>
         </div>
 
-        <!-- TEMPO & MIXER CONTROLS -->
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; background: #0a0d12; padding: 4px 8px; border: 1px solid var(--border); border-radius: 20px;">
-            <div style="display: flex; align-items: center; gap: 5px; padding-right: 8px; border-right: 1px solid var(--border);">
-                <div class="led" id="top-bpm-led" style="margin:0; width:8px; height:8px; background:#222; box-shadow:none;"></div>
-                <button onclick="tapTempo()" style="padding: 2px 5px; font-size: 10px;">TAP</button>
-                <div id="ui-bpm-display" title="Drag Up/Down to Adjust" style="font-family: 'VT323', monospace; font-size: 22px; color: var(--red); min-width: 36px; text-align: center; letter-spacing: 2px; line-height: 1; cursor: ns-resize;">120</div>
+        <!-- SYNTH INSPECTOR TOGGLE -->
+        <button id="toggle-synth-btn" type="button" class="toolbar-pill-btn" onclick="toggleSynthUI()" aria-label="Toggle Synthesizer">SYNTH</button>
+
+        <!-- TEMPO (TAP FLASHES GREEN ON BEAT 1) & MIXER -->
+        <div class="tempo-mixer-cluster">
+            <div class="bpm-clock-group">
+                <button type="button" id="btn-tap-tempo" class="tap-tempo-btn" onclick="tapTempo()">TAP</button>
+                <div id="ui-bpm-display" class="tabular-nums" style="font-size: 19px; min-width: 34px; text-align: center; line-height: 1; cursor: ns-resize;">120</div>
             </div>
-            
-            <button id="toggle-synth-btn" onclick="toggleSynthUI()" style="cursor: pointer; font-weight: bold; opacity: 0.5; padding: 3px 8px; font-size: 10px;">SYNTH</button>
-            
-            <div class="dropdown-widget" style="display: flex; align-items: center; gap: 6px;">
-                <div class="master-vu-container" style="display: flex; align-items: center; justify-content: center; padding: 3px 5px; cursor: pointer; background: var(--knob-bg); border: 1px solid var(--border); border-radius: 12px; transition: border-color 0.2s;" onclick="window.toggleDropdownWidget(this.parentElement, event);" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'" title="Open Mixer">
-                    <canvas id="master-vu-hz" width="70" height="14" style="background:#000; border-radius:2px; margin: 0 !important; display: block;"></canvas>
-                </div>
-                <button id="btn-master-mute" class="danger" onclick="toggleMasterMute(); event.stopPropagation();" style="padding: 2px 6px; font-size: 10px; border-radius:3px;">MUTE</button>
+
+            <div class="dropdown-widget" id="mixer-dropdown-widget" style="display: flex; align-items: center; gap: 5px;">
+                <button type="button" class="master-vu-container toolbar-vu-pill" aria-label="Open Channel Mixer" onclick="window.toggleDropdownWidget(this.parentElement, event);">
+                    <canvas id="master-vu-hz" width="62" height="14" style="background:#000; border-radius:4px; display: block;"></canvas>
+                </button>
+                <button id="btn-master-mute" type="button" class="danger" onclick="toggleMasterMute(); event.stopPropagation();" style="padding: 2px 8px; font-size: 10px; border-radius: 999px;">MUTE</button>
                 <div class="dropdown-content mixer-dropdown" id="mixer-dropdown-content" onclick="event.stopPropagation();"></div>
             </div>
         </div>
 
-        <button id="btn-pwa-install" onclick="triggerPWAInstall()" style="display: none; border-color: var(--cyan); color: var(--cyan); padding: 4px 8px; font-size: 10px; white-space: nowrap; font-weight: bold; cursor: pointer;">INSTALL</button>
-        <button id="btn-download-firmware" onclick="downloadFirmwareZip()" style="border-color: var(--green); color: var(--green); padding: 4px 8px; font-size: 10px; white-space: nowrap;">FIRMWARE</button>
+        <button id="btn-pwa-install" type="button" class="toolbar-utility-pill" onclick="triggerPWAInstall()" style="display: none; border-color: var(--cyan); color: var(--cyan);">INSTALL</button>
     </div>
 </div>
 
-<!-- DATA STREAM & RECORDER CONTROL DECK (PURE VANILLA HTML/JS) -->
-<div id="stream-transport-deck" class="stream-deck-container">
-    <div class="stream-deck-bar">
-        <!-- 1. Record Block -->
-        <div style="display: flex; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--border);">
-            <button id="btn-rec-stream" class="stream-btn rec-btn" title="Toggle biodata recording">● REC</button>
-            <div id="stream-pts-counter" style="font-size: 11px; font-weight: bold; padding: 2px 8px; background: rgba(0,0,0,0.6); border-radius: 4px; min-width: 60px; text-align: center; color: #6e7681;">0 pts</div>
+<!-- NON-BLOCKING HARDWARE / PRESET NOTICE BANNER -->
+<div id="hw-toast-banner" class="hw-toast-banner" role="status" aria-live="polite">
+    <span id="hw-toast-text">Ready</span>
+    <a id="hw-toast-action-link" href="./" target="_blank" rel="noopener noreferrer" class="stream-btn" style="display: none; min-height: 22px; padding: 2px 8px; font-size: 10px; color: var(--cyan); border-color: var(--cyan); text-decoration: none; font-weight: 700; white-space: nowrap;">OPEN TAB ↗</a>
+    <button type="button" class="stream-btn" onclick="document.getElementById('hw-toast-banner').style.display='none'" style="min-height: 22px; padding: 1px 6px; font-size: 10px;">✕</button>
+</div>
+
+<!-- INLINE HARDWARE CONNECT WORKSPACE CARD -->
+<div id="connect-portal-card" class="workspace-panel-card ui-hidden" style="display: none;">
+    <div class="workspace-card-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">CONNECT</span>
+            <span style="font-size: 9.5px; color: var(--cyan); font-weight: 700;">ESP32</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <button id="btn-open-firmware-portal" type="button" class="stream-btn" onclick="window.toggleFirmwarePortal && window.toggleFirmwarePortal()" style="min-height: 24px; padding: 2px 10px; font-size: 10px; border-color: rgba(57, 255, 20, 0.45); color: var(--green); font-weight: 700;">FLASH ESP32</button>
+            <a id="hw-hub-standalone-link" href="./" target="_blank" rel="noopener noreferrer" class="stream-btn" style="display: none; min-height: 24px; padding: 2px 10px; font-size: 10px; border-color: var(--cyan); color: var(--cyan); text-decoration: none; font-weight: 700;">
+                OPEN TAB ↗
+            </a>
+        </div>
+    </div>
+    <div class="workspace-card-body">
+        <div class="connect-cards-grid">
+            <!-- USB-C Serial Card -->
+            <div class="hw-hub-card">
+                <div class="hw-hub-card-header">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span id="usb-hub-dot" class="status-offline">●</span>
+                        <span>USB-C Serial</span>
+                    </div>
+                    <select id="usb-baud-select" aria-label="USB Baud Rate" class="pill-select" style="width: auto; height: 22px; padding: 1px 8px; font-size: 10px;">
+                        <option value="115200" selected>115200</option>
+                        <option value="230400">230400</option>
+                        <option value="921600">921600</option>
+                    </select>
+                </div>
+                <div id="usb-hub-status" style="font-size: 10px; color: var(--text-muted);">Ready</div>
+                <button id="btn-usb-connect" type="button" class="stream-btn" onclick="window.connectUSB()" style="width: 100%; justify-content: center;">CONNECT USB</button>
+            </div>
+
+            <!-- BLE GATT Wireless Card -->
+            <div class="hw-hub-card">
+                <div class="hw-hub-card-header">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span id="ble-hub-dot" class="status-offline">●</span>
+                        <span>Bluetooth LE</span>
+                    </div>
+                    <span style="font-size: 9.5px; color: #6e7681;">GATT</span>
+                </div>
+                <div id="ble-hub-status" style="font-size: 10px; color: var(--text-muted);">Ready</div>
+                <button id="btn-ble-connect" type="button" class="stream-btn" onclick="window.connectBLE()" style="width: 100%; justify-content: center;">CONNECT BLE</button>
+            </div>
         </div>
 
-        <!-- 2. Transport Buttons -->
+        <!-- I2C Environmental Sensor Rate Bar (SHT4x / Wind / Light on SDA=8, SCL=9) -->
+        <div id="hw-sensor-config-bar" class="hw-sensor-config-bar">
+            <div style="display: flex; align-items: center; gap: 7px; flex-wrap: wrap;">
+                <span style="font-size: 10.5px; font-weight: 700; color: #c9d1d9; letter-spacing: 0.4px;">I2C SENSOR</span>
+                <span id="hw-env-live-summary" class="tabular-nums" style="font-size: 10px; color: var(--text-muted); font-weight: 600;">SDA 8 · SCL 9</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <label for="hw-env-rate-select" style="font-size: 9.5px; color: #8b949e; font-weight: 700; letter-spacing: 0.4px;">RATE</label>
+                <select id="hw-env-rate-select" aria-label="I2C Sensor Update Rate" class="pill-select hw-env-rate-select" onchange="window.setHardwareEnvRate && window.setHardwareEnvRate(this.value)">
+                    <option value="-1">ON CHANGE (±0.5°F)</option>
+                    <option value="250">250ms (FAST)</option>
+                    <option value="500">500ms</option>
+                    <option value="1000">1s</option>
+                    <option value="5000">5s</option>
+                    <option value="15000" selected>15s</option>
+                    <option value="30000">30s</option>
+                    <option value="60000">60s</option>
+                    <option value="0">OFF</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- ESP32 WiFi & Cloud MQTT Provisioning Card (via BLE GATT or USB Serial) -->
+        <div id="hw-net-config-card" class="portal-card hw-net-card">
+            <div class="portal-card-title">
+                <div style="display: flex; align-items: center; gap: 7px; flex-wrap: wrap;">
+                    <span id="hw-net-dot" class="status-offline">●</span>
+                    <span>WIFI &amp; CLOUD MQTT</span>
+                    <span style="color: #484f58;">·</span>
+                    <span id="hw-net-status-badge" class="tabular-nums" style="font-size: 10px; color: var(--text-muted); text-transform: none; font-weight: 600;">Connect BLE or USB</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+                    <button type="button" class="stream-btn hw-broker-preset-btn" data-hw-preset="mosquitto" onclick="window.applyHwBrokerPreset('mosquitto')" style="min-height: 22px; padding: 2px 8px; font-size: 9.5px;">Mosquitto</button>
+                    <button type="button" class="stream-btn hw-broker-preset-btn" data-hw-preset="emqx" onclick="window.applyHwBrokerPreset('emqx')" style="min-height: 22px; padding: 2px 8px; font-size: 9.5px;">EMQX</button>
+                    <button type="button" class="stream-btn hw-broker-preset-btn" data-hw-preset="hivemq" onclick="window.applyHwBrokerPreset('hivemq')" style="min-height: 22px; padding: 2px 8px; font-size: 9.5px;">HiveMQ</button>
+                    <button type="button" id="btn-hw-cloud-enable" class="stream-btn hw-pill-toggle is-on" onclick="window.toggleHwCloudEnable()" aria-pressed="true" style="min-height: 22px; padding: 2px 9px; font-size: 9.5px;">AUTO ON</button>
+                </div>
+            </div>
+
+            <div class="hw-net-grid-two">
+                <input type="text" id="hw-wifi-ssid" class="pill-text-field" placeholder="WiFi SSID (2.4GHz)" aria-label="ESP32 WiFi SSID" autocomplete="off">
+                <input type="password" id="hw-wifi-pass" class="pill-text-field" placeholder="WiFi Password" aria-label="ESP32 WiFi Password" autocomplete="new-password">
+            </div>
+
+            <div class="hw-net-broker-row">
+                <input type="text" id="hw-mqtt-host" class="pill-text-field" value="test.mosquitto.org" placeholder="test.mosquitto.org or custom broker host" aria-label="ESP32 MQTT Broker Host" oninput="window.syncHwBrokerPresetHighlight && window.syncHwBrokerPresetHighlight()" style="flex: 1 1 190px; min-width: 150px; color: var(--cyan);">
+                <input type="number" id="hw-mqtt-port" class="pill-text-field hw-port-input" value="1883" min="1" max="65535" placeholder="1883" aria-label="ESP32 MQTT TCP Port">
+                <button type="button" id="btn-hw-mqtt-tls" class="stream-btn hw-pill-toggle" onclick="window.toggleHwMqttTls()" aria-pressed="false" style="min-height: 28px; padding: 3px 10px; font-size: 10px;">TLS</button>
+                <button type="button" id="btn-hw-mqtt-auth-toggle" class="stream-btn hw-pill-toggle" onclick="window.toggleHwMqttAuthRow()" aria-expanded="false" style="min-height: 28px; padding: 3px 10px; font-size: 10px;">AUTH</button>
+            </div>
+
+            <div id="hw-mqtt-auth-row" class="hw-net-grid-two" style="display: none;">
+                <input type="text" id="hw-mqtt-user" class="pill-text-field" placeholder="MQTT Username (custom broker)" aria-label="ESP32 MQTT Username" autocomplete="off">
+                <input type="password" id="hw-mqtt-pass" class="pill-text-field" placeholder="MQTT Password (custom broker)" aria-label="ESP32 MQTT Password" autocomplete="new-password">
+            </div>
+
+            <div class="hw-net-identity-row">
+                <input type="text" id="hw-mqtt-name" class="pill-text-field" value="ESP32 BioQuad" placeholder="Stream Name (e.g. Atrium Pod 1)" aria-label="ESP32 Stream Display Name" style="flex: 1 1 150px; min-width: 130px; color: #fff;">
+                <input type="text" id="hw-mqtt-id" class="pill-text-field" value="esp32-bioquad-01" placeholder="stream-id" aria-label="ESP32 Stream ID" style="flex: 0.85 1 130px; min-width: 115px; color: var(--text-muted);">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" id="btn-hw-net-read" class="stream-btn" onclick="window.requestHardwareNetStatus()" style="padding: 4px 11px;">READ</button>
+                    <button type="button" id="btn-hw-net-save" class="stream-btn play-btn" onclick="window.saveHardwareNetConfig()" style="width: auto; padding: 4px 13px;">SAVE TO ESP32</button>
+                    <button type="button" id="btn-hw-open-stream" class="stream-btn" onclick="window.openHwFeedInStream()" style="padding: 4px 11px; color: var(--cyan); border-color: rgba(0,240,255,0.4);">OPEN STREAM</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- INLINE ESP32 WEB SERIAL FIRMWARE UPLOADER PORTAL -->
+<div id="firmware-portal-card" class="workspace-panel-card ui-hidden" style="display: none;">
+    <div class="workspace-card-header">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">ESP32 FIRMWARE UPLOADER</span>
+            <span style="font-size: 9.5px; color: var(--green); font-weight: 700;">WEB SERIAL</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <button id="btn-download-firmware" type="button" class="stream-btn" onclick="downloadFirmwareZip()" style="min-height: 24px; padding: 2px 10px; font-size: 10px; border-color: rgba(0, 240, 255, 0.4); color: var(--cyan); font-weight: 700;">↓ .INO ZIP</button>
+            <button type="button" class="stream-btn" onclick="window.closeFirmwarePortal && window.closeFirmwarePortal()" style="min-height: 24px; padding: 2px 10px; font-size: 10px; color: var(--text-muted);">HIDE</button>
+        </div>
+    </div>
+    <div class="workspace-card-body">
+        <div id="esp-flasher-root" data-manifest-url="./firmware/manifest.json"></div>
+    </div>
+</div>
+
+<!-- INLINE MIDI ROUTING WORKSPACE CARD -->
+<div id="midi-portal-card" class="workspace-panel-card ui-hidden" style="display: none;">
+    <div class="workspace-card-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">MIDI</span>
+        </div>
+    </div>
+    <div class="workspace-card-body">
+        <div class="midi-workspace-grid">
+            <div class="portal-card" style="gap: 8px;">
+                <div class="portal-card-title"><span>PORTS &amp; CLOCK</span></div>
+                <div class="midi-ports-row">
+                    <div class="midi-inline-pill">
+                        <span class="midi-inline-lbl">IN</span>
+                        <select id="midi-in-select" aria-label="MIDI Input" class="pill-select midi-port-select">
+                            <option value="none" selected>None</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                    <div class="midi-inline-pill">
+                        <span class="midi-inline-lbl">OUT</span>
+                        <select id="midi-out-select" aria-label="MIDI Output" class="pill-select midi-port-select">
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div class="midi-inline-pill midi-clock-pill">
+                        <span class="midi-inline-lbl">CLK</span>
+                        <select id="midi-clock-dir" aria-label="MIDI Clock Mode" class="pill-select midi-clock-select" onchange="window.setMidiClockMode ? window.setMidiClockMode(this.value) : (window.midiClockMode = this.value, syncUI());">
+                            <option value="off">OFF</option>
+                            <option value="out" selected>OUT</option>
+                            <option value="in">IN</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="portal-card" style="gap: 8px;">
+                <div class="portal-card-title"><span>CHANNEL ROUTING</span></div>
+                <div class="midi-channels-row">
+                    <div class="midi-ch-pill" data-ch="0">
+                        <span style="color: #ff3333; font-weight: 700; font-size: 10.5px; flex-shrink: 0;">CH 1</span>
+                        <select id="ui-midi-ch-0" aria-label="CH 1 MIDI Out Channel" class="pill-select midi-ch-num-select" onchange="updateMidiChannel(0, this.value)"></select>
+                    </div>
+                    <div class="midi-ch-pill" data-ch="1">
+                        <span style="color: #39ff14; font-weight: 700; font-size: 10.5px; flex-shrink: 0;">CH 2</span>
+                        <select id="ui-midi-ch-1" aria-label="CH 2 MIDI Out Channel" class="pill-select midi-ch-num-select" onchange="updateMidiChannel(1, this.value)"></select>
+                    </div>
+                    <div class="midi-ch-pill" data-ch="2">
+                        <span style="color: #33ccff; font-weight: 700; font-size: 10.5px; flex-shrink: 0;">CH 3</span>
+                        <select id="ui-midi-ch-2" aria-label="CH 3 MIDI Out Channel" class="pill-select midi-ch-num-select" onchange="updateMidiChannel(2, this.value)"></select>
+                    </div>
+                    <div class="midi-ch-pill" data-ch="3">
+                        <span style="color: #b84dff; font-weight: 700; font-size: 10.5px; flex-shrink: 0;">CH 4</span>
+                        <select id="ui-midi-ch-3" aria-label="CH 4 MIDI Out Channel" class="pill-select midi-ch-num-select" onchange="updateMidiChannel(3, this.value)"></select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- INLINE STREAM WORKSPACE CARD -->
+<div id="feeds-portal-modal" class="workspace-panel-card ui-hidden" style="display: none;">
+    <div class="workspace-card-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">STREAM</span>
+            <span style="color: #484f58;">·</span>
+            <span id="mqtt-broker-status-badge" class="tabular-nums" style="font-size: 10px; color: var(--text-muted);">Standby</span>
+        </div>
+    </div>
+
+    <div class="workspace-card-body">
+        <div class="feeds-top-split-grid">
+            <!-- Section 1: Broker -->
+            <div class="portal-card">
+                <div class="portal-card-title">
+                    <span>BROKER</span>
+                    <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                        <button type="button" class="stream-btn mqtt-preset-btn" data-preset-url="wss://broker.emqx.io:8084/mqtt" onclick="window.selectMqttPreset('wss://broker.emqx.io:8084/mqtt')" style="min-height: 22px; padding: 2px 8px; font-size: 9.5px;">EMQX</button>
+                        <button type="button" class="stream-btn mqtt-preset-btn" data-preset-url="wss://broker.hivemq.com:8884/mqtt" onclick="window.selectMqttPreset('wss://broker.hivemq.com:8884/mqtt')" style="min-height: 22px; padding: 2px 8px; font-size: 9.5px;">HiveMQ</button>
+                        <button type="button" class="stream-btn mqtt-preset-btn" data-preset-url="wss://test.mosquitto.org:8081/mqtt" onclick="window.selectMqttPreset('wss://test.mosquitto.org:8081/mqtt')" style="min-height: 22px; padding: 2px 8px; font-size: 9.5px;">Mosquitto</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                    <input type="text" id="mqtt-broker-url-input" aria-label="MQTT Broker URL" value="wss://broker.emqx.io:8084/mqtt" placeholder="wss://broker.emqx.io:8084/mqtt"
+                        class="pill-text-field" style="flex: 1; min-width: 170px; color: var(--cyan);">
+                    <button id="btn-mqtt-connect" type="button" class="stream-btn play-btn" onclick="window.handleMqttConnectClick()" style="width: auto; padding: 4px 14px;">Connect</button>
+                    <button id="btn-mqtt-ping" type="button" class="stream-btn" onclick="window.handleMqttPingClick()" title="Send a live round-trip test packet through the MQTT broker" style="width: auto; padding: 4px 12px; color: var(--cyan); border-color: rgba(0,240,255,0.4);">Ping</button>
+                    <button id="btn-mqtt-auth-toggle" type="button" class="stream-btn hw-pill-toggle" onclick="window.toggleMqttAuthRow()" aria-expanded="false" style="width: auto; padding: 4px 10px; font-size: 10px;">Auth</button>
+                </div>
+
+                <div id="mqtt-auth-row" class="hw-net-grid-two" style="display: none;">
+                    <input type="text" id="mqtt-broker-user-input" aria-label="MQTT Broker Username" placeholder="Broker Username (optional)" class="pill-text-field" autocomplete="off">
+                    <input type="password" id="mqtt-broker-pass-input" aria-label="MQTT Broker Password" placeholder="Broker Password (optional)" class="pill-text-field" autocomplete="new-password">
+                </div>
+
+                <div id="mqtt-telemetry-strip" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; background: #121720; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 10px; color: #8b949e;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                        <span>TX <strong id="mqtt-tx-val" class="tabular-nums" style="color: var(--cyan);">0</strong></span>
+                        <span>RX <strong id="mqtt-rx-val" class="tabular-nums" style="color: var(--green);">0</strong></span>
+                        <span>RTT <strong id="mqtt-rtt-val" class="tabular-nums" style="color: #fff;">--</strong></span>
+                    </div>
+                    <code id="mqtt-topic-val" style="color: #8b949e; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px;">Idle</code>
+                </div>
+            </div>
+
+            <!-- Section 2: Outgoing Broadcast Status per Channel -->
+            <div class="portal-card">
+                <div class="portal-card-title">
+                    <span>BROADCAST</span>
+                    <span id="mqtt-pub-status-badge" class="tabular-nums" style="font-size: 10px; color: #8b949e; text-transform: none;">Off</span>
+                </div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                    <input type="text" id="mqtt-pub-name-input" aria-label="Broadcast Feed Name" placeholder="Feed name"
+                        class="pill-text-field" style="flex: 1; min-width: 120px; color: #fff;">
+                    <input type="text" id="mqtt-pub-id-input" aria-label="Broadcast Feed Topic" placeholder="feed-id"
+                        class="pill-text-field" style="flex: 0.75; min-width: 100px; color: var(--text-muted);">
+                    <button id="btn-mqtt-publish-toggle" type="button" class="stream-btn rec-btn" onclick="window.handleMqttBroadcastToggle()" style="padding: 4px 12px;">
+                        Broadcast
+                    </button>
+                </div>
+
+                <div id="mqtt-tx-channels-grid" class="tx-channels-pill-grid">
+                    <div class="tx-ch-pill" data-ch="0">
+                        <div class="tx-ch-pill-left">
+                            <span id="mqtt-tx-dot-0" class="tx-ch-dot">○</span>
+                            <span style="color: #ff3333; font-weight: 700;">CH 1</span>
+                        </div>
+                        <span id="mqtt-tx-stat-0" class="tabular-nums tx-ch-stat">Off</span>
+                    </div>
+                    <div class="tx-ch-pill" data-ch="1">
+                        <div class="tx-ch-pill-left">
+                            <span id="mqtt-tx-dot-1" class="tx-ch-dot">○</span>
+                            <span style="color: #39ff14; font-weight: 700;">CH 2</span>
+                        </div>
+                        <span id="mqtt-tx-stat-1" class="tabular-nums tx-ch-stat">Off</span>
+                    </div>
+                    <div class="tx-ch-pill" data-ch="2">
+                        <div class="tx-ch-pill-left">
+                            <span id="mqtt-tx-dot-2" class="tx-ch-dot">○</span>
+                            <span style="color: #33ccff; font-weight: 700;">CH 3</span>
+                        </div>
+                        <span id="mqtt-tx-stat-2" class="tabular-nums tx-ch-stat">Off</span>
+                    </div>
+                    <div class="tx-ch-pill" data-ch="3">
+                        <div class="tx-ch-pill-left">
+                            <span id="mqtt-tx-dot-3" class="tx-ch-dot">○</span>
+                            <span style="color: #b84dff; font-weight: 700;">CH 4</span>
+                        </div>
+                        <span id="mqtt-tx-stat-3" class="tabular-nums tx-ch-stat">Off</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: Scalable Live Streams Directory + Per-Channel Patch AUTO/CUSTOM Strip -->
+        <div class="portal-card" style="border-color: rgba(0, 240, 255, 0.3);">
+            <div class="portal-card-title">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span>STREAMS</span>
+                    <span id="mqtt-live-feeds-summary" style="font-size: 10px; color: #8b949e; font-weight: normal; text-transform: none;">0 active</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <button id="btn-mqtt-clear-stale" type="button" class="stream-btn" onclick="window.handlePurgeStaleFeeds()" style="display: none; min-height: 22px; padding: 1px 8px; font-size: 9.5px; color: #8b949e;">Clear Idle</button>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #8b949e; cursor: pointer; font-weight: normal; text-transform: none;">
+                        <input type="checkbox" id="feeds-show-idle-chk" onchange="window.toggleShowIdleStreams(this.checked)" style="accent-color: var(--cyan);">
+                        <span>Idle</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #8b949e; cursor: pointer; font-weight: normal; text-transform: none;">
+                        <input type="checkbox" id="feeds-show-sim-chk" onchange="window.toggleShowSimFeeds(this.checked)" style="accent-color: var(--cyan);">
+                        <span>Sim</span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <input type="search" id="feeds-stream-search" aria-label="Filter live streams" placeholder="Filter streams by name, id, species, or patch..."
+                    oninput="window.handleFeedsSearchInput(this.value)"
+                    class="pill-text-field" style="flex: 1; min-width: 180px; color: #fff;">
+                <span id="feeds-visible-count" class="tabular-nums" style="font-size: 10px; color: #8b949e; white-space: nowrap;">0 shown</span>
+            </div>
+
+            <!-- Routed Channels Automation Strip (AUTO / CUSTOM per channel) -->
+            <div id="feeds-routed-strip" style="display: none; flex-direction: column; gap: 6px; background: #0d131a; border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 10px; padding: 8px 10px;"></div>
+
+            <!-- Scrollable Live Stream Rows -->
+            <div id="feeds-active-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 2px;"></div>
+        </div>
+
+        <!-- Section 4: Compact Playout Sync Bar -->
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; background: #0d1117; padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px;">
+                <label for="sync-buffer-slider" style="font-size: 10px; font-weight: 700; color: #c9d1d9;">SYNC BUFFER</label>
+                <input type="range" id="sync-buffer-slider" class="pro-slider" min="40" max="600" step="10" value="180" oninput="window.handleSyncBufferInput(this.value)" style="flex: 1; min-width: 100px; background: #21262d;">
+                <span id="sync-buffer-val" class="tabular-nums" style="font-size: 11px; font-weight: 700; color: var(--cyan); min-width: 48px;">180 ms</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; color: #8b949e;">
+                <span id="sync-pkt-val" class="tabular-nums" style="color: var(--green);">0 synced</span>
+                <span>·</span>
+                <span>Offset <strong id="sync-offset-val" class="tabular-nums" style="color: #fff;">+0 ms</strong></span>
+                <span>·</span>
+                <span>Jitter <strong id="sync-jitter-val" class="tabular-nums" style="color: var(--green);">±0 ms</strong></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DATA STREAM, SESSION FILENAME & RECORDER CONTROL DECK -->
+<div id="stream-transport-deck" class="stream-deck-container ui-hidden" style="display: none;">
+    <div class="stream-deck-bar">
+        <!-- 1. Record + Automation Toggle + Editable Session Filename -->
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <button id="btn-rec-stream" type="button" class="stream-btn rec-btn" title="Start or stop biodata session recording">● REC</button>
+            <button id="btn-rec-auto" type="button" class="stream-btn auto-btn" aria-pressed="false" title="Record synth parameter automation into session CSV (Off by default for clean data files)">REC AUTO</button>
+            <div id="stream-pts-counter" class="tabular-nums" style="font-size: 11px; font-weight: bold; padding: 3px 9px; background: rgba(0,0,0,0.6); border: 1px solid #21262d; border-radius: 999px; min-width: 56px; text-align: center; color: #6e7681;">0 pts</div>
+
+            <div class="session-filename-group" title="Session filename">
+                <label for="stream-session-name" style="font-size: 9px; color: #8b949e; font-weight: 700;">SESSION</label>
+                <input type="text" id="stream-session-name" class="session-filename-input" value="bioQuad_session" placeholder="session_filename" aria-label="Session Filename">
+                <span id="session-name-saved-tag" style="display: none; font-size: 9px; color: var(--green); font-weight: 700;">SAVED</span>
+                <button id="btn-session-name-apply" type="button" class="stream-btn" onclick="window.applySessionFilename()" title="Update session filename" aria-label="Save Session Filename" style="min-height: 22px; padding: 1px 8px; font-size: 9.5px; color: var(--cyan);">SET</button>
+                <button id="btn-session-name-reset" type="button" class="stream-btn" onclick="window.resetSessionFilename()" title="Reset to fresh timestamp filename" aria-label="Reset Session Filename to Timestamp" style="min-height: 22px; padding: 1px 7px; font-size: 10px;">↻</button>
+            </div>
+        </div>
+
+        <!-- 2. Transport Playback Controls -->
         <div style="display: flex; align-items: center; gap: 6px;">
-            <button id="btn-play-stream" class="stream-btn play-btn" title="Play / Pause" disabled>▶ PLAY</button>
-            <button id="btn-loop-stream" class="stream-btn loop-btn" title="Toggle Loop Playback">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <polyline points="17 1 21 5 17 9"></polyline>
-                    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-                    <polyline points="7 23 3 19 7 15"></polyline>
-                    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-                </svg>
+            <button id="btn-play-stream" type="button" class="stream-btn play-btn" title="Play / Pause stream" disabled>▶ PLAY</button>
+            <button id="btn-loop-stream" type="button" class="stream-btn loop-btn" title="Toggle Loop Playback">
                 <span>LOOP</span>
             </button>
-            <button id="btn-auto-stream" class="stream-btn auto-btn" title="No recorded control automation in current stream" aria-pressed="false" disabled>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="4" y1="21" x2="4" y2="14"></line>
-                    <line x1="4" y1="10" x2="4" y2="3"></line>
-                    <line x1="12" y1="21" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12" y2="3"></line>
-                    <line x1="20" y1="21" x2="20" y2="16"></line>
-                    <line x1="20" y1="12" x2="20" y2="3"></line>
-                    <line x1="1" y1="14" x2="7" y2="14"></line>
-                    <line x1="9" y1="8" x2="15" y2="8"></line>
-                    <line x1="17" y1="16" x2="23" y2="16"></line>
-                </svg>
+            <button id="btn-auto-stream" type="button" class="stream-btn auto-btn" title="Follow recorded parameter automation" aria-pressed="false" disabled>
                 <span>AUTO</span>
             </button>
         </div>
 
         <!-- 3. Scrubber Slider -->
         <div class="stream-scrubber-wrap">
-            <input type="range" id="stream-scrubber" class="stream-scrubber-slider" min="0" max="1" value="0" disabled>
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; white-space: nowrap;">
+            <input type="range" id="stream-scrubber" aria-label="Stream Playback Scrubber" class="stream-scrubber-slider" min="0" max="1" value="0" disabled>
+            <div class="tabular-nums" style="display: flex; align-items: center; gap: 6px; font-size: 10px; white-space: nowrap;">
                 <span id="stream-time-display" style="color: #8b949e;">00:00 / 00:00</span>
                 <span id="stream-index-display" style="color: var(--cyan); font-weight: 700;">#0</span>
             </div>
         </div>
 
-        <!-- 4. Cadence Setting (for un-timed data) -->
-        <div id="stream-cadence-box" style="display: none; align-items: center; gap: 4px; background: rgba(0,0,0,0.5); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px;">
-            <span style="font-size: 10px; color: #8b949e; font-weight: 700;">Rate</span>
-            <input type="number" id="stream-cadence-val" min="1" max="500" value="30" style="width: 44px; background: #0d1117; color: var(--green); border: 1px solid var(--border); font-weight: 700; font-size: 10px; text-align: center; border-radius: 3px; padding: 2px;">
-            <span style="font-size: 9px; color: #6e7681;">pts/s</span>
-        </div>
+        <!-- 4. Cadence + Speed + Expand/Collapse File Manager -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <div id="stream-cadence-box" style="display: none; align-items: center; gap: 4px; background: rgba(0,0,0,0.5); padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;">
+                <span style="font-size: 10px; color: #8b949e; font-weight: 700;">Rate</span>
+                <input type="number" id="stream-cadence-val" aria-label="Playback Cadence Rate" min="1" max="500" value="30" style="width: 42px; background: #0d1117; color: var(--green); border: 1px solid var(--border); font-weight: 700; font-size: 10px; text-align: center; border-radius: 999px; padding: 2px;">
+            </div>
 
-        <!-- 5. Playback Speed (Drag Up/Down, Double-Click to Reset) -->
-        <div id="stream-speed-box" class="stream-speed-box" title="Drag up/down to adjust speed · Double-click to reset to 1.0x">
-            <span style="font-size: 10px; color: #8b949e; font-weight: 700;">Speed</span>
-            <span id="stream-speed-val" class="tabular-nums" style="font-size: 11px; color: var(--cyan); font-weight: 700; min-width: 34px; text-align: right;">1.0x</span>
-        </div>
+            <div id="stream-speed-box" class="stream-speed-box">
+                <span style="font-size: 10px; color: #8b949e; font-weight: 700;">Speed</span>
+                <span id="stream-speed-val" class="tabular-nums" style="font-size: 11px; color: var(--cyan); font-weight: 700; min-width: 32px; text-align: right;">1.0x</span>
+            </div>
 
-        <!-- 6. File Button (Opens File Portal) -->
-        <button id="btn-open-portal" class="stream-btn" style="color: var(--cyan); border-color: rgba(0,240,255,0.4);" title="Open File & Data Portal">FILE</button>
+            <button id="btn-expand-file-manager" type="button" class="stream-btn" onclick="window.toggleFileDetailsPanel && window.toggleFileDetailsPanel()" aria-expanded="false" style="min-height: 24px; padding: 2px 10px; font-size: 10px; font-weight: 700;">FILES ▾</button>
+        </div>
     </div>
 
-    <!-- 7. Channels Status Row -->
+    <!-- Channels Status Row (Unified Pill Capsules) -->
     <div class="stream-channel-grid">
-        <!-- CH 1 -->
-        <div class="stream-channel-card" style="border-left: 3px solid #ff3333;">
+        <div class="stream-channel-card" data-ch="0" onclick="if(!event.target.closest('button') && window.openFileDetailsPanel) window.openFileDetailsPanel();">
             <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
-                <span style="font-weight: 700; color: #ff3333; font-size: 10px; flex-shrink: 0;">CH 1</span>
+                <span class="ch-pill-dot" style="background: #ff3333;"></span>
+                <span style="font-weight: 700; color: #ff3333; font-size: 10.5px; flex-shrink: 0;">CH 1</span>
                 <span id="stream-ch-label-0" style="color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Empty</span>
             </div>
             <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                 <span id="stream-ch-val-0" class="tabular-nums" style="color: var(--cyan); font-weight: 700; display: none;">--</span>
-                <button id="stream-ch-clear-0" class="stream-btn" style="padding: 0 4px; font-size: 9px; display: none; color: #ff5577;">✕</button>
+                <button id="stream-ch-clear-0" type="button" aria-label="Clear Channel 1 Source" class="stream-btn" style="padding: 0 6px; min-height: 20px; font-size: 9px; display: none; color: #ff5577;">✕</button>
             </div>
         </div>
 
-        <!-- CH 2 -->
-        <div class="stream-channel-card" style="border-left: 3px solid #39ff14;">
+        <div class="stream-channel-card" data-ch="1" onclick="if(!event.target.closest('button') && window.openFileDetailsPanel) window.openFileDetailsPanel();">
             <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
-                <span style="font-weight: 700; color: #39ff14; font-size: 10px; flex-shrink: 0;">CH 2</span>
+                <span class="ch-pill-dot" style="background: #39ff14;"></span>
+                <span style="font-weight: 700; color: #39ff14; font-size: 10.5px; flex-shrink: 0;">CH 2</span>
                 <span id="stream-ch-label-1" style="color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Empty</span>
             </div>
             <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                 <span id="stream-ch-val-1" class="tabular-nums" style="color: var(--cyan); font-weight: 700; display: none;">--</span>
-                <button id="stream-ch-clear-1" class="stream-btn" style="padding: 0 4px; font-size: 9px; display: none; color: #ff5577;">✕</button>
+                <button id="stream-ch-clear-1" type="button" aria-label="Clear Channel 2 Source" class="stream-btn" style="padding: 0 6px; min-height: 20px; font-size: 9px; display: none; color: #ff5577;">✕</button>
             </div>
         </div>
 
-        <!-- CH 3 -->
-        <div class="stream-channel-card" style="border-left: 3px solid #33ccff;">
+        <div class="stream-channel-card" data-ch="2" onclick="if(!event.target.closest('button') && window.openFileDetailsPanel) window.openFileDetailsPanel();">
             <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
-                <span style="font-weight: 700; color: #33ccff; font-size: 10px; flex-shrink: 0;">CH 3</span>
+                <span class="ch-pill-dot" style="background: #33ccff;"></span>
+                <span style="font-weight: 700; color: #33ccff; font-size: 10.5px; flex-shrink: 0;">CH 3</span>
                 <span id="stream-ch-label-2" style="color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Empty</span>
             </div>
             <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                 <span id="stream-ch-val-2" class="tabular-nums" style="color: var(--cyan); font-weight: 700; display: none;">--</span>
-                <button id="stream-ch-clear-2" class="stream-btn" style="padding: 0 4px; font-size: 9px; display: none; color: #ff5577;">✕</button>
+                <button id="stream-ch-clear-2" type="button" aria-label="Clear Channel 3 Source" class="stream-btn" style="padding: 0 6px; min-height: 20px; font-size: 9px; display: none; color: #ff5577;">✕</button>
             </div>
         </div>
 
-        <!-- CH 4 -->
-        <div class="stream-channel-card" style="border-left: 3px solid #b84dff;">
+        <div class="stream-channel-card" data-ch="3" onclick="if(!event.target.closest('button') && window.openFileDetailsPanel) window.openFileDetailsPanel();">
             <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
-                <span style="font-weight: 700; color: #b84dff; font-size: 10px; flex-shrink: 0;">CH 4</span>
+                <span class="ch-pill-dot" style="background: #b84dff;"></span>
+                <span style="font-weight: 700; color: #b84dff; font-size: 10.5px; flex-shrink: 0;">CH 4</span>
                 <span id="stream-ch-label-3" style="color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Empty</span>
             </div>
             <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                 <span id="stream-ch-val-3" class="tabular-nums" style="color: var(--cyan); font-weight: 700; display: none;">--</span>
-                <button id="stream-ch-clear-3" class="stream-btn" style="padding: 0 4px; font-size: 9px; display: none; color: #ff5577;">✕</button>
+                <button id="stream-ch-clear-3" type="button" aria-label="Clear Channel 4 Source" class="stream-btn" style="padding: 0 6px; min-height: 20px; font-size: 9px; display: none; color: #ff5577;">✕</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- FILE PORTAL MODAL (PURE VANILLA) -->
-<div id="file-portal-modal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) window.closePortalModal()">
-    <div class="modal-dialog" onclick="event.stopPropagation()">
-        <!-- Header -->
-        <div class="modal-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="color: var(--cyan); font-size: 16px;">📁</span>
-                <span style="font-weight: 700; color: #fff; font-size: 14px;">File Portal</span>
-            </div>
-            <button class="stream-btn" onclick="window.closePortalModal()" style="padding: 2px 8px;">✕</button>
+<!-- EXPANDABLE FILE MANAGER DETAILS CARD -->
+<div id="file-portal-modal" class="workspace-panel-card ui-hidden" style="display: none;">
+    <div class="workspace-card-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">FILE MANAGER</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <button id="btn-file-open-firmware" type="button" class="stream-btn" onclick="window.toggleFirmwarePortal && window.toggleFirmwarePortal()" style="min-height: 24px; padding: 2px 10px; font-size: 10px; border-color: rgba(57, 255, 20, 0.45); color: var(--green); font-weight: 700;">FIRMWARE</button>
+        </div>
+    </div>
+
+    <div class="workspace-card-body" id="file-portal-modal-body">
+        <div id="portal-error-alert" style="display: none; background: rgba(100, 10, 25, 0.7); border: 1px solid #ff3355; padding: 8px 12px; border-radius: 10px; color: #ffccd5; font-size: 11px; justify-content: space-between; align-items: center;">
+            <span id="portal-error-text">Error message</span>
+            <button type="button" class="stream-btn" onclick="window.hidePortalError()" style="padding: 1px 7px; min-height: 22px; font-size: 9px;">✕</button>
         </div>
 
-        <!-- Body -->
-        <div class="modal-body">
-            <!-- Error Alert -->
-            <div id="portal-error-alert" style="display: none; background: rgba(100, 10, 25, 0.7); border: 1px solid #ff3355; padding: 8px 12px; border-radius: 4px; color: #ffccd5; font-size: 11px; justify-content: space-between; align-items: center;">
-                <span id="portal-error-text">Error message</span>
-                <button class="stream-btn" onclick="window.hidePortalError()" style="padding: 1px 6px; font-size: 9px;">✕</button>
-            </div>
-
-            <!-- Section 1: Channels (CH 1 - CH 4) -->
-            <div class="portal-card">
-                <div class="portal-card-title">
-                    <span>Channels (CH 1 – CH 4)</span>
-                    <span style="color: #8b949e; font-size: 10px; font-weight: normal;">Select a data file directly for any channel</span>
+        <!-- Post-Upload Dataset Structure & Column Mapping -->
+        <div id="portal-mapping-section" class="portal-card" style="display: none; border-color: rgba(0, 240, 255, 0.55); box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.18);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #21262d; padding-bottom: 8px;">
+                <div style="font-size: 11px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <span id="portal-file-summary" style="font-weight: 700; color: var(--cyan);">file.csv</span>
                 </div>
-                <div id="portal-channels-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;"></div>
-            </div>
-
-            <!-- Section 2: Upload Dropzone & Dense Test Datasets -->
-            <div class="portal-card">
-                <div id="portal-dropzone" class="portal-dropzone">
-                    <input type="file" id="portal-file-input" style="display:none;" accept=".csv,.tsv,.tab,.txt,.json,.xml,.dat,.log">
-                    <div style="font-size: 24px; color: var(--cyan); margin-bottom: 4px;">⬆</div>
-                    <div style="font-weight: 700; color: #fff; font-size: 12px;">Drop data file here or click to select file</div>
-                    <div style="font-size: 10px; color: #8b949e; margin-top: 2px;">Supports CSV, TSV, JSON, TXT, DAT, LOG</div>
-                </div>
-
-                <!-- Test Datasets -->
-                <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 11px; font-weight: 700; color: #c9d1d9; text-transform: uppercase;">Test Datasets (Dense Multi-Series & Multi-Column)</span>
-                        <span style="font-size: 10px; color: #6e7681;">5,000–8,000 rows</span>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px;">
-                        <!-- NASA -->
-                        <div style="background: #161b22; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <div style="overflow: hidden;">
-                                <div style="font-weight: 700; color: #fff; font-size: 11px;">NASA ISS Telemetry <span style="font-size: 9px; color: var(--cyan); background: #21262d; padding: 1px 4px; border-radius: 3px;">5,000 rows</span></div>
-                                <div style="font-size: 10px; color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Solar volts, cabin pressure, coolant temp, gyro drift</div>
-                            </div>
-                            <div style="display: flex; gap: 4px;">
-                                <a href="datasets/nasa_telemetry_iss.csv" download class="stream-btn" style="text-decoration: none; padding: 2px 6px; font-size: 10px;">CSV</a>
-                                <button class="stream-btn play-btn" onclick="window.loadSampleDataset('nasa')" style="padding: 2px 8px; font-size: 10px;">Load</button>
-                            </div>
-                        </div>
-
-                        <!-- EKG -->
-                        <div style="background: #161b22; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <div style="overflow: hidden;">
-                                <div style="font-weight: 700; color: #fff; font-size: 11px;">EKG Cardiac & GSR <span style="font-size: 9px; color: var(--cyan); background: #21262d; padding: 1px 4px; border-radius: 3px;">6,000 rows</span></div>
-                                <div style="font-size: 10px; color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Lead_I_Heart wave + Lead_II_GSR conductance</div>
-                            </div>
-                            <div style="display: flex; gap: 4px;">
-                                <a href="datasets/ekg_heart_biometrics.csv" download class="stream-btn" style="text-decoration: none; padding: 2px 6px; font-size: 10px;">CSV</a>
-                                <button class="stream-btn play-btn" onclick="window.loadSampleDataset('ekg')" style="padding: 2px 8px; font-size: 10px;">Load</button>
-                            </div>
-                        </div>
-
-                        <!-- CRYPTO -->
-                        <div style="background: #161b22; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <div style="overflow: hidden;">
-                                <div style="font-weight: 700; color: #fff; font-size: 11px;">Crypto Tick HFT <span style="font-size: 9px; color: var(--cyan); background: #21262d; padding: 1px 4px; border-radius: 3px;">5,000 rows</span></div>
-                                <div style="font-size: 10px; color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">BTC_USDT, ETH_USDT, SOL_USDT prices & tick volume</div>
-                            </div>
-                            <div style="display: flex; gap: 4px;">
-                                <a href="datasets/market_crypto_hft.csv" download class="stream-btn" style="text-decoration: none; padding: 2px 6px; font-size: 10px;">CSV</a>
-                                <button class="stream-btn play-btn" onclick="window.loadSampleDataset('crypto')" style="padding: 2px 8px; font-size: 10px;">Load</button>
-                            </div>
-                        </div>
-
-                        <!-- FOREST -->
-                        <div style="background: #161b22; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <div style="overflow: hidden;">
-                                <div style="font-weight: 700; color: #fff; font-size: 11px;">Deep Forest Mycelium <span style="font-size: 9px; color: var(--cyan); background: #21262d; padding: 1px 4px; border-radius: 3px;">8,000 rows</span></div>
-                                <div style="font-size: 10px; color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Oak canopy, fern spore, mycelium network, and moss</div>
-                            </div>
-                            <div style="display: flex; gap: 4px;">
-                                <a href="datasets/deep_forest_mycelium.csv" download class="stream-btn" style="text-decoration: none; padding: 2px 6px; font-size: 10px;">CSV</a>
-                                <button class="stream-btn play-btn" onclick="window.loadSampleDataset('forest')" style="padding: 2px 8px; font-size: 10px;">Load</button>
-                            </div>
-                        </div>
-                    </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="font-size: 11px; color: #c9d1d9; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="portal-auto-win-chk" checked style="accent-color: var(--cyan);">
+                        <span id="portal-auto-win-label">Auto Window</span>
+                    </label>
+                    <button type="button" class="stream-btn" onclick="window.dismissMappingSection()" style="padding: 2px 9px; min-height: 24px; font-size: 10px; color: #8b949e;">✕ Cancel</button>
                 </div>
             </div>
 
-            <!-- Section 3: Post-Upload Dataset Structure & Column Mapping -->
-            <div id="portal-mapping-section" class="portal-card" style="display: none; border-color: rgba(0, 240, 255, 0.4);">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #21262d; padding-bottom: 8px;">
-                    <div style="font-size: 11px;">
-                        <span style="color: #8b949e;">File Loaded:</span>
-                        <span id="portal-file-summary" style="font-weight: 700; color: var(--cyan);">file.csv</span>
-                    </div>
-                    <div>
-                        <label style="font-size: 11px; color: #c9d1d9; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                            <input type="checkbox" id="portal-auto-win-chk" checked style="accent-color: var(--cyan);">
-                            <span id="portal-auto-win-label">Auto Window</span>
-                        </label>
-                    </div>
+            <div>
+                <div style="font-size: 10px; color: #8b949e; text-transform: uppercase; font-weight: 700; margin-bottom: 5px;">Import Method</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    <button id="portal-mode-btn-multi_value_cols" type="button" class="stream-btn" onclick="window.setMappingMode('multi_value_cols')">Multiple Columns</button>
+                    <button id="portal-mode-btn-multi_sensor_id" type="button" class="stream-btn" onclick="window.setMappingMode('multi_sensor_id')">Multi-Series / ID</button>
+                    <button id="portal-mode-btn-single_channel" type="button" class="stream-btn" onclick="window.setMappingMode('single_channel')">Single Channel</button>
                 </div>
+            </div>
 
-                <!-- Mode selection -->
+            <div id="portal-mode-controls"></div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; border-top: 1px solid #21262d; padding-top: 8px;">
+                <div id="portal-id-col-wrap">
+                    <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Series / ID Column</div>
+                    <select id="portal-id-col-select" class="pill-select" style="height: 28px; text-align: left; padding: 2px 10px; font-size: 11px; color: var(--cyan);"></select>
+                </div>
+                <div id="portal-val-col-wrap">
+                    <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Value Column</div>
+                    <select id="portal-val-col-select" class="pill-select" style="height: 28px; text-align: left; padding: 2px 10px; font-size: 11px; color: var(--green);"></select>
+                </div>
                 <div>
-                    <div style="font-size: 10px; color: #8b949e; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">Data Structure</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                        <button id="portal-mode-btn-multi_value_cols" class="stream-btn" onclick="window.setMappingMode('multi_value_cols')">Multiple Columns (NASA / Multi-metric)</button>
-                        <button id="portal-mode-btn-multi_sensor_id" class="stream-btn" onclick="window.setMappingMode('multi_sensor_id')">Multi-Series / Sensor ID (EKG / Crypto / Species)</button>
-                        <button id="portal-mode-btn-single_channel" class="stream-btn" onclick="window.setMappingMode('single_channel')">Single Stream (Route to 1 Channel)</button>
-                    </div>
+                    <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Timestamp Column</div>
+                    <select id="portal-time-col-select" class="pill-select" style="height: 28px; text-align: left; padding: 2px 10px; font-size: 11px; color: var(--purple);"></select>
                 </div>
-
-                <!-- Mode Controls (Interactive Selectors) -->
-                <div id="portal-mode-controls"></div>
-
-                <!-- Column Selectors -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; border-top: 1px solid #21262d; padding-top: 8px;">
-                    <div id="portal-id-col-wrap">
-                        <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Series / ID Column</div>
-                        <select id="portal-id-col-select" style="width: 100%; background: #0d1117; color: var(--cyan); border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 11px;"></select>
-                    </div>
-                    <div id="portal-val-col-wrap">
-                        <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Value Column</div>
-                        <select id="portal-val-col-select" style="width: 100%; background: #0d1117; color: var(--green); border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 11px;"></select>
-                    </div>
-                    <div>
-                        <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Timestamp Column</div>
-                        <select id="portal-time-col-select" style="width: 100%; background: #0d1117; color: var(--purple); border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 11px;"></select>
-                    </div>
-                    <div id="portal-cadence-rate-wrap">
-                        <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Cadence Rate (pts/s)</div>
-                        <input type="number" id="portal-cadence-rate-val" min="1" max="500" value="30" style="width: 100%; background: #0d1117; color: var(--green); border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 11px; box-sizing: border-box;">
-                    </div>
-                </div>
-
-                <!-- Preview Table -->
-                <div style="overflow-x: auto; max-height: 140px; border: 1px solid var(--border); border-radius: 4px;">
-                    <table class="portal-table">
-                        <thead><tr id="portal-table-head"></tr></thead>
-                        <tbody id="portal-table-body"></tbody>
-                    </table>
-                </div>
-
-                <div style="display: flex; justify-content: flex-end;">
-                    <button class="stream-btn play-btn" onclick="window.applyStreamMapping()" style="padding: 6px 18px; font-size: 12px;">
-                        ▶ Load into Player
-                    </button>
+                <div id="portal-cadence-rate-wrap">
+                    <div style="font-size: 10px; color: #8b949e; font-weight: 700; margin-bottom: 3px;">Cadence Rate (pts/s)</div>
+                    <input type="number" id="portal-cadence-rate-val" min="1" max="500" value="30" class="pill-text-field" style="width: 100%; height: 28px; color: var(--green);">
                 </div>
             </div>
 
-            <!-- Section 4: Saved Data (Unified at bottom) -->
-            <div class="portal-card">
+            <div style="overflow-x: auto; max-height: 135px; border: 1px solid var(--border); border-radius: 8px;">
+                <table class="portal-table">
+                    <thead><tr id="portal-table-head"></tr></thead>
+                    <tbody id="portal-table-body"></tbody>
+                </table>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="stream-btn" onclick="window.dismissMappingSection()" style="padding: 5px 14px; font-size: 11px;">Cancel</button>
+                <button type="button" class="stream-btn play-btn" onclick="window.applyStreamMapping()" style="width: auto; padding: 5px 18px; font-size: 11.5px;">
+                    ▶ Load into Player
+                </button>
+            </div>
+        </div>
+
+        <!-- Section 1: Channels (CH 1 - CH 4) -->
+        <div class="portal-card">
+            <div class="portal-card-title">
+                <span>CHANNELS</span>
+            </div>
+            <div id="portal-channels-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px;"></div>
+        </div>
+
+        <!-- Section 2: Upload Dropzone + Sample Datasets -->
+        <div class="files-upload-samples-grid">
+            <div id="portal-dropzone" class="portal-dropzone">
+                <input type="file" id="portal-file-input" style="display:none;" accept=".csv,.tsv,.tab,.txt,.json,.xml,.dat,.log,text/csv,text/plain,application/json">
+                <div style="font-size: 20px; color: var(--cyan); margin-bottom: 4px;">⬆</div>
+                <div style="font-weight: 700; color: #fff; font-size: 12px;">LOAD FILE</div>
+                <div style="font-size: 10px; color: #8b949e; margin-top: 2px;">CSV · TSV · JSON · TXT · DAT</div>
+            </div>
+
+            <div class="portal-card" style="justify-content: center;">
                 <div class="portal-card-title">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span>Saved Data</span>
-                        <span id="portal-saved-count-badge" style="display: none; background: #21262d; color: var(--cyan); font-size: 9px; padding: 1px 6px; border-radius: 10px;">0</span>
+                    <span>DATASETS</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px;">
+                    <div class="dataset-pill-row">
+                        <div style="overflow: hidden; min-width: 0;">
+                            <div style="font-weight: 700; color: #fff; font-size: 11px;">Deep Forest Mycelium <span style="font-size: 9.5px; color: #8b949e; font-weight: normal;">· 4 Ch</span></div>
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <a href="./datasets/deep_forest_mycelium.csv" download class="stream-btn" style="text-decoration: none; min-height: 24px; padding: 2px 8px; font-size: 9.5px;">CSV</a>
+                            <button type="button" class="stream-btn play-btn" onclick="window.loadSampleDataset('forest')" style="min-width: 50px; min-height: 24px; padding: 2px 10px; font-size: 9.5px;">Load</button>
+                        </div>
                     </div>
-                    <button id="portal-clear-all-takes-btn" class="stream-btn" onclick="window.clearAllSavedTakes()" style="display: none; padding: 2px 6px; font-size: 10px; color: #ff5577;">Clear All</button>
+
+                    <div class="dataset-pill-row">
+                        <div style="overflow: hidden; min-width: 0;">
+                            <div style="font-weight: 700; color: #fff; font-size: 11px;">NASA ISS Telemetry <span style="font-size: 9.5px; color: #8b949e; font-weight: normal;">· 4 Col</span></div>
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <a href="./datasets/nasa_telemetry_iss.csv" download class="stream-btn" style="text-decoration: none; min-height: 24px; padding: 2px 8px; font-size: 9.5px;">CSV</a>
+                            <button type="button" class="stream-btn play-btn" onclick="window.loadSampleDataset('nasa')" style="min-width: 50px; min-height: 24px; padding: 2px 10px; font-size: 9.5px;">Load</button>
+                        </div>
+                    </div>
+
+                    <div class="dataset-pill-row">
+                        <div style="overflow: hidden; min-width: 0;">
+                            <div style="font-weight: 700; color: #fff; font-size: 11px;">Cardiac GSR <span style="font-size: 9.5px; color: #8b949e; font-weight: normal;">· 2 Series</span></div>
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <a href="./datasets/ekg_heart_biometrics.csv" download class="stream-btn" style="text-decoration: none; min-height: 24px; padding: 2px 8px; font-size: 9.5px;">CSV</a>
+                            <button type="button" class="stream-btn play-btn" onclick="window.loadSampleDataset('ekg')" style="min-width: 50px; min-height: 24px; padding: 2px 10px; font-size: 9.5px;">Load</button>
+                        </div>
+                    </div>
+
+                    <div class="dataset-pill-row">
+                        <div style="overflow: hidden; min-width: 0;">
+                            <div style="font-weight: 700; color: #fff; font-size: 11px;">Crypto Tick HFT <span style="font-size: 9.5px; color: #8b949e; font-weight: normal;">· 3 Series</span></div>
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <a href="./datasets/market_crypto_hft.csv" download class="stream-btn" style="text-decoration: none; min-height: 24px; padding: 2px 8px; font-size: 9.5px;">CSV</a>
+                            <button type="button" class="stream-btn play-btn" onclick="window.loadSampleDataset('crypto')" style="min-width: 50px; min-height: 24px; padding: 2px 10px; font-size: 9.5px;">Load</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: Saved Sessions Manager -->
+        <div class="portal-card">
+            <div class="portal-card-title">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>SAVED SESSIONS</span>
+                    <span id="portal-saved-count-badge" class="tabular-nums" style="display: none; color: var(--cyan); font-size: 10px; font-weight: 700;">0</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <input type="search" id="portal-takes-search" aria-label="Search Saved Sessions" placeholder="Filter..."
+                        class="pill-text-field" style="padding: 3px 10px; font-size: 10px; width: 145px; color: #fff;">
+                    <select id="portal-takes-sort" aria-label="Sort Saved Sessions"
+                        class="pill-select" style="width: auto; height: 24px; padding: 2px 10px; font-size: 10px;">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="name_asc">Filename A–Z</option>
+                        <option value="points_desc">Most Data Points</option>
+                    </select>
+                    <button id="portal-clear-all-takes-btn" type="button" class="stream-btn" onclick="window.clearAllSavedTakes()" style="display: none; padding: 2px 9px; min-height: 24px; font-size: 10px; color: #ff5577;">Clear All</button>
+                </div>
+            </div>
+
+            <div id="portal-saved-takes-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
+                <div style="color: #6e7681; padding: 10px; text-align: center;">No saved sessions</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FOCUSED CHANNEL VIEW BAR (COMPACT PILL BAR: 1CH / 2CH / 4CH + CH 1–4) -->
+<div class="channel-focus-bar" aria-label="Channel View">
+    <div class="view-mode-segmented" role="group" aria-label="Dashboard View Layout">
+        <button id="view-mode-1ch" type="button" class="view-mode-btn" onclick="window.setViewMode('1ch')" title="Single-Channel Focus">1CH</button>
+        <button id="view-mode-2ch" type="button" class="view-mode-btn active-view-mode" onclick="window.setViewMode('2ch')" title="Dual-Channel Split">2CH</button>
+        <button id="view-mode-4ch" type="button" class="view-mode-btn" onclick="window.setViewMode('4ch')" title="Quad-Channel Grid">4CH</button>
+    </div>
+
+    <div class="channel-focus-pills" role="group" aria-label="Select Focused Plant Channels">
+        <button id="focus-ch-btn-0" type="button" class="focus-ch-pill" data-ch="0" onclick="window.selectChannelInCurrentView(0)">
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+                <span id="focus-led-0" class="focus-ch-led"></span>
+                <span style="color: #ff3333;">CH 1</span>
+            </span>
+            <span id="focus-val-0" class="tabular-nums" style="font-size: 10px; color: #8b949e;">--</span>
+        </button>
+
+        <button id="focus-ch-btn-1" type="button" class="focus-ch-pill" data-ch="1" onclick="window.selectChannelInCurrentView(1)">
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+                <span id="focus-led-1" class="focus-ch-led"></span>
+                <span style="color: #39ff14;">CH 2</span>
+            </span>
+            <span id="focus-val-1" class="tabular-nums" style="font-size: 10px; color: #8b949e;">--</span>
+        </button>
+
+        <button id="focus-ch-btn-2" type="button" class="focus-ch-pill" data-ch="2" onclick="window.selectChannelInCurrentView(2)">
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+                <span id="focus-led-2" class="focus-ch-led"></span>
+                <span style="color: #33ccff;">CH 3</span>
+            </span>
+            <span id="focus-val-2" class="tabular-nums" style="font-size: 10px; color: #8b949e;">--</span>
+        </button>
+
+        <button id="focus-ch-btn-3" type="button" class="focus-ch-pill" data-ch="3" onclick="window.selectChannelInCurrentView(3)">
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+                <span id="focus-led-3" class="focus-ch-led"></span>
+                <span style="color: #b84dff;">CH 4</span>
+            </span>
+            <span id="focus-val-3" class="tabular-nums" style="font-size: 10px; color: #8b949e;">--</span>
+        </button>
+    </div>
+</div>
+
+<!-- SYNTH INSPECTOR (COLOR-CODED BY SELECTED CHANNEL FROM TOP CH 1–4 BAR) -->
+<div class="synth-inspector ui-hidden" id="synth-inspector" data-ch="0">
+    <!-- ACTIVE STREAM SYNTH AUTOMATION BAR (VISIBLE WHEN INSPECTED CHANNEL IS SUBSCRIBED TO A STREAM) -->
+    <div id="synth-feed-auto-bar" style="display: none; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #0d131a; border-bottom: 1px solid rgba(0, 240, 255, 0.25); border-radius: 8px 8px 0 0; padding: 6px 12px; font-size: 11px;">
+        <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <span style="color: var(--cyan); font-weight: 700;">STREAM</span>
+            <span id="synth-feed-source-label" style="color: #fff; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">--</span>
+            <span id="synth-feed-patch-label" style="color: #8b949e; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+            <button id="btn-synth-feed-auto" type="button" class="stream-btn" onclick="window.toggleActiveSynthFeedAuto()" aria-pressed="true" style="min-height: 24px; padding: 2px 10px; font-size: 10px; font-weight: 700;">AUTO</button>
+        </div>
+    </div>
+
+    <!-- SYNTHESIZER MODULES -->
+    <div class="synth-controls">
+
+        <!-- CARD 1: SCALE (ROOT + SCALE IN HEADER, PIANO + WIDE DUAL PITCH/VEL SLIDERS) -->
+        <div class="synth-module scale-module scale-pitch-module" data-testid="card-scale-range">
+            <div class="module-header scale-header-row">
+                <div class="scale-title">SCALE</div>
+                <div class="scale-selectors-inline">
+                    <select id="ui-scaleRoot" aria-label="Scale Root Note" class="pill-select scale-root-pill" onchange="updateActiveSynth('scaleRoot', this.value);">
+                        <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
+                    </select>
+                    <select id="ui-scaleType" aria-label="Scale Type" class="pill-select scale-type-pill" onchange="if(this.value && this.value !== 'custom'){ updateActiveSynth('scaleType', this.value); }">
+                        <option value="chromatic">Chromatic</option>
+                        <option value="major">Major</option>
+                        <option value="minor">Minor</option>
+                        <option value="pentatonic_major">Maj Pentatonic</option>
+                        <option value="pentatonic_minor">Min Pentatonic</option>
+                        <option value="hirajoshi">Hirajoshi</option>
+                        <option value="custom" hidden>Custom</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="scale-card-body">
+                <div class="piano-wrapper" id="piano-keys"></div>
+
+                <div class="scale-ranges-col">
+                    <div class="dual-range-group">
+                        <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 3px;">
+                            <span>PITCH</span><span id="note-range-text" class="tabular-nums" style="color: #ccc;">C2 (36) ↔ C6 (84)</span>
+                        </div>
+                        <div class="dual-slider-track">
+                            <div class="dual-slider-fill" id="note-fill"></div>
+                            <input type="range" id="ui-note-min" aria-label="Minimum Note" class="dual-slider-input" min="0" max="127" value="36">
+                            <input type="range" id="ui-note-max" aria-label="Maximum Note" class="dual-slider-input" min="0" max="127" value="84">
+                        </div>
+                    </div>
+
+                    <div class="dual-range-group">
+                        <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 3px;">
+                            <span>VELOCITY</span><span id="ui-vel-text" class="tabular-nums" style="color: #ccc;">60 ↔ 110</span>
+                        </div>
+                        <div class="dual-slider-track">
+                            <div class="dual-slider-fill" id="vel-fill"></div>
+                            <input type="range" id="ui-vel-min" aria-label="Minimum Velocity" class="dual-slider-input" min="0" max="127" value="60">
+                            <input type="range" id="ui-vel-max" aria-label="Maximum Velocity" class="dual-slider-input" min="0" max="127" value="110">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 2: DENSITY (COMPACT QUANTIZE, GATE VISUALIZER, DUR, SPREAD, POLY, STEAL, LEGATO) -->
+        <div class="synth-module scale-module gate-timing-module" data-testid="card-gate-timing">
+            <div class="module-header density-header-row">
+                <div class="scale-title">DENSITY</div>
+                <div class="quantize-compact-bar" title="Rhythmic Quantize Grid">
+                    <span class="quantize-lbl">QUANT</span>
+                    <div class="quantize-slider-wrap">
+                        <input type="range" class="pro-slider quantize-compact-slider" id="ui-quantize" aria-label="Quantize Subdivision" min="0" max="8" value="0">
+                        <div class="quantize-ticks" id="ui-quantize-ticks">
+                            <span onclick="window.setQuantizeStep(0)" style="color:var(--cyan);">FR</span><span onclick="window.setQuantizeStep(1)">/64</span><span onclick="window.setQuantizeStep(2)">/32</span><span onclick="window.setQuantizeStep(3)">/16</span><span onclick="window.setQuantizeStep(4)">/8</span><span onclick="window.setQuantizeStep(5)">/4</span><span onclick="window.setQuantizeStep(6)">/4T</span><span onclick="window.setQuantizeStep(7)">/2</span><span onclick="window.setQuantizeStep(8)">1B</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-row density-control-row">
+                <div class="gate-viz-col">
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">
+                        <span>GATE</span>
+                        <span id="ui-density-display" class="tabular-nums" style="color: var(--cyan);">100%</span>
+                    </div>
+                    <div class="gate-canvas-box">
+                        <canvas id="vu-density" style="position: absolute; width: 100%; height: 100%; left:0; top:0;"></canvas>
+                        <input type="range" id="ui-slider-density" aria-label="Note Density Gate" class="pro-slider" min="0" max="100" value="100" style="position: absolute; top: 50%; transform: translateY(-50%); width: 92%; left: 4%; z-index: 2; background: transparent;">
+                    </div>
                 </div>
 
-                <div id="portal-saved-takes-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 250px; overflow-y: auto;">
-                    <div style="color: #6e7681; padding: 12px; text-align: center;">No saved data yet. Click REC on the transport bar to record biodata.</div>
+                <div class="col-wrap" style="justify-content: center;">
+                    <div class="control-area"><div class="knob-track" data-param="durMult" data-min="0.1" data-max="5.0" data-val="1.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">DUR</div>
+                </div>
+
+                <div class="col-wrap" style="justify-content: center;">
+                    <div class="control-area"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">SPREAD</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="col-wrap" style="justify-content: center;" title="Polyphony Voices">
+                    <div class="control-area">
+                        <div class="knob-track" id="poly-knob" data-param="voices" data-val="5" data-min="1" data-max="8">
+                            <div class="knob-dial"><div class="knob-indicator"></div></div>
+                        </div>
+                    </div>
+                    <div class="control-label" style="display: flex; align-items: center; justify-content: center; gap: 3px;">
+                        <span>POLY</span><span id="poly-readout" class="tabular-nums" style="color: var(--cyan);">5</span>
+                    </div>
+                </div>
+
+                <div class="col-wrap" style="width: 82px; align-items: center; justify-content: center;">
+                    <div class="control-area" style="flex-direction: column; gap: 6px; align-items: center; height: auto; width: 100%;">
+                        <select id="ui-steal" aria-label="Voice Steal Priority" class="pill-select" style="width: 100%; padding: 2px 6px;" title="Voice Steal Mode" onchange="updateActiveSynth('stealMode', this.value)">
+                            <option value="oldest">Steal: Old</option>
+                            <option value="lowest">Steal: Lo</option>
+                            <option value="highest">Steal: Hi</option>
+                            <option value="env">Steal: Env</option>
+                            <option value="none">Steal: Off</option>
+                        </select>
+                        <div class="pill-toggle" id="legato-wrapper" style="width: 92%; height: 18px; border-radius: 999px;" title="Legato Triggering">
+                            <input type="checkbox" id="ui-legato" onchange="updateActiveSynth('legato', this.checked ? 1 : 0)">
+                            <label for="ui-legato" style="line-height: 16px; font-size: 8px;">LEGATO</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 3: VOICE (WITH CHANNEL SYNTH PRESET PILL IN HEADER) -->
+        <div class="synth-module voice-module" data-testid="card-voice">
+            <div class="module-header voice-header-row">
+                <div class="voice-title">VOICE</div>
+                <div class="dropdown-widget" id="active-voice-preset-widget">
+                    <button type="button" class="pill-select ch-preset-btn" id="ui-voice-preset-btn" onclick="window.toggleDropdownWidget(this.parentElement, event);" aria-label="Synth Voice Preset">INIT ▼</button>
+                    <div class="dropdown-content preset-panel" style="min-width: 205px; padding: 10px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
+                        <select id="ui-voice-preset-select" aria-label="Channel Voice Preset" class="pill-select" onchange="loadChannelPreset(window.activeSynthIndex, this.value)"><option value="">-- Select Patch --</option></select>
+                        <div style="display: flex; gap: 4px;">
+                            <button type="button" class="pill-select" onclick="saveChannelPreset(window.activeSynthIndex, false)" style="flex: 1;">SAVE</button>
+                            <button type="button" class="pill-select" onclick="window.toggleChannelNewPresetRow(window.activeSynthIndex)" style="flex: 0 0 auto; width: 58px;">+ NEW</button>
+                        </div>
+                        <div id="ui-voice-new-preset-row" class="inline-new-preset-row" style="display: none;">
+                            <input type="text" id="ui-voice-new-preset-input" class="dropdown-text-input" placeholder="Patch name..." aria-label="New voice preset name" onkeydown="if(event.key==='Enter'){event.preventDefault();saveChannelPreset(window.activeSynthIndex, true);}else if(event.key==='Escape'){window.toggleChannelNewPresetRow(window.activeSynthIndex, false);}">
+                            <button type="button" class="inline-preset-confirm-btn" onclick="saveChannelPreset(window.activeSynthIndex, true)">SAVE</button>
+                            <button type="button" class="inline-preset-cancel-btn" onclick="window.toggleChannelNewPresetRow(window.activeSynthIndex, false)" aria-label="Cancel">✕</button>
+                        </div>
+                        <button type="button" class="pill-select danger" onclick="deleteChannelPreset(window.activeSynthIndex)">DELETE</button>
+                    </div>
+                </div>
+            </div>
+            <div class="control-row" style="justify-content: space-around;">
+                <div class="col-wrap" style="width: 82px; align-items: center;">
+                    <div class="control-area" style="width: 100%;">
+                        <select id="ui-wave" aria-label="Oscillator Waveform" class="pill-select" style="width: 100%; padding: 2px 6px;" title="Oscillator Waveform" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
+                            <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Tri</option><option value="sine">Sine</option><option value="noise">Noise</option><option value="drums">Drums</option>
+                        </select>
+                    </div>
+                    <div class="control-label">WAVE</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="col-wrap" title="Portamento Glide">
+                    <div class="control-area"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">GLIDE</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 4: MODULATION -->
+        <div class="synth-module mod-module" data-testid="card-modulation">
+            <div class="module-header mod-module-header">
+                <div class="mod-title">MODULATION</div>
+                <div class="mod-header-controls">
+                    <div class="target-selectors">
+                        <label><input type="radio" name="activeLfo" value="pitchLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'pitchEnv');"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span>PITCH</span></label>
+                        <label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'filterEnv');"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span>FILTER</span></label>
+                        <label><input type="radio" name="activeLfo" value="ampLfo" checked onchange="switchModView('lfo', this.value); switchModView('env', 'ampEnv');"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span>AMP</span></label>
+                    </div>
+
+                    <div class="pill-toggle env-time-toggle" style="width: 50px; height: 14px; flex-shrink: 0;">
+                        <input type="radio" id="env-time-norm" name="envTimeMode" value="norm" checked onchange="window.updateEnvTimeMode(this.value)">
+                        <label for="env-time-norm" style="line-height: 14px; font-size: 8px;">NRM</label>
+                        <input type="radio" id="env-time-ext" name="envTimeMode" value="ext" onchange="window.updateEnvTimeMode(this.value)">
+                        <label for="env-time-ext" style="line-height: 14px; font-size: 8px;">EXT</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <div class="col-wrap" style="width: 55px;">
+                    <div class="control-area">
+                        <div class="stacked-config">
+                            <div class="pill-toggle" style="margin-bottom: 2px;">
+                                <input type="radio" id="rate-lo" name="lfoRateMode" value="lo" checked onchange="window.updateLfoRateMode(this.value)">
+                                <label for="rate-lo">LO</label>
+                                <input type="radio" id="rate-hi" name="lfoRateMode" value="hi" onchange="window.updateLfoRateMode(this.value)">
+                                <label for="rate-hi">HI</label>
+                            </div>
+                            <select id="ui-lfo-shape" aria-label="LFO Waveform" class="pill-select" onchange="updateNestedSynth('lfo', 'shape', this.value)">
+                                <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Tri</option>
+                                <option value="sawtooth">Up</option><option value="rampdown">Down</option><option value="random">Random</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="control-label">SHAPE</div>
+                </div>
+
+                <div class="col-wrap">
+                    <div class="control-area"><div class="knob-track" data-param="rate" data-group="lfo" data-min="0.01" data-max="20" data-val="2.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">RATE</div>
+                </div>
+
+                <div class="col-wrap">
+                    <div class="control-area"><div class="knob-track" data-param="depth" data-group="lfo" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">DPTH</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="adsr-group">
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Envelope Attack" class="v-slider" id="ui-env-atk" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'atk', this.value)"></div></div><div class="control-label">A</div></div>
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Envelope Decay" class="v-slider" id="ui-env-dec" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'dec', this.value)"></div></div><div class="control-label">D</div></div>
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Envelope Sustain" class="v-slider" id="ui-env-sus" min="0" max="1" step="0.01" oninput="updateNestedSynth('env', 'sus', this.value)"></div></div><div class="control-label">S</div></div>
+                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Envelope Release" class="v-slider" id="ui-env-rel" min="0.01" max="5" step="0.01" oninput="updateNestedSynth('env', 'rel', this.value)"></div></div><div class="control-label">R</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 5: FX -->
+        <div class="synth-module fx-module" data-testid="card-filter-fx">
+            <div class="module-header">
+                <div class="fx-title"><span style="color: var(--green);">FX</span></div>
+                <div class="target-selectors" style="gap: 14px;">
+                    <label><input type="radio" name="activeFx" value="drv" checked onchange="switchModView('fx', this.value)"><div class="mod-led led-pitch" id="ind-fx-drv"></div><span>DRV</span></label>
+                    <label><input type="radio" name="activeFx" value="dly" onchange="switchModView('fx', this.value)"><div class="mod-led led-filter" id="ind-fx-dly"></div><span>DLY</span></label>
+                    <label><input type="radio" name="activeFx" value="rev" onchange="switchModView('fx', this.value)"><div class="mod-led led-amp" id="ind-fx-rev"></div><span>REV</span></label>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <div class="col-wrap fx-filter-knob">
+                    <div class="control-area"><div class="knob-track" data-param="cutoff" data-group="filter" data-min="100" data-max="10000" data-val="2000" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label" style="color: var(--green);">CUTOFF</div>
+                </div>
+
+                <div class="col-wrap fx-filter-knob">
+                    <div class="control-area"><div class="knob-track" data-param="res" data-group="filter" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label" style="color: var(--green);">RES</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="col-wrap fx-dynamic-knob">
+                    <div class="control-area"><div class="knob-track" id="fx-send-knob" data-param="drv" data-group="fx" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">SEND</div>
+                </div>
+
+                <!-- DRV Controls -->
+                <div class="col-wrap fx-dynamic-knob fx-params fx-drv-params">
+                    <div class="control-area"><div class="knob-track" data-param="drvGrit" data-group="fx" data-min="0" data-max="100" data-val="10"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">GRIT</div>
+                </div>
+                <div class="col-wrap fx-dynamic-knob fx-params fx-drv-params">
+                    <div class="control-area"><div class="knob-track" data-param="drvTone" data-group="fx" data-min="100" data-max="10000" data-log="true" data-val="2000"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">TONE</div>
+                </div>
+                <div class="col-wrap fx-params fx-drv-params">
+                    <div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Drive Output Level" class="v-slider" id="ui-fx-drv-lvl" min="0" max="1" step="0.01" value="1.0" oninput="updateNestedSynth('fx', 'drvLvl', this.value)"></div></div>
+                    <div class="control-label">LVL</div>
+                </div>
+
+                <!-- DLY Controls -->
+                <div class="col-wrap fx-dynamic-knob fx-params fx-dly-params" style="display: none;">
+                    <div class="control-area"><div class="knob-track" data-param="time" data-group="globalFx.dly" data-min="0.01" data-max="10.0" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">TIME</div>
+                </div>
+                <div class="col-wrap fx-dynamic-knob fx-params fx-dly-params" style="display: none;">
+                    <div class="control-area"><div class="knob-track" data-param="feedback" data-group="globalFx.dly" data-min="0" data-max="0.95" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">FDBK</div>
+                </div>
+                <div class="col-wrap fx-params fx-dly-params" style="display: none;">
+                    <div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Delay Send to Reverb" class="v-slider" id="ui-fx-torev" min="0" max="1" step="0.01" value="0.2" oninput="updateNestedSynth('globalFx.dly', 'toRev', this.value)"></div></div>
+                    <div class="control-label">&gt;REV</div>
+                </div>
+
+                <!-- REV Controls -->
+                <div class="col-wrap fx-dynamic-knob fx-params fx-rev-params" style="display: none;">
+                    <div class="control-area"><div class="knob-track" data-param="size" data-group="globalFx.rev" data-min="0.1" data-max="8.0" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">SIZE</div>
+                </div>
+                <div class="col-wrap fx-dynamic-knob fx-params fx-rev-params" style="display: none;">
+                    <div class="control-area"><div class="knob-track" data-param="damp" data-group="globalFx.rev" data-min="500" data-max="15000" data-log="true" data-val="3000"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
+                    <div class="control-label">DAMP</div>
+                </div>
+                <div class="col-wrap fx-params fx-rev-params" style="display: none;">
+                    <div class="control-area"><div class="v-slider-container"><input type="range" aria-label="Reverb High Pass Filter" class="v-slider" id="ui-fx-rev-hpf" min="20" max="2000" step="1" value="100" oninput="updateNestedSynth('globalFx.rev', 'hpf', this.value)"></div></div>
+                    <div class="control-label">HPF</div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- EXPORT FILE MODAL (iOS / BLUEIFY SHARE SHEET & FALLBACK) -->
+<!-- FOCUSED OSCILLOSCOPE DASHBOARD -->
+<div id="dashboard"></div>
+
+<!-- EXPORT FILE MODAL -->
 <div id="export-file-modal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) window.closeExportModal()">
     <div class="modal-dialog export-modal-dialog" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -412,7 +1088,7 @@
                 <span style="color: var(--cyan); font-size: 14px;">⬇</span>
                 <span style="font-weight: 700; color: #fff; font-size: 13px;">Export Recording</span>
             </div>
-            <button class="stream-btn" onclick="window.closeExportModal()" style="min-height: 36px; min-width: 36px; justify-content: center;">✕</button>
+            <button type="button" class="stream-btn" onclick="window.closeExportModal()" aria-label="Close Export Modal" style="min-height: 32px; min-width: 32px; justify-content: center;">✕</button>
         </div>
         <div class="modal-body" style="gap: 12px;">
             <div id="export-status-banner" class="export-status-banner">
@@ -437,17 +1113,14 @@
                     <span id="export-meta-size" class="export-meta-val tabular-nums">--</span>
                 </div>
             </div>
-            <div id="export-ios-hint" class="export-ios-hint" style="display: none;">
-                On iPad / Blueify, tap <strong>Share / Save to Files</strong> to open the iOS Share Sheet and save to Files or AirDrop.
-            </div>
             <div class="export-actions-stack">
-                <button id="btn-export-share" class="stream-btn play-btn export-primary-btn" style="display: none;" disabled>
+                <button id="btn-export-share" type="button" class="stream-btn play-btn export-primary-btn" style="display: none;" disabled>
                     Share / Save to Files
                 </button>
                 <a id="btn-export-download" class="stream-btn export-secondary-btn" href="#" download style="display: none;">
                     Download File
                 </a>
-                <button id="btn-export-copy" class="stream-btn export-secondary-btn" style="display: none;">
+                <button id="btn-export-copy" type="button" class="stream-btn export-secondary-btn" style="display: none;">
                     Copy CSV to Clipboard
                 </button>
             </div>
@@ -458,7 +1131,7 @@
 
 <!-- OFFLINE STATUS BANNER -->
 <div id="offline-indicator" class="offline-banner" style="display: none;">
-    ⚡ OFFLINE MODE — Running local cache & files
+    OFFLINE
 </div>
 
 <!-- IOS PWA INSTALL GUIDE MODAL -->
@@ -466,362 +1139,36 @@
     <div class="modal-dialog" style="max-width: 360px; padding: 16px;" onclick="event.stopPropagation()">
         <div style="font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 8px;">Install on iPhone / iPad</div>
         <div style="font-size: 11px; color: #8b949e; line-height: 1.5;">
-            1. Tap the <strong>Share</strong> button (box with upward arrow) in Safari.<br>
+            1. Tap the <strong>Share</strong> button in Safari.<br>
             2. Scroll down and tap <strong>Add to Home Screen</strong>.<br>
-            3. bioQuad will launch full screen with full offline access.
+            3. bioQuad launches full screen with offline caching.
         </div>
-        <button class="stream-btn play-btn" onclick="closeIOSPWAModal()" style="margin-top: 14px; width: 100%; justify-content: center; padding: 6px;">Got It</button>
+        <button type="button" class="stream-btn play-btn" onclick="closeIOSPWAModal()" style="margin-top: 14px; width: 100%; justify-content: center; padding: 6px;">Got It</button>
     </div>
 </div>
 
-<!-- SYNTH INSPECTOR -->
-<div class="synth-inspector ui-hidden" id="synth-inspector">
-    <div class="synth-tabs">
-        <!-- TAB 1 -->
-        <div class="synth-tab active" onclick="selectTab(0)">
-            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-0"></div>CH 1</div>
-            <div class="dropdown-widget">
-                <button class="pill-select ch-preset-btn" id="ch-preset-btn-0" onclick="window.toggleDropdownWidget(this.parentElement, event);" style="width: auto; padding: 2px 10px;">INIT ▼</button>
-                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
-                    <select id="ch-preset-select-0" class="pill-select" onchange="loadChannelPreset(0, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select" onclick="saveChannelPreset(0, false)" style="flex: 1;">SAVE</button>
-                        <button class="pill-select" onclick="saveChannelPreset(0, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
-                    </div>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select danger" onclick="deleteChannelPreset(0)" style="flex: 1;">DELETE</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TAB 2 -->
-        <div class="synth-tab" onclick="selectTab(1)">
-            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-1"></div>CH 2</div>
-            <div class="dropdown-widget">
-                <button class="pill-select ch-preset-btn" id="ch-preset-btn-1" onclick="window.toggleDropdownWidget(this.parentElement, event);" style="width: auto; padding: 2px 10px;">INIT ▼</button>
-                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
-                    <select id="ch-preset-select-1" class="pill-select" onchange="loadChannelPreset(1, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select" onclick="saveChannelPreset(1, false)" style="flex: 1;">SAVE</button>
-                        <button class="pill-select" onclick="saveChannelPreset(1, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
-                    </div>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select danger" onclick="deleteChannelPreset(1)" style="flex: 1;">DELETE</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TAB 3 -->
-        <div class="synth-tab" onclick="selectTab(2)">
-            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-2"></div>CH 3</div>
-            <div class="dropdown-widget">
-                <button class="pill-select ch-preset-btn" id="ch-preset-btn-2" onclick="window.toggleDropdownWidget(this.parentElement, event);" style="width: auto; padding: 2px 10px;">INIT ▼</button>
-                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
-                    <select id="ch-preset-select-2" class="pill-select" onchange="loadChannelPreset(2, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select" onclick="saveChannelPreset(2, false)" style="flex: 1;">SAVE</button>
-                        <button class="pill-select" onclick="saveChannelPreset(2, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
-                    </div>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select danger" onclick="deleteChannelPreset(2)" style="flex: 1;">DELETE</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TAB 4 -->
-        <div class="synth-tab" onclick="selectTab(3)">
-            <div style="display: flex; align-items: center; gap: 8px;"><div class="led" id="led-3"></div>CH 4</div>
-            <div class="dropdown-widget">
-                <button class="pill-select ch-preset-btn" id="ch-preset-btn-3" onclick="window.toggleDropdownWidget(this.parentElement, event);" style="width: auto; padding: 2px 10px;">INIT ▼</button>
-                <div class="dropdown-content preset-panel" style="min-width: 180px; padding: 12px; gap: 6px; right: 0; left: auto; z-index: 999;" onclick="event.stopPropagation();">
-                    <select id="ch-preset-select-3" class="pill-select" onchange="loadChannelPreset(3, this.value)" style="margin-bottom: 4px;"><option value="">-- Select --</option></select>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select" onclick="saveChannelPreset(3, false)" style="flex: 1;">SAVE</button>
-                        <button class="pill-select" onclick="saveChannelPreset(3, true)" style="flex: 0 0 auto; width: 50px;">NEW</button>
-                    </div>
-                    <div style="display: flex; gap: 4px;">
-                        <button class="pill-select danger" onclick="deleteChannelPreset(3)" style="flex: 1;">DELETE</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- SYNTHESIZER MODULES -->
-    <div class="synth-controls">
-        
-        <!-- MODULE 1: SCALE & DENSITY -->
-        <div class="synth-module scale-module">
-            <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <div class="scale-title">SCALE</div>
-            </div>
-            
-            <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center; width: 100%;">
-                <select id="ui-scaleRoot" class="pill-select" style="flex: 0 0 45px; color: var(--cyan); font-size: 10px; padding: 2px 4px;" onchange="updateActiveSynth('scaleRoot', this.value);">
-                    <option value="0">C</option><option value="1">C#</option><option value="2">D</option><option value="3">D#</option><option value="4">E</option><option value="5">F</option><option value="6">F#</option><option value="7">G</option><option value="8">G#</option><option value="9">A</option><option value="10">A#</option><option value="11">B</option>
-                </select>
-                <select id="ui-scaleType" class="pill-select" style="flex: 0 0 92px; color: var(--cyan); font-size: 10px; padding: 2px 6px;" onchange="if(this.value && this.value !== 'custom'){ updateActiveSynth('scaleType', this.value); }">
-                    <option value="chromatic">Chromatic</option><option value="major">Major</option><option value="minor">Minor</option><option value="pentatonic_major">Major Pentatonic</option><option value="pentatonic_minor">Minor Pentatonic</option><option value="hirajoshi">Hirajoshi</option><option value="custom" hidden>Custom</option>
-                </select>
-                
-                <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">QUANTIZE</div>
-                    <input type="range" class="pro-slider" id="ui-quantize" min="0" max="8" value="0" style="margin: 0; background: #333; width: 100%;">
-                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; font-weight: bold; margin-top: 4px; padding: 0 2px;">
-                        <span style="color:var(--cyan);">FR</span><span>/64</span><span>/32</span><span>/16</span><span>/8</span><span>/4</span><span>/4T</span><span>/2</span><span>1B</span>
-                    </div>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
-                <div style="flex: 0 0 110px; display: flex; flex-direction: column;">
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">
-                        <span>VELOCITY</span><span id="ui-vel-text" style="color: #ccc;">60 ↔ 110</span>
-                    </div>
-                    <div class="dual-slider-track">
-                        <div class="dual-slider-fill" id="vel-fill"></div>
-                        <input type="range" id="ui-vel-min" class="dual-slider-input" min="0" max="127" value="60">
-                        <input type="range" id="ui-vel-max" class="dual-slider-input" min="0" max="127" value="110">
-                    </div>
-                </div>
-                <div style="flex: 1; display: flex; flex-direction: column;">
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">
-                        <span>RANGE</span><span id="note-range-text" style="color: #ccc;">C2 (36) ↔ C6 (84)</span>
-                    </div>
-                    <div class="dual-slider-track">
-                        <div class="dual-slider-fill" id="note-fill"></div>
-                        <input type="range" id="ui-note-min" class="dual-slider-input" min="0" max="127" value="36">
-                        <input type="range" id="ui-note-max" class="dual-slider-input" min="0" max="127" value="84">
-                    </div>
-                </div>
-            </div>
-
-            <div class="control-row" style="align-items: stretch; height: 75px; gap: 8px;">
-                <div class="piano-wrapper" id="piano-keys" style="width: 140px; margin: 0; flex-shrink: 0;"></div>
-                
-                <div style="flex-grow: 1; display: flex; flex-direction: column;">
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-weight: bold; margin-bottom: 4px;">
-                        <span>DENSITY GATE</span><span id="ui-density-display" style="color: var(--cyan);">100%</span>
-                    </div>
-                    <div style="position: relative; flex-grow: 1; background: #111; border: 1px solid var(--border); border-radius: 4px; overflow: hidden;">
-                        <canvas id="vu-density" style="position: absolute; width: 100%; height: 100%; left:0; top:0;"></canvas>
-                        <input type="range" id="ui-slider-density" class="pro-slider" min="0" max="100" value="100" style="position: absolute; top: 50%; transform: translateY(-50%); width: 90%; left: 5%; z-index: 2; background: transparent;">
-                    </div>
-                </div>
-                
-                <div class="col-wrap" style="justify-content: center; padding-top: 4px;">
-                    <div class="control-area"><div class="knob-track" data-param="durMult" data-min="0.1" data-max="5.0" data-val="1.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">DUR</div>
-                </div>
-                
-                <div class="col-wrap" style="justify-content: center; padding-top: 4px;">
-                    <div class="control-area"><div class="knob-track" data-param="spread" data-min="0" data-max="100" data-val="75"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">SPREAD</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- MODULE 2: VOICE -->
-        <div class="synth-module voice-module">
-            <div class="module-header"><div class="voice-title">VOICE</div></div>
-            <div class="control-row">
-                <div class="col-wrap" style="width: 80px; align-items: center;">
-                    <div class="control-area" style="flex-direction: column; gap: 6px; align-items: center; height: auto; width: 100%; margin-top: 8px;">
-                        <select id="ui-wave" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateNestedSynth('sources', 'osc1.type', this.value)">
-                            <option value="sawtooth">Sawtooth</option><option value="square">Square</option><option value="triangle">Tri</option><option value="sine">Sine</option><option value="noise">Noise</option><option value="drums">Drums</option>
-                        </select>
-						<select id="ui-steal" class="pill-select" style="width: 100%; padding: 2px 4px;" onchange="updateActiveSynth('stealMode', this.value)">
-							<option value="oldest">Old</option>
-							<option value="lowest">Lo</option>
-							<option value="highest">Hi</option>
-							<option value="env">Env</option>
-							<option value="none">Off</option>
-						</select>
-                        <div class="pill-toggle" id="legato-wrapper" style="width: 65%; height: 14px; margin-top: 2px;">
-                            <input type="checkbox" id="ui-legato" onchange="updateActiveSynth('legato', this.checked ? 1 : 0)">
-                            <label for="ui-legato" style="line-height: 14px; font-size: 8px;">LEGATO</label>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="divider"></div>
-
-                <div class="col-wrap">
-                    <div class="control-area">
-                        <div class="knob-track" id="poly-knob" data-param="voices" data-val="5" data-min="1" data-max="8">
-                            <div class="knob-dial"><div class="knob-indicator"></div></div>
-                        </div>
-                    </div>
-                    <div class="control-label" style="display: flex; align-items: center; justify-content: center; gap: 3px; width: 150%; height: 10px; margin: 0; padding: 0;">
-                        <span>POLY</span><span id="poly-readout" style="color: var(--cyan);">5</span>
-                    </div>
-                </div>
-
-                <div class="col-wrap">
-                    <div class="control-area"><div class="knob-track" data-param="glide" data-min="0" data-max="0.5" data-val="0.1"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">GLIDE</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- MODULE 3: MODULATION -->
-        <div class="synth-module mod-module">
-            <div class="module-header mod-module-header">
-                <div class="mod-title">MODULATION</div>
-                <div class="mod-header-controls">
-                    <div class="target-selectors">
-                        <label><input type="radio" name="activeLfo" value="pitchLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'pitchEnv');"><div class="mod-led led-pitch" id="ind-lfo-pitchLfo"></div><span>PITCH</span></label>
-                        <label><input type="radio" name="activeLfo" value="filterLfo" onchange="switchModView('lfo', this.value); switchModView('env', 'filterEnv');"><div class="mod-led led-filter" id="ind-lfo-filterLfo"></div><span>FILTER</span></label>
-                        <label><input type="radio" name="activeLfo" value="ampLfo" checked onchange="switchModView('lfo', this.value); switchModView('env', 'ampEnv');"><div class="mod-led led-amp" id="ind-lfo-ampLfo"></div><span>AMP</span></label>
-                    </div>
-                    
-                    <!-- ENV TIME TOGGLE -->
-                    <div class="pill-toggle env-time-toggle" style="width: 50px; height: 14px; flex-shrink: 0;">
-                        <input type="radio" id="env-time-norm" name="envTimeMode" value="norm" checked onchange="window.updateEnvTimeMode(this.value)">
-                        <label for="env-time-norm" style="line-height: 14px; font-size: 8px;">NRM</label>
-                        <input type="radio" id="env-time-ext" name="envTimeMode" value="ext" onchange="window.updateEnvTimeMode(this.value)">
-                        <label for="env-time-ext" style="line-height: 14px; font-size: 8px;">EXT</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="control-row">
-                <div class="col-wrap" style="width: 55px;">
-                    <div class="control-area">
-                        <div class="stacked-config">
-                            <div class="pill-toggle" style="margin-bottom: 2px;">
-                                <input type="radio" id="rate-lo" name="lfoRateMode" value="lo" checked onchange="window.updateLfoRateMode(this.value)">
-                                <label for="rate-lo">LO</label>
-                                <input type="radio" id="rate-hi" name="lfoRateMode" value="hi" onchange="window.updateLfoRateMode(this.value)">
-                                <label for="rate-hi">HI</label>
-                            </div>
-                            <select id="ui-lfo-shape" class="pill-select" onchange="updateNestedSynth('lfo', 'shape', this.value)">
-                                <option value="sine">Sine</option><option value="square">Square</option><option value="triangle">Tri</option>
-                                <option value="sawtooth">Up</option><option value="rampdown">Down</option><option value="random">S&H</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="control-label">SHAPE</div>
-                </div>
-
-                <div class="col-wrap">
-                    <div class="control-area"><div class="knob-track" data-param="rate" data-group="lfo" data-min="0.01" data-max="20" data-val="2.0" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">RATE</div>
-                </div>
-
-                <div class="col-wrap">
-                    <div class="control-area"><div class="knob-track" data-param="depth" data-group="lfo" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">DPTH</div>
-                </div>
-
-                <div class="divider"></div>
-
-                <div class="adsr-group">
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-atk" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'atk', this.value)"></div></div><div class="control-label">A</div></div>
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-dec" min="0.01" max="2" step="0.01" oninput="updateNestedSynth('env', 'dec', this.value)"></div></div><div class="control-label">D</div></div>
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-sus" min="0" max="1" step="0.01" oninput="updateNestedSynth('env', 'sus', this.value)"></div></div><div class="control-label">S</div></div>
-                    <div class="col-wrap"><div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-env-rel" min="0.01" max="5" step="0.01" oninput="updateNestedSynth('env', 'rel', this.value)"></div></div><div class="control-label">R</div></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- MODULE 4: FILTER & EFFECTS -->
-        <div class="synth-module fx-module">
-            <div class="module-header">
-                <div class="fx-title"><span style="color: var(--green);">FILTER</span></div>
-                <div class="target-selectors" style="gap: 24px;">
-                    <label><input type="radio" name="activeFx" value="drv" checked onchange="switchModView('fx', this.value)"><div class="mod-led led-pitch" id="ind-fx-drv"></div><span>DRV</span></label>
-                    <label><input type="radio" name="activeFx" value="dly" onchange="switchModView('fx', this.value)"><div class="mod-led led-filter" id="ind-fx-dly"></div><span>DLY</span></label>
-                    <label><input type="radio" name="activeFx" value="rev" onchange="switchModView('fx', this.value)"><div class="mod-led led-amp" id="ind-fx-rev"></div><span>REV</span></label>
-                </div>
-            </div>
-
-            <div class="control-row">
-                <div class="col-wrap fx-filter-knob">
-                    <div class="control-area"><div class="knob-track" data-param="cutoff" data-group="filter" data-min="100" data-max="10000" data-val="2000" data-log="true"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label" style="color: var(--green);">CUTOFF</div>
-                </div>
-
-                <div class="col-wrap fx-filter-knob">
-                    <div class="control-area"><div class="knob-track" data-param="res" data-group="filter" data-min="0" data-max="20" data-val="6"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label" style="color: var(--green);">RES</div>
-                </div>
-
-                <div class="divider"></div>
-
-                <div class="col-wrap fx-dynamic-knob">
-                    <div class="control-area"><div class="knob-track" id="fx-send-knob" data-param="drv" data-group="fx" data-min="0" data-max="1" data-val="0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">SEND</div>
-                </div>
-                
-                <!-- DRV Controls -->
-                <div class="col-wrap fx-dynamic-knob fx-params fx-drv-params">
-                    <div class="control-area"><div class="knob-track" data-param="drvGrit" data-group="fx" data-min="0" data-max="100" data-val="10"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">GRIT</div>
-                </div>
-                <div class="col-wrap fx-dynamic-knob fx-params fx-drv-params">
-                    <div class="control-area"><div class="knob-track" data-param="drvTone" data-group="fx" data-min="100" data-max="10000" data-log="true" data-val="2000"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">TONE</div>
-                </div>
-                <div class="col-wrap fx-params fx-drv-params">
-                    <div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-fx-drv-lvl" min="0" max="1" step="0.01" value="1.0" oninput="updateNestedSynth('fx', 'drvLvl', this.value)"></div></div>
-                    <div class="control-label">LVL</div>
-                </div>
-
-                <!-- DLY Controls -->
-                <div class="col-wrap fx-dynamic-knob fx-params fx-dly-params" style="display: none;">
-                    <div class="control-area"><div class="knob-track" data-param="time" data-group="globalFx.dly" data-min="0.01" data-max="10.0" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">TIME</div>
-                </div>
-                <div class="col-wrap fx-dynamic-knob fx-params fx-dly-params" style="display: none;">
-                    <div class="control-area"><div class="knob-track" data-param="feedback" data-group="globalFx.dly" data-min="0" data-max="0.95" data-val="0.5"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">FDBK</div>
-                </div>
-                <div class="col-wrap fx-params fx-dly-params" style="display: none;">
-                    <div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-fx-torev" min="0" max="1" step="0.01" value="0.2" oninput="updateNestedSynth('globalFx.dly', 'toRev', this.value)"></div></div>
-                    <div class="control-label">>REV</div>
-                </div>
-                
-                <!-- REV Controls -->
-                <div class="col-wrap fx-dynamic-knob fx-params fx-rev-params" style="display: none;">
-                    <div class="control-area"><div class="knob-track" data-param="size" data-group="globalFx.rev" data-min="0.1" data-max="8.0" data-val="2.0"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">SIZE</div>
-                </div>
-                <div class="col-wrap fx-dynamic-knob fx-params fx-rev-params" style="display: none;">
-                    <div class="control-area"><div class="knob-track" data-param="damp" data-group="globalFx.rev" data-min="500" data-max="15000" data-log="true" data-val="3000"><div class="knob-dial"><div class="knob-indicator"></div></div></div></div>
-                    <div class="control-label">DAMP</div>
-                </div>
-                <div class="col-wrap fx-params fx-rev-params" style="display: none;">
-                    <div class="control-area"><div class="v-slider-container"><input type="range" class="v-slider" id="ui-fx-rev-hpf" min="20" max="2000" step="1" value="100" oninput="updateNestedSynth('globalFx.rev', 'hpf', this.value)"></div></div>
-                    <div class="control-label">HPF</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 4-CHANNEL VISUALIZER DASHBOARD -->
-<div id="dashboard"></div>
-
-<!-- Core Engine Scripts (Pure Vanilla, Zero Compiler/Build Step) -->
-<script src="js/globals.js"></script>
-<script src="js/audioEngine.js"></script>
-<script src="js/uiController.js"></script>
-<script src="js/visualizer.js"></script>
-<script src="js/bleMidi.js"></script>
-<script src="js/dataStreamer.js"></script>
-<script src="js/streamPortalUI.js"></script>
-<script src="js/pwa.js"></script>
-<script src="js/main.js"></script>
+<!-- Core Engine Scripts (100% Pure Vanilla HTML/CSS/JS for Static GitHub Pages Deployment) -->
+<script src="./js/syncCore.js"></script>
+<script src="./js/globals.js"></script>
+<script src="./js/audioEngine.js"></script>
+<script src="./js/uiController.js"></script>
+<script src="./js/visualizer.js"></script>
+<script src="./js/bleMidi.js"></script>
+<script src="./js/usbSerial.js"></script>
+<script src="./js/mqttFeeds.js"></script>
+<script src="./js/dataStreamer.js"></script>
+<script src="./js/streamPortalUI.js"></script>
+<script src="./js/pwa.js"></script>
+<script src="./js/main.js"></script>
+<script src="./js/flasher.js"></script>
 
 <script>
-    // Auto-close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.dropdown-widget')) {
             document.querySelectorAll('.dropdown-widget.show').forEach(w => w.classList.remove('show'));
+        }
+        if (!e.target.closest('.hud-settings-wrapper')) {
+            document.querySelectorAll('.hud-settings-wrapper.is-open').forEach(w => w.classList.remove('is-open'));
         }
     });
 </script>
