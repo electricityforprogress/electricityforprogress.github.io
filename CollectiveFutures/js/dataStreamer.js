@@ -1253,17 +1253,17 @@
             let recommendedWindow = 40;
             let recommendedZoom = 500;
 
-            if (N < 250) {
-                recommendedWindow = Math.max(10, Math.round(N / 8));
+            if (N < 160) {
+                recommendedWindow = Math.max(10, Math.min(40, Math.round(N / 4)));
                 recommendedZoom = Math.min(250, Math.max(10, N));
             } else if (N < 1500) {
-                recommendedWindow = Math.max(20, Math.min(50, Math.round(N / 25)));
+                recommendedWindow = 40;
                 recommendedZoom = Math.min(500, Math.round(N * 0.7));
             } else if (N < 8000) {
-                recommendedWindow = Math.max(40, Math.min(90, Math.round(N / 80)));
+                recommendedWindow = 40;
                 recommendedZoom = Math.min(2000, Math.round(N * 0.4));
             } else {
-                recommendedWindow = Math.max(60, Math.min(180, Math.round(N / 120)));
+                recommendedWindow = 40;
                 recommendedZoom = Math.min(8000, Math.round(N * 0.25));
             }
 
@@ -1389,30 +1389,41 @@
 
             // 3. Data Point candidate
             let valueCols = [];
+            const helperColRegex = /^(channel|ch|note_event|note|midi_note|velocity|vel|duration|dur|param_attr|param_value)$/i;
+            const rawCounterRegex = /^(raw_ticks|ticks|pulse_ticks)$/i;
             columns.forEach(col => {
                 if (col === timestampCol || col === identifierCol) return;
                 const s = colStats[col];
                 let score = 0;
-                const lower = col.toLowerCase();
+                const lower = col.toLowerCase().trim();
+
+                if (helperColRegex.test(lower)) return;
 
                 if (s.numRatio > 0.7) score += 40;
-                if (/(val|value|conductance|admittance|us|reading|signal|resist|voltage|volt|amp|temp|hum|flux|raw|ec|bio|metric)/i.test(lower)) score += 50;
-                if (s.variance > 0.001) score += 20;
+                if (/(conductance|admittance|_us$|_µs$|biometric_us|gsr|eda)/i.test(lower)) score += 75;
+                else if (/(val|value|reading|signal|resist|voltage|volt|amp|temp|hum|flux|ec|bio|metric|kpa|dps|bpm|price|index)/i.test(lower)) score += 55;
+                else if (rawCounterRegex.test(lower)) score -= 20;
+                else if (/(raw)/i.test(lower)) score += 25;
+
+                if (s.variance > 0.00001) score += 20;
                 if (!s.isMonotonic) score += 10;
 
-                if (score > 30) {
-                    valueCols.push({ col, score, variance: s.variance });
+                if (score > 20) {
+                    valueCols.push({ col, score, variance: s.variance, isRawCounter: rawCounterRegex.test(lower) });
                 }
             });
 
-            valueCols.sort((a, b) => b.score - a.score || b.variance - a.variance);
-            const primaryValueCol = valueCols.length > 0 ? valueCols[0].col : (columns.find(c => c !== timestampCol && c !== identifierCol) || columns[0]);
+            valueCols.sort((a, b) => {
+                if (a.isRawCounter !== b.isRawCounter) return a.isRawCounter ? 1 : -1;
+                return (b.score - a.score) || (b.variance - a.variance);
+            });
+            const primaryValueCol = valueCols.length > 0 ? valueCols[0].col : (columns.find(c => c !== timestampCol && c !== identifierCol && !helperColRegex.test(c)) || columns[0]);
 
             return {
                 timestampCol,
                 identifierCol,
                 primaryValueCol,
-                detectedValueCols: valueCols.map(v => v.col),
+                detectedValueCols: valueCols.filter(v => !v.isRawCounter || valueCols.length === 1).map(v => v.col),
                 sensorList: identifierCol ? colStats[identifierCol].uniqueValuesList : [],
                 colStats
             };
@@ -1465,6 +1476,41 @@
                 }
             }
 
+            const applySafeChannelWindowAndZoom = (ch, rowCount) => {
+                if (config.autoApplyWindow === false) return;
+                if (window.synthChannels && window.synthChannels[ch] && window.synthChannels[ch].params) {
+                    const curWin = Math.round(Number(window.synthChannels[ch].params.sampleSize) || 40);
+                    // Only shrink window if the dataset itself is shorter than 40 samples, OR clamp back to 40
+                    // if a legacy session had left sampleSize > 100. Never inflate hardware's 40-sample window!
+                    let nextWin = curWin;
+                    if (rowCount > 0 && rowCount < 40) {
+                        nextWin = Math.max(10, Math.min(curWin, Math.round(rowCount / 2)));
+                    } else if (curWin > 100) {
+                        nextWin = 40;
+                    }
+                    if (nextWin !== curWin) {
+                        window.synthChannels[ch].params.sampleSize = nextWin;
+                        const miniW = document.getElementById(`ch-window-${ch}`);
+                        const miniWV = document.getElementById(`ch-val-window-${ch}`);
+                        if (miniW) miniW.value = nextWin;
+                        if (miniWV) miniWV.innerText = nextWin;
+                    }
+                }
+                if (window.chData && window.chData[ch] && window.chData[ch].config) {
+                    window.chData[ch].config.zoom = recommendedZoom;
+                }
+            };
+
+            const resolveRowRecordValue = (rawVal, rawTicks, isBio) => {
+                if (Core && typeof Core.resolveBioRecordValue === 'function') {
+                    return Core.resolveBioRecordValue(rawVal, rawTicks, isBio, false);
+                }
+                if (isBio && rawTicks !== null && rawTicks !== undefined && rawTicks !== '' && Number(rawTicks) > 0) {
+                    return Math.max(0.1, 10000000 / Number(rawTicks));
+                }
+                return rawVal;
+            };
+
             if (mode === 'single_channel') {
                 const targetCh = Math.max(0, Math.min(3, config.targetChannel !== undefined ? config.targetChannel : 0));
                 const valCol = config.valueCol || this.loadedFile.guesses.primaryValueCol;
@@ -1474,15 +1520,18 @@
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
                     const numVal = parseFloat(row[valCol]);
-                    if (!isNaN(numVal) && isFinite(numVal)) {
+                    const rawTicks = row['raw_ticks'] ?? row['ticks'] ?? null;
+                    const hasTicks = metricMeta.isBiodata && rawTicks !== null && rawTicks !== '' && Number(rawTicks) > 0;
+                    if ((!isNaN(numVal) && isFinite(numVal)) || hasTicks) {
                         const noteRaw = row['note_event'] ?? row['note'] ?? row['midi_note'] ?? null;
                         const velRaw = row['velocity'] ?? row['vel'] ?? null;
+                        const resolvedVal = resolveRowRecordValue(numVal, rawTicks, metricMeta.isBiodata !== false);
                         channelData.push({
-                            value: numVal,
+                            value: resolvedVal,
                             rawTime: timeCol && row[timeCol] !== undefined ? row[timeCol] : null,
                             note: (noteRaw !== null && noteRaw !== undefined && noteRaw !== '' && !isNaN(parseInt(noteRaw))) ? parseInt(noteRaw) : null,
                             velocity: (velRaw !== null && velRaw !== undefined && velRaw !== '' && !isNaN(parseInt(velRaw))) ? parseInt(velRaw) : null,
-                            ticks: row['raw_ticks'] || row['ticks'] || null,
+                            ticks: rawTicks,
                             index: i
                         });
                     }
@@ -1490,21 +1539,27 @@
 
                 const hasNotes = channelData.some(pt => pt.note !== null);
 
+                const curP = (window.synthChannels && window.synthChannels[targetCh] && window.synthChannels[targetCh].params)
+                    ? window.synthChannels[targetCh].params
+                    : (window.defaultParams || {});
+
                 this.channelFeeds[targetCh] = {
                     data: channelData,
                     index: 0,
+                    hasProcessedInitial: false,
+                    initialWaveSeeded: false,
+                    lastNoteTime: 0,
+                    lastTriggerTMs: -Infinity,
                     label: `${name} (${valCol})`,
                     sourceFile: name,
                     hasRecordedNotes: hasNotes,
+                    recordedThreshold: Number(curP.threshold) || 2.0,
+                    recordedDensity: curP.density !== undefined ? Number(curP.density) : 100,
+                    recordedDurMult: Number(curP.durMult) || 1.0,
                     metricMeta
                 };
 
-                if (config.autoApplyWindow !== false && window.synthChannels && window.synthChannels[targetCh]) {
-                    window.synthChannels[targetCh].params.sampleSize = recommendedWindow;
-                    if (window.chData && window.chData[targetCh] && window.chData[targetCh].config) {
-                        window.chData[targetCh].config.zoom = recommendedZoom;
-                    }
-                }
+                applySafeChannelWindowAndZoom(targetCh, channelData.length);
             } 
             else if (mode === 'multi_sensor_id') {
                 const idCol = config.identifierCol || this.loadedFile.guesses.identifierCol;
@@ -1547,17 +1602,23 @@
 
                     if (targetCh !== undefined && targetCh >= 0 && targetCh < 4) {
                         const numVal = parseFloat(row[valCol]);
-                        if (!isNaN(numVal) && isFinite(numVal)) {
+                        const rawTicks = row['raw_ticks'] ?? row['ticks'] ?? null;
+                        const isMidiRow = Boolean(String(row[idCol] || '').endsWith('_MIDI'));
+                        const isBio = baseMetricMeta.isBiodata !== false && !isMidiRow;
+                        const hasTicks = isBio && rawTicks !== null && rawTicks !== '' && Number(rawTicks) > 0;
+                        if ((!isNaN(numVal) && isFinite(numVal)) || hasTicks) {
                             const noteRaw = row['note_event'] ?? row['note'] ?? row['midi_note'] ?? null;
                             const velRaw = row['velocity'] ?? row['vel'] ?? null;
+                            const resolvedVal = resolveRowRecordValue(numVal, rawTicks, isBio);
                             partitioned[targetCh].push({
-                                value: numVal,
+                                value: resolvedVal,
                                 rawTime: timeCol && row[timeCol] !== undefined ? row[timeCol] : null,
                                 id: idCol ? String(row[idCol]) : `CH_${targetCh + 1}`,
                                 note: (noteRaw !== null && noteRaw !== undefined && noteRaw !== '' && !isNaN(parseInt(noteRaw))) ? parseInt(noteRaw) : null,
                                 velocity: (velRaw !== null && velRaw !== undefined && velRaw !== '' && !isNaN(parseInt(velRaw))) ? parseInt(velRaw) : null,
-                                ticks: row['raw_ticks'] || row['ticks'] || null,
-                                index: i
+                                ticks: rawTicks,
+                                isMidiOnly: isMidiRow,
+                                index: partitioned[targetCh].length
                             });
                         }
                     }
@@ -1567,24 +1628,33 @@
                     if (partitioned[ch].length > 0) {
                         const matchedSensor = Object.keys(sensorMap).find(s => sensorMap[s] === ch) || `CH ${ch+1}`;
                         const hasNotes = partitioned[ch].some(pt => pt.note !== null);
+                        const isMidiOnly = partitioned[ch].every(pt => Boolean(pt.isMidiOnly));
                         const chHeading = (!baseMetricMeta.isBiodata && matchedSensor)
                             ? String(matchedSensor).replace(/[_\s-]+/g, ' ').trim().toUpperCase().slice(0, 16)
                             : baseMetricMeta.heading;
+                        const curP = (window.synthChannels && window.synthChannels[ch] && window.synthChannels[ch].params)
+                            ? window.synthChannels[ch].params
+                            : (window.defaultParams || {});
                         this.channelFeeds[ch] = {
                             data: partitioned[ch],
                             index: 0,
+                            hasProcessedInitial: false,
+                            initialWaveSeeded: false,
+                            lastNoteTime: 0,
+                            lastTriggerTMs: -Infinity,
                             label: `${matchedSensor} (${valCol})`,
                             sourceFile: name,
                             hasRecordedNotes: hasNotes,
-                            metricMeta: Object.assign({}, baseMetricMeta, { heading: chHeading || baseMetricMeta.heading })
+                            recordedThreshold: Number(curP.threshold) || 2.0,
+                            recordedDensity: curP.density !== undefined ? Number(curP.density) : 100,
+                            recordedDurMult: Number(curP.durMult) || 1.0,
+                            isMidiOnly,
+                            metricMeta: isMidiOnly
+                                ? { isBiodata: false, unit: '', heading: 'MIDI EVENTS' }
+                                : Object.assign({}, baseMetricMeta, { heading: chHeading || baseMetricMeta.heading })
                         };
 
-                        if (config.autoApplyWindow !== false && window.synthChannels && window.synthChannels[ch]) {
-                            window.synthChannels[ch].params.sampleSize = recommendedWindow;
-                            if (window.chData && window.chData[ch] && window.chData[ch].config) {
-                                window.chData[ch].config.zoom = recommendedZoom;
-                            }
-                        }
+                        applySafeChannelWindowAndZoom(ch, partitioned[ch].length);
                     }
                 }
             }
@@ -1606,36 +1676,44 @@
                         for (let i = 0; i < rows.length; i++) {
                             const row = rows[i];
                             const numVal = parseFloat(row[targetCol]);
-                            if (!isNaN(numVal) && isFinite(numVal)) {
+                            const rawTicks = row['raw_ticks'] ?? row['ticks'] ?? null;
+                            const hasTicks = metricMeta.isBiodata && rawTicks !== null && rawTicks !== '' && Number(rawTicks) > 0;
+                            if ((!isNaN(numVal) && isFinite(numVal)) || hasTicks) {
                                 const noteRaw = row['note_event'] ?? row['note'] ?? row['midi_note'] ?? null;
                                 const velRaw = row['velocity'] ?? row['vel'] ?? null;
+                                const resolvedVal = resolveRowRecordValue(numVal, rawTicks, metricMeta.isBiodata !== false);
                                 channelData.push({
-                                    value: numVal,
+                                    value: resolvedVal,
                                     rawTime: timeCol && row[timeCol] !== undefined ? row[timeCol] : null,
                                     note: (noteRaw !== null && noteRaw !== undefined && noteRaw !== '' && !isNaN(parseInt(noteRaw))) ? parseInt(noteRaw) : null,
                                     velocity: (velRaw !== null && velRaw !== undefined && velRaw !== '' && !isNaN(parseInt(velRaw))) ? parseInt(velRaw) : null,
-                                    ticks: row['raw_ticks'] || row['ticks'] || null,
+                                    ticks: rawTicks,
                                     index: i
                                 });
                             }
                         }
 
                         const hasNotes = channelData.some(pt => pt.note !== null);
+                        const curP = (window.synthChannels && window.synthChannels[ch] && window.synthChannels[ch].params)
+                            ? window.synthChannels[ch].params
+                            : (window.defaultParams || {});
                         this.channelFeeds[ch] = {
                             data: channelData,
                             index: 0,
+                            hasProcessedInitial: false,
+                            initialWaveSeeded: false,
+                            lastNoteTime: 0,
+                            lastTriggerTMs: -Infinity,
                             label: `${name} [${targetCol}]`,
                             sourceFile: name,
                             hasRecordedNotes: hasNotes,
+                            recordedThreshold: Number(curP.threshold) || 2.0,
+                            recordedDensity: curP.density !== undefined ? Number(curP.density) : 100,
+                            recordedDurMult: Number(curP.durMult) || 1.0,
                             metricMeta
                         };
 
-                        if (config.autoApplyWindow !== false && window.synthChannels && window.synthChannels[ch]) {
-                            window.synthChannels[ch].params.sampleSize = recommendedWindow;
-                            if (window.chData && window.chData[ch] && window.chData[ch].config) {
-                                window.chData[ch].config.zoom = recommendedZoom;
-                            }
-                        }
+                        applySafeChannelWindowAndZoom(ch, channelData.length);
                     }
                 });
             }
@@ -1743,48 +1821,36 @@
             this.playbackElapsedMs = 0;
             this.currentIndex = 0;
 
-            // Pre-warm visualizers with clean bounds & metric metadata
+            // Initialize channel visualizers with clean bounds & preserve visual flow when compatible
             for (let ch = 0; ch < 4; ch++) {
                 const feed = this.channelFeeds[ch];
                 const chVisual = window.chData ? window.chData[ch] : null;
                 if (feed && feed.data.length > 0 && chVisual) {
                     const isBio = !feed.metricMeta || feed.metricMeta.isBiodata !== false;
-                    chVisual.metricMeta = feed.metricMeta || { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                    const isMidiOnly = Boolean(feed.isMidiOnly);
+                    const nextMeta = feed.metricMeta || { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                    const prevMeta = chVisual.metricMeta || null;
+                    const hasExistingWave = Array.isArray(chVisual.waveBuffer) && chVisual.waveBuffer.length > 1;
+                    const domainChanged = Boolean(
+                        prevMeta &&
+                        ((prevMeta.isBiodata !== false) !== (nextMeta.isBiodata !== false) || (prevMeta.unit || '') !== (nextMeta.unit || ''))
+                    );
+                    const shouldResetVisuals = !hasExistingWave || domainChanged;
+
+                    chVisual.metricMeta = nextMeta;
                     let dMin = Infinity, dMax = -Infinity;
                     for (let k = 0; k < feed.data.length; k++) {
-                        let val = feed.data[k].value;
-                        if (isBio) {
-                            val = Math.abs(val);
-                            if (val < 0.1) val = 0.1;
-                            if (val > 10000) val = 10000000 / val;
-                        }
+                        const val = (Core && typeof Core.resolveBioRecordValue === 'function')
+                            ? Core.resolveBioRecordValue(feed.data[k].value, feed.data[k].ticks, isBio, isMidiOnly)
+                            : feed.data[k].value;
                         if (val < dMin) dMin = val;
                         if (val > dMax) dMax = val;
                     }
-                    if (isFinite(dMin) && isFinite(dMax) && dMax > dMin) {
+                    if (isFinite(dMin) && isFinite(dMax) && dMax > dMin && shouldResetVisuals) {
                         chVisual.bounds = { min: dMin, max: dMax };
                         chVisual.boundsNeedSnap = true;
                     }
-                    chVisual.waveBuffer = [];
-                    chVisual.vizBuffer = [];
-                    chVisual.history = [];
-                    chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: Date.now() };
-
-                    const preWarmCount = Math.min(25, feed.data.length);
-                    for (let p = 0; p < preWarmCount; p++) {
-                        let rVal = feed.data[p].value;
-                        let ticks = 0;
-                        if (isBio) {
-                            rVal = Math.abs(rVal);
-                            if (rVal < 0.1) rVal = 0.1;
-                            if (rVal > 10000) rVal = 10000000 / rVal;
-                            ticks = feed.data[p].ticks || Math.round(10000000 / rVal);
-                        } else {
-                            ticks = Number(feed.data[p].ticks) || 0;
-                        }
-                        chVisual.waveBuffer.push({ r: rVal, ticks: ticks, evt: 0 });
-                        chVisual.vizBuffer.push(rVal);
-                    }
+                    this.seedChannelWindowAtIndex(ch, 0, shouldResetVisuals);
                 } else if (chVisual && (mode === 'multi_sensor_id' || mode === 'multi_value_cols')) {
                     chVisual.metricMeta = { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
                     chVisual.waveBuffer = [];
@@ -1793,6 +1859,7 @@
                     chVisual.lastMaxDev = 0;
                     chVisual.lastStdevi = 1.0;
                     chVisual.rawStdev = 0;
+                    chVisual.vizDeltaPct = 0;
                 }
             }
 
@@ -1812,7 +1879,7 @@
             if (this.totalRecords === 0) return;
 
             if (this.totalDurationMs > 0 && this.playbackElapsedMs >= this.totalDurationMs) {
-                this.rewind();
+                this.rewind({ preserveVisualFlow: true });
             }
 
             if (window.audioCtx && window.audioCtx.state === 'suspended') {
@@ -1839,33 +1906,88 @@
             this.emitChange('pause');
         }
 
-        stop() {
+        stop(opts = {}) {
             this.isPlaying = false;
             this.isPaused = false;
             if (this.timerId) {
                 cancelAnimationFrame(this.timerId);
                 this.timerId = null;
             }
-            this.rewind();
+            this.rewind({ preserveVisualFlow: opts.preserveVisualFlow !== false });
             this.emitChange('stop');
         }
 
-        rewind() {
-            this.playbackElapsedMs = 0;
+        /**
+         * Cleanly rebuilds a channel's rolling `vizBuffer` up to `targetIdx` (`[start .. targetIdx]`)
+         * without wiping `waveBuffer` or `history` during loop wraps, rewinds, or live-to-take transitions
+         * so the oscilloscope and history ribbon keep flowing continuously like a live hardware stream.
+         */
+        seedChannelWindowAtIndex(chIdx, targetIdx = 0, resetWaveAndHistory = false, opts = {}) {
+            const feed = this.channelFeeds[chIdx];
+            const chVisual = window.chData ? window.chData[chIdx] : null;
+            if (!feed || !Array.isArray(feed.data) || feed.data.length === 0 || !chVisual) return;
+
+            const safeIdx = Math.max(0, Math.min(feed.data.length - 1, targetIdx));
+            const isLoopWrap = Boolean(opts && opts.isLoopWrap);
+            feed.index = safeIdx;
+            feed.hasProcessedInitial = (safeIdx > 0);
+            feed.initialWaveSeeded = false;
+            feed.lastNoteTime = 0;
+            feed.lastTriggerTMs = -Infinity;
+
+            const synthCh = window.synthChannels ? window.synthChannels[chIdx] : null;
+            const p = synthCh ? synthCh.params : (window.defaultParams || {});
+            const sampleWindow = Math.max(2, Math.min(2000, Math.round(Number(p.sampleSize) || 40)));
+
+            chVisual.vizBuffer = [];
+            if (resetWaveAndHistory) {
+                chVisual.vizDeltaPct = 0;
+                if (chVisual.peak) {
+                    chVisual.peak.val = 0;
+                    chVisual.peak.vel = 0;
+                }
+                chVisual.waveBuffer = [];
+                chVisual.history = [];
+                chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: Date.now() };
+            }
+
+            if (isLoopWrap && safeIdx === 0) {
+                // On seamless loop wrap, let runStreamLoop stream data[0..N] directly without touching waveBuffer/history
+                return;
+            }
+
+            const hasExistingWave = Array.isArray(chVisual.waveBuffer) && chVisual.waveBuffer.length > 0;
+            const startIdx = Math.max(0, safeIdx - sampleWindow + 1);
+            for (let k = startIdx; k <= safeIdx; k++) {
+                const shouldPushWave = (k === safeIdx) && (resetWaveAndHistory || !hasExistingWave);
+                this.processChannelRecord(chIdx, feed.data[k], {
+                    silent: true,
+                    skipWave: !shouldPushWave
+                });
+                if (k === 0 && safeIdx === 0 && shouldPushWave) {
+                    feed.initialWaveSeeded = true;
+                }
+            }
+        }
+
+        rewind(opts = {}) {
+            const preserveVisualFlow = opts.preserveVisualFlow !== false;
+            const isLoopWrap = Boolean(opts.isLoopWrap);
+            if (!opts.keepElapsed) {
+                this.playbackElapsedMs = 0;
+            }
             this.currentIndex = 0;
             if (this.followAutomation && this.automationEvents.length > 0) {
-                this.reconcileAutomationToTime(0);
+                this.reconcileAutomationToTime(this.playbackElapsedMs || 0);
             } else {
                 this.automationCursor = 0;
             }
             for (let i = 0; i < 4; i++) {
-                if (this.channelFeeds[i]) {
-                    this.channelFeeds[i].index = 0;
-                    this.channelFeeds[i].lastNoteTime = 0;
-                    this.channelFeeds[i].lastCandidateTime = 0;
-                    if (this.channelFeeds[i].data.length > 0) {
-                        this.processChannelRecord(i, this.channelFeeds[i].data[0], { silent: true });
-                    }
+                if (this.channelFeeds[i] && this.channelFeeds[i].data.length > 0) {
+                    const chVisual = window.chData ? window.chData[i] : null;
+                    const hasWave = Boolean(chVisual && Array.isArray(chVisual.waveBuffer) && chVisual.waveBuffer.length > 0);
+                    const resetVisuals = !preserveVisualFlow || !hasWave;
+                    this.seedChannelWindowAtIndex(i, 0, resetVisuals, { isLoopWrap });
                 }
             }
             this.emitChange('rewind');
@@ -1905,8 +2027,7 @@
                             break;
                         }
                     }
-                    feed.index = targetIdx;
-                    this.processChannelRecord(ch, feed.data[targetIdx], { silent: true });
+                    this.seedChannelWindowAtIndex(ch, targetIdx, false);
                 }
             }
             this.emitChange('seek');
@@ -2071,13 +2192,24 @@
             if (this.playbackElapsedMs >= this.totalDurationMs) {
                 if (this.isLooping) {
                     try {
-                        this.rewind();
+                        // Flush any remaining tail samples before wrapping so end-of-loop events are never clipped
+                        for (let chIdx = 0; chIdx < 4; chIdx++) {
+                            const tailFeed = this.channelFeeds[chIdx];
+                            if (!tailFeed || tailFeed.data.length === 0) continue;
+                            let tailSteps = 0;
+                            while (tailFeed.index < tailFeed.data.length - 1 && tailSteps < 120) {
+                                tailFeed.index++;
+                                tailSteps++;
+                                try { this.processChannelRecord(chIdx, tailFeed.data[tailFeed.index]); } catch (e) {}
+                            }
+                        }
+                        this.playbackElapsedMs = this.totalDurationMs > 0
+                            ? (this.playbackElapsedMs % this.totalDurationMs)
+                            : 0;
+                        this.rewind({ preserveVisualFlow: true, keepElapsed: true, isLoopWrap: true });
                     } catch (err) {
-                        console.warn('[DataStreamer] Rewind error:', err);
+                        console.warn('[DataStreamer] Loop wrap error:', err);
                     }
-                    this.lastFrameTime = performance.now();
-                    this.timerId = requestAnimationFrame(() => this.runStreamLoop());
-                    return;
                 } else {
                     this.playbackElapsedMs = this.totalDurationMs;
                     this.pause();
@@ -2106,7 +2238,19 @@
                     if (!feed || feed.data.length === 0) continue;
 
                     let stepsThisFrame = 0;
-                    while (feed.index < feed.data.length - 1 && feed.data[feed.index + 1].tMs <= this.playbackElapsedMs && stepsThisFrame < 100) {
+                    if (feed.index === 0 && !feed.hasProcessedInitial && feed.data[0].tMs <= this.playbackElapsedMs) {
+                        feed.hasProcessedInitial = true;
+                        const skipFirstWave = Boolean(feed.initialWaveSeeded);
+                        feed.initialWaveSeeded = false;
+                        if (window.chData && window.chData[chIdx]) {
+                            window.chData[chIdx].vizBuffer = [];
+                        }
+                        stepsThisFrame++;
+                        try {
+                            this.processChannelRecord(chIdx, feed.data[0], { skipWave: skipFirstWave });
+                        } catch (recErr) {}
+                    }
+                    while (feed.index < feed.data.length - 1 && feed.data[feed.index + 1].tMs <= this.playbackElapsedMs && stepsThisFrame < 120) {
                         feed.index++;
                         stepsThisFrame++;
                         try {
@@ -2158,29 +2302,31 @@
 
         processChannelRecord(chIdx, record, opts = {}) {
             const CALIBRATION_FACTOR = 10000000;
+            const Core = window.BioQuadCore;
             const nowMs = Date.now();
             const silent = Boolean(opts && opts.silent);
+            const skipWave = Boolean(opts && opts.skipWave);
 
-            if (!record || record.value === undefined || record.value === null) return;
-
-            let rawVal = Number(record.value);
-            if (!isFinite(rawVal)) return;
+            if (!record || (record.value === undefined && record.ticks === undefined) || (record.value === null && record.ticks === null)) return;
 
             const feed = this.channelFeeds[chIdx];
             const metricMeta = (feed && feed.metricMeta) ? feed.metricMeta : { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
             const isBiodata = metricMeta.isBiodata !== false;
+            const isMidiOnly = Boolean((feed && feed.isMidiOnly) || record.isMidiOnly);
 
-            let rVal;
-            if (isBiodata) {
-                rVal = Math.abs(rawVal);
-                if (rVal < 0.1) rVal = 0.1;
-                if (rVal > 10000) {
-                    rVal = CALIBRATION_FACTOR / rVal;
-                }
-            } else {
-                // Uploaded raw data file: preserve exact signed & large/small datapoint values without 555-timer tick inversion
-                rVal = rawVal;
-            }
+            const rVal = (Core && typeof Core.resolveBioRecordValue === 'function')
+                ? Core.resolveBioRecordValue(record.value, record.ticks, isBiodata, isMidiOnly)
+                : (() => {
+                    const num = Number(record.value);
+                    if (!isBiodata || isMidiOnly) return isFinite(num) ? num : 0;
+                    if (record.ticks && Number(record.ticks) > 0) return Math.max(0.1, CALIBRATION_FACTOR / Number(record.ticks));
+                    if (!isFinite(num)) return 0.1;
+                    let v = Math.abs(num);
+                    if (v < 0.1) v = 0.1;
+                    if (v > 10000) v = CALIBRATION_FACTOR / v;
+                    return v;
+                })();
+            if (!isFinite(rVal)) return;
 
             const synthCh = window.synthChannels ? window.synthChannels[chIdx] : null;
             const p = synthCh ? synthCh.params : window.defaultParams;
@@ -2197,7 +2343,7 @@
             }
 
             const ticks = isBiodata
-                ? (record.ticks || Math.round(CALIBRATION_FACTOR / rVal))
+                ? (Number(record.ticks) > 0 ? Math.round(Number(record.ticks)) : Math.round(CALIBRATION_FACTOR / Math.max(0.1, rVal)))
                 : (Number(record.ticks) || 0);
 
             if (!silent && window.bioquadFeeds && window.bioquadFeeds.isPublishing) {
@@ -2217,70 +2363,84 @@
                     });
                 }
             }
-            
-            chVisual.acc.sum += rVal;
-            chVisual.acc.count++;
-            if (rVal < chVisual.acc.min) chVisual.acc.min = rVal;
-            if (rVal > chVisual.acc.max) chVisual.acc.max = rVal;
 
-            chVisual.waveBuffer.push({ r: rVal, ticks: ticks, evt: 0 });
-            chVisual.vizBuffer.push(rVal);
+            if (!skipWave) {
+                chVisual.acc.sum += rVal;
+                chVisual.acc.count++;
+                if (rVal < chVisual.acc.min) chVisual.acc.min = rVal;
+                if (rVal > chVisual.acc.max) chVisual.acc.max = rVal;
 
-            while (chVisual.waveBuffer.length > 120000) chVisual.waveBuffer.shift();
-            while (chVisual.vizBuffer.length > sampleWindow) chVisual.vizBuffer.shift();
+                chVisual.waveBuffer.push({ r: rVal, ticks: ticks, evt: 0 });
+                while (chVisual.waveBuffer.length > 120000) chVisual.waveBuffer.shift();
 
-            // 1-Second Historical Data Rollup
-            if (nowMs - chVisual.acc.lastSec >= 1000) {
-                if (!chVisual.history) chVisual.history = [];
-                if (chVisual.acc.count > 0) {
-                    chVisual.history.push({
-                        avg: chVisual.acc.sum / chVisual.acc.count,
-                        min: chVisual.acc.min,
-                        max: chVisual.acc.max
-                    });
+                // 1-Second Historical Data Rollup
+                if (nowMs - chVisual.acc.lastSec >= 1000) {
+                    if (!chVisual.history) chVisual.history = [];
+                    if (chVisual.acc.count > 0) {
+                        chVisual.history.push({
+                            avg: chVisual.acc.sum / chVisual.acc.count,
+                            min: chVisual.acc.min,
+                            max: chVisual.acc.max
+                        });
+                    }
+                    if (chVisual.history.length > 300) chVisual.history.shift();
+                    chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: nowMs };
                 }
-                if (chVisual.history.length > 300) chVisual.history.shift();
-                chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: nowMs };
             }
+
+            chVisual.vizBuffer.push(rVal);
+            while (chVisual.vizBuffer.length > sampleWindow) chVisual.vizBuffer.shift();
 
             if (chVisual.vizBuffer.length > 1) {
                 const vLen = chVisual.vizBuffer.length;
                 chVisual.slew = chVisual.vizBuffer[vLen - 1] - chVisual.vizBuffer[vLen - 2];
             }
 
-            // Rolling Mean and Standard Deviation
             const bufferLen = chVisual.vizBuffer.length;
-            let sum = 0, maxim = -Infinity, minim = Infinity;
-            for (let j = 0; j < bufferLen; j++) {
-                const v = chVisual.vizBuffer[j];
-                sum += v;
-                if (v > maxim) maxim = v;
-                if (v < minim) minim = v;
+            const threshold = Number(p.threshold) || 2.0;
+
+            const stats = (Core && typeof Core.evaluateBioSampleWindow === 'function')
+                ? Core.evaluateBioSampleWindow(chVisual.vizBuffer, rVal, threshold, isBiodata)
+                : (() => {
+                    let sum = 0, maxim = -Infinity, minim = Infinity;
+                    for (let j = 0; j < bufferLen; j++) {
+                        const v = chVisual.vizBuffer[j];
+                        sum += v;
+                        if (v > maxim) maxim = v;
+                        if (v < minim) minim = v;
+                    }
+                    const mean = bufferLen > 0 ? sum / bufferLen : rVal;
+                    let sumSqDev = 0, maxDev = 0;
+                    for (let j = 0; j < bufferLen; j++) {
+                        const dev = Math.abs(chVisual.vizBuffer[j] - mean);
+                        sumSqDev += dev * dev;
+                        if (dev > maxDev) maxDev = dev;
+                    }
+                    const rawStdev = bufferLen > 0 ? Math.sqrt(sumSqDev / bufferLen) : 0;
+                    const minStdDev = isBiodata ? Math.max(1e-5, Math.abs(mean) * 0.00005) : 1e-6;
+                    const sampleDev = Math.abs(rVal - mean);
+                    const isActive = rawStdev > minStdDev;
+                    const normalized = (threshold * rawStdev) > 0 ? (sampleDev / (threshold * rawStdev)) : 1.0;
+                    return {
+                        mean, minim, maxim, rawStdev, minStdDev, sampleDev, maxDev,
+                        meterStdevi: isActive ? rawStdev : minStdDev,
+                        meterMaxDev: isActive ? maxDev : 0,
+                        normPct: Math.max(1.0, Math.min(2.0, normalized)) - 1.0,
+                        isOverThreshold: isActive && (sampleDev > (threshold * rawStdev))
+                    };
+                })();
+
+            // Keep chVisual.lastMaxDev & lastStdevi synced in exact hardware deviation units for the Threshold VU meter
+            // (Avoid blanking meter during the first single-sample seed at a seamless loop seam)
+            if (bufferLen >= 2 || chVisual.lastStdevi === undefined || silent) {
+                chVisual.rawStdev = stats.rawStdev;
+                chVisual.lastStdevi = stats.meterStdevi;
+                chVisual.lastMaxDev = stats.meterMaxDev;
             }
-            const mean = bufferLen > 0 ? sum / bufferLen : rVal;
-
-            let sumSqDev = 0, maxDev = 0;
-            for (let j = 0; j < bufferLen; j++) {
-                const dev = Math.abs(chVisual.vizBuffer[j] - mean);
-                sumSqDev += dev * dev;
-                if (dev > maxDev) maxDev = dev;
-            }
-
-            const variance = bufferLen > 0 ? (sumSqDev / bufferLen) : 0;
-            const rawStdev = variance > 0 ? Math.sqrt(variance) : 0;
-            const stdevi = isBiodata
-                ? (rawStdev >= 0.1 ? rawStdev : 1.0)
-                : (rawStdev > 1e-6 ? rawStdev : 1.0);
-
-            // Keep chVisual.lastMaxDev & lastStdevi intact for the zero-parallax Threshold VU meter
-            chVisual.rawStdev = rawStdev;
-            chVisual.lastStdevi = stdevi;
-            chVisual.lastMaxDev = maxDev;
             chVisual.lastBlockTime = nowMs;
 
             if (silent) return;
 
-            const isMidiOnly = Boolean(feed && feed.isMidiOnly);
             const hasNote = record.note !== null && record.note !== undefined && record.note !== '' && !isNaN(parseInt(record.note));
 
             // 1. Pure MIDI-only recordings (zero raw conductance sensors): replay stored MIDI event
@@ -2302,71 +2462,106 @@
                 return;
             }
 
-            // 2. Real-time sonification from rolling window deviation (matches ESP32 biodata_quad.ino):
-            //    Tests CURRENT sample deviation against rolling window (abs(rVal - mean) > threshold * std_dev,
-            //    std_dev > abs(mean) * 0.005) with a 150ms refractory period so spikes never machine-gun re-trigger.
-            const threshold = p.threshold || 2.0;
-            const minStdDev = isBiodata
-                ? Math.max(0.015, mean * 0.005)
-                : Math.max(1e-5, Math.abs(mean) * 0.005);
-            const sampleDev = Math.abs(rVal - mean);
-            const isOverThreshold = (rawStdev > minStdDev) && (sampleDev > (threshold * rawStdev));
+            // 2. Unified Biodata & Telemetry Sonification:
+            //    - Evaluates rolling-window deviation (`stats.isOverThreshold`) identically to live hardware, AND
+            //    - Honors captured hardware BLE/USB transient notes (`hasNote`) that occurred between 100ms `tx_buffer`
+            //      decimation frames whenever `threshold` has not been raised above the recorded threshold (`recThresh + 0.15`),
+            //      sharing the exact same 150ms refractory lock so notes never double-fire while live Threshold/Scale/Synth edits work!
+            const dynamicHit = Boolean(stats.isOverThreshold && bufferLen >= Math.min(8, sampleWindow));
+            const recThresh = (feed && isFinite(feed.recordedThreshold)) ? feed.recordedThreshold : threshold;
+            const recDensity = (feed && isFinite(feed.recordedDensity) && feed.recordedDensity > 0) ? feed.recordedDensity : 100;
+            const recDurMult = (feed && isFinite(feed.recordedDurMult) && feed.recordedDurMult > 0) ? feed.recordedDurMult : 1.0;
+            const recordedHit = Boolean(!dynamicHit && hasNote && (threshold <= recThresh + 0.15));
 
-            if (isOverThreshold && bufferLen >= Math.min(10, sampleWindow)) {
-                const refractoryMs = Math.max(45, Math.round(150 / Math.max(1, this.playbackRate || 1)));
-                const pastRefractory = !feed || !feed.lastCandidateTime || (nowMs - feed.lastCandidateTime >= refractoryMs);
+            if (dynamicHit || recordedHit) {
+                const hasRecTMs = typeof record.tMs === 'number' && isFinite(record.tMs);
+                const wallRefractoryMs = Math.max(45, Math.round(150 / Math.max(1, this.playbackRate || 1)));
+                const pastRefractory = !feed || (
+                    hasRecTMs
+                        ? (!isFinite(feed.lastTriggerTMs) || (record.tMs - feed.lastTriggerTMs) > 150)
+                        : (!feed.lastNoteTime || (nowMs - feed.lastNoteTime) >= wallRefractoryMs)
+                );
                 if (!pastRefractory) return;
 
-                if (feed) feed.lastCandidateTime = nowMs;
-
-                const minN = p.minNote ?? 36;
-                const maxN = p.maxNote ?? 84;
-                const span = Math.max(isBiodata ? 0.5 : 1e-5, maxim - minim);
-                let normPitch = Math.max(0, Math.min(1, (rVal - minim) / span));
-
-                if (typeof window.applySpreadCurve === 'function') {
-                    normPitch = window.applySpreadCurve(normPitch, p.spread ?? 75);
+                const entropyUnit = (isBiodata && ticks > 0) ? ((ticks % 127) / 127) : Math.random();
+                let mapped;
+                if (recordedHit) {
+                    const minN = p.minNote ?? 0;
+                    const maxN = p.maxNote ?? 127;
+                    const rawRecNote = parseInt(record.note, 10);
+                    const scaledRec = (Core && typeof Core.scaleNote === 'function')
+                        ? Core.scaleNote(rawRecNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN)
+                        : (typeof window.scaleNote === 'function'
+                            ? window.scaleNote(rawRecNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN)
+                            : rawRecNote);
+                    const baseVel = (record.velocity !== null && record.velocity !== undefined && record.velocity !== '' && !isNaN(parseInt(record.velocity, 10)))
+                        ? parseInt(record.velocity, 10)
+                        : 82;
+                    const baseDur = (record.duration !== null && record.duration !== undefined && record.duration !== '' && !isNaN(parseInt(record.duration, 10)))
+                        ? Math.round(parseInt(record.duration, 10) * ((Number(p.durMult) || 1.0) / recDurMult))
+                        : Math.round((160 + entropyUnit * 300) * (Number(p.durMult) || 1.0));
+                    mapped = {
+                        note: Math.max(0, Math.min(127, Math.round(isFinite(scaledRec) ? scaledRec : rawRecNote))),
+                        velocity: Math.max(1, Math.min(127, baseVel)),
+                        duration: Math.max(35, baseDur)
+                    };
+                } else {
+                    mapped = (Core && typeof Core.sonifyBioSample === 'function')
+                        ? Core.sonifyBioSample(stats, rVal, p, entropyUnit)
+                        : (() => {
+                            const minN = p.minNote ?? 36;
+                            const maxN = p.maxNote ?? 84;
+                            const span = Math.max(1e-5, stats.maxim - stats.minim);
+                            let normPitch = Math.max(0, Math.min(1, (rVal - stats.minim) / span));
+                            if (typeof window.applySpreadCurve === 'function') normPitch = window.applySpreadCurve(normPitch, p.spread ?? 75);
+                            const rawNote = Math.round(minN + normPitch * (maxN - minN));
+                            const scaled = typeof window.scaleNote === 'function'
+                                ? window.scaleNote(rawNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN)
+                                : rawNote;
+                            const velMin = p.velMin ?? 60;
+                            const velMax = p.velMax ?? 110;
+                            return {
+                                note: Math.max(0, Math.min(127, Math.round(isFinite(scaled) ? scaled : 60))),
+                                velocity: Math.max(1, Math.min(127, Math.round(velMin + stats.normPct * (velMax - velMin)))),
+                                duration: Math.round((160 + entropyUnit * 300) * (p.durMult || 1.0))
+                            };
+                        })();
                 }
-
-                const rawNote = Math.round(minN + normPitch * (maxN - minN));
-                let scaledNote = rawNote;
-                if (typeof window.scaleNote === 'function') {
-                    scaledNote = window.scaleNote(rawNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN);
-                }
-                scaledNote = Math.max(0, Math.min(127, Math.round(isFinite(scaledNote) ? scaledNote : 60)));
-
-                const velMin = p.velMin ?? 60;
-                const velMax = p.velMax ?? 110;
-                const normalized = (threshold * rawStdev) > 0 ? (sampleDev / (threshold * rawStdev)) : 1.0;
-                const normPct = Math.max(1.0, Math.min(2.0, normalized)) - 1.0;
-                const vel = Math.max(1, Math.min(127, Math.round(velMin + normPct * (velMax - velMin))));
-                const durMult = p.durMult || 1.0;
-                const dur = Math.round((160 + Math.random() * 300) * durMult);
 
                 const density = p.density !== undefined ? p.density : 100;
-                const passesDensity = (Math.random() * 100) <= density;
+                const effectiveDensityPct = recordedHit
+                    ? (density >= recDensity - 1 ? 100 : Math.max(0, Math.min(100, (density / recDensity) * 100)))
+                    : density;
+                const passesDensity = (Math.random() * 100) <= effectiveDensityPct;
 
                 if (passesDensity) {
-                    if (feed) feed.lastNoteTime = nowMs;
+                    if (feed) {
+                        feed.lastNoteTime = nowMs;
+                        if (hasRecTMs) feed.lastTriggerTMs = record.tMs;
+                    }
+
+                    if (recordedHit && chVisual.lastStdevi > 0) {
+                        chVisual.lastMaxDev = Math.max(chVisual.lastMaxDev || 0, threshold * chVisual.lastStdevi * 1.06);
+                    }
 
                     if (typeof window.processBiodata === 'function') {
                         window.processBiodata({
                             type: 'note',
                             ch: chIdx,
-                            n: scaledNote,
-                            v: vel,
-                            d: dur
+                            n: mapped.note,
+                            v: mapped.velocity,
+                            d: mapped.duration
                         }, 'stream');
                     } else if (synthCh && typeof synthCh.play === 'function') {
-                        synthCh.play(scaledNote, vel, dur);
+                        synthCh.play(mapped.note, mapped.velocity, mapped.duration);
                     }
 
                     if (chVisual.waveBuffer.length > 0) {
                         chVisual.waveBuffer[chVisual.waveBuffer.length - 1].evt = 1;
-                        chVisual.waveBuffer[chVisual.waveBuffer.length - 1].n = scaledNote;
+                        chVisual.waveBuffer[chVisual.waveBuffer.length - 1].n = mapped.note;
                     }
                 } else if (typeof window.triggerDensityVisualizer === 'function') {
-                    window.triggerDensityVisualizer(chIdx, 'drop', scaledNote, vel, dur);
+                    window.triggerDensityVisualizer(chIdx, 'drop', mapped.note, mapped.velocity, mapped.duration);
                 }
             }
         }
@@ -2467,9 +2662,9 @@
         /**
          * Fast, memory-safe chunked take loader for both v2 chunked takes (500k+ records) and legacy v1 takes.
          */
-        async loadTakeById(takeId) {
+        async loadTakeById(takeId, opts = {}) {
             if (!window.bioquadStorage) throw new Error('Storage engine not available');
-            this.stop();
+            this.stop({ preserveVisualFlow: true });
 
             this.automationEvents = [];
             this.automationCursor = 0;
@@ -2503,7 +2698,12 @@
                         continue;
                     }
                     const ch = Math.max(0, Math.min(3, (r.channel || 1) - 1));
-                    const val = parseFloat(r.conductance_uS !== undefined ? r.conductance_uS : (r.value || 50));
+                    const isMidiRow = Boolean(r.isMidiOnly || String(r.sensor_id || '').endsWith('_MIDI'));
+                    const Core = window.BioQuadCore;
+                    const rawCond = parseFloat(r.conductance_uS !== undefined ? r.conductance_uS : (r.value || 50));
+                    const val = (Core && typeof Core.resolveBioRecordValue === 'function')
+                        ? Core.resolveBioRecordValue(rawCond, r.ticks, !isMidiRow, isMidiRow)
+                        : ((!isMidiRow && r.ticks && Number(r.ticks) > 0) ? Math.max(0.1, 10000000 / Number(r.ticks)) : rawCond);
                     if (!isNaN(val) && isFinite(val)) {
                         const rawT = r.timestamp_ms || (r.timestamp ? Date.parse(r.timestamp) : null);
                         const noteRaw = (r.note !== null && r.note !== undefined && r.note !== '') ? parseInt(r.note) : (r.note_event ? parseInt(r.note_event) : null);
@@ -2517,7 +2717,7 @@
                             velocity: !isNaN(velRaw) ? velRaw : null,
                             duration: r.duration || null,
                             ticks: r.ticks || null,
-                            isMidiOnly: Boolean(r.isMidiOnly || String(r.sensor_id || '').endsWith('_MIDI')),
+                            isMidiOnly: isMidiRow,
                             index: partitioned[ch].length
                         });
                     }
@@ -2543,29 +2743,97 @@
                 this.basePresetSnapshot = window.biodataRecorder.captureCurrentPreset();
             }
 
-            // Only synthesize note timeline entries from collectedMidiNotes if a channel had ZERO raw conductance records
-            // (e.g., pure MIDI-Input recording with no plant sensor). Never backfill onto raw conductance streams!
+            // Heal any mixed `isMidiOnly` rows if a channel also has real raw conductance samples (prevents fake 50 µS
+            // spikes recorded before the first 100ms raw packet from distorting vizBuffer stdDev or bounds)
+            const originMs = firstRecTime !== null ? firstRecTime : (takeMeta?.timestamp || Date.now());
+            for (let ch = 0; ch < 4; ch++) {
+                const arr = partitioned[ch];
+                if (arr.length > 0 && arr.some(pt => !pt.isMidiOnly) && arr.some(pt => pt.isMidiOnly)) {
+                    const realRaw = [];
+                    for (let i = 0; i < arr.length; i++) {
+                        const pt = arr[i];
+                        if (pt.isMidiOnly) {
+                            if (pt.note !== null && pt.note !== undefined) {
+                                const relMs = pt.parsedMs !== undefined ? Math.max(0, pt.parsedMs - originMs) : 0;
+                                collectedMidiNotes.push({
+                                    timeMs: relMs,
+                                    channel: ch,
+                                    pitch: pt.note,
+                                    velocity: pt.velocity || 80,
+                                    durationMs: pt.duration || 260
+                                });
+                            }
+                        } else {
+                            pt.index = realRaw.length;
+                            realRaw.push(pt);
+                        }
+                    }
+                    partitioned[ch] = realRaw;
+                }
+            }
+
+            // Align `collectedMidiNotes` onto real raw conductance streams (or synthesize MIDI-only timeline when a channel
+            // had ZERO raw conductance sensors) so hardware BLE notes that arrived between 100ms raw batches are never lost!
             if (collectedMidiNotes.length > 0) {
-                const originMs = firstRecTime !== null ? firstRecTime : (takeMeta?.timestamp || Date.now());
                 collectedMidiNotes.sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
                 for (let ch = 0; ch < 4; ch++) {
-                    if (partitioned[ch].length > 0) continue;
                     const chNotes = collectedMidiNotes.filter(m => Math.max(0, Math.min(3, m.channel ?? 0)) === ch);
-                    for (let i = 0; i < chNotes.length; i++) {
-                        const m = chNotes[i];
-                        const absMs = originMs + (m.timeMs || 0);
-                        partitioned[ch].push({
-                            value: 50,
-                            rawTime: new Date(absMs).toISOString(),
-                            parsedMs: absMs,
-                            id: `CH_${ch + 1}_MIDI`,
-                            note: m.pitch,
-                            velocity: m.velocity || 80,
-                            duration: m.durationMs || 260,
-                            ticks: 200000,
-                            isMidiOnly: true,
-                            index: partitioned[ch].length
-                        });
+                    if (chNotes.length === 0) continue;
+
+                    if (partitioned[ch].length === 0) {
+                        for (let i = 0; i < chNotes.length; i++) {
+                            const m = chNotes[i];
+                            const absMs = originMs + (m.timeMs || 0);
+                            partitioned[ch].push({
+                                value: 50,
+                                rawTime: new Date(absMs).toISOString(),
+                                parsedMs: absMs,
+                                id: `CH_${ch + 1}_MIDI`,
+                                note: m.pitch,
+                                velocity: m.velocity || 80,
+                                duration: m.durationMs || 260,
+                                ticks: 200000,
+                                isMidiOnly: true,
+                                index: partitioned[ch].length
+                            });
+                        }
+                    } else {
+                        const rawArr = partitioned[ch];
+                        for (let i = 0; i < chNotes.length; i++) {
+                            const m = chNotes[i];
+                            const absMs = originMs + (m.timeMs || 0);
+                            // Binary search closest raw sample by parsedMs
+                            let lo = 0, hi = rawArr.length - 1;
+                            while (lo < hi) {
+                                const mid = (lo + hi) >> 1;
+                                const midMs = rawArr[mid].parsedMs ?? originMs;
+                                if (midMs < absMs) lo = mid + 1;
+                                else hi = mid;
+                            }
+                            let bestIdx = lo;
+                            if (lo > 0) {
+                                const dPrev = Math.abs((rawArr[lo - 1].parsedMs ?? originMs) - absMs);
+                                const dCur = Math.abs((rawArr[lo].parsedMs ?? originMs) - absMs);
+                                if (dPrev <= dCur) bestIdx = lo - 1;
+                            }
+                            const bestPt = rawArr[bestIdx];
+                            const bestDist = Math.abs((bestPt.parsedMs ?? absMs) - absMs);
+                            if (bestDist <= 350) {
+                                // Check if a nearby sample within ±80ms already carries this note
+                                let alreadyTagged = false;
+                                for (let s = Math.max(0, bestIdx - 12); s <= Math.min(rawArr.length - 1, bestIdx + 12); s++) {
+                                    if (rawArr[s].note !== null && Math.abs((rawArr[s].parsedMs ?? absMs) - absMs) <= 80) {
+                                        alreadyTagged = true;
+                                        break;
+                                    }
+                                }
+                                if (!alreadyTagged && bestPt.note === null) {
+                                    bestPt.note = m.pitch;
+                                    bestPt.velocity = m.velocity || 80;
+                                    bestPt.duration = m.durationMs || 260;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2604,6 +2872,9 @@
                     this.channelFeeds[ch] = {
                         data: [],
                         index: 0,
+                        hasProcessedInitial: false,
+                        lastNoteTime: 0,
+                        lastTriggerTMs: -Infinity,
                         label: 'Unassigned',
                         sourceFile: '',
                         metricMeta: { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' }
@@ -2635,38 +2906,51 @@
                 const takeMetricMeta = isMidiOnly
                     ? { isBiodata: false, unit: '', heading: 'MIDI EVENTS' }
                     : { isBiodata: true, unit: '\u00B5S', heading: 'ADMITTANCE' };
+                const presetCh = takeMeta && takeMeta.preset && Array.isArray(takeMeta.preset.channels)
+                    ? takeMeta.preset.channels[ch]
+                    : (window.synthChannels && window.synthChannels[ch] ? window.synthChannels[ch].params : null);
+                const recordedThreshold = Number(presetCh && presetCh.threshold) || 2.0;
+                const recordedDensity = (presetCh && presetCh.density !== undefined) ? Number(presetCh.density) : 100;
+                const recordedDurMult = Number(presetCh && presetCh.durMult) || 1.0;
+
                 this.channelFeeds[ch] = {
                     data: arr,
                     index: 0,
+                    hasProcessedInitial: false,
+                    initialWaveSeeded: false,
+                    lastNoteTime: 0,
+                    lastTriggerTMs: -Infinity,
                     label: `CH ${ch + 1} Recorded`,
                     sourceFile: fname,
                     hasRecordedNotes: hasNotes,
+                    recordedThreshold,
+                    recordedDensity,
+                    recordedDurMult,
                     isMidiOnly,
                     metricMeta: takeMetricMeta
                 };
 
                 const chVisual = window.chData ? window.chData[ch] : null;
                 if (chVisual) {
+                    const prevMeta = chVisual.metricMeta || null;
+                    const hasExistingWave = Array.isArray(chVisual.waveBuffer) && chVisual.waveBuffer.length > 1;
+                    const domainChanged = Boolean(
+                        prevMeta &&
+                        ((prevMeta.isBiodata !== false) !== (takeMetricMeta.isBiodata !== false) || (prevMeta.unit || '') !== (takeMetricMeta.unit || ''))
+                    );
+                    const shouldResetVisuals = (!opts.preserveVisualFlow && domainChanged) || !hasExistingWave;
+
                     chVisual.metricMeta = takeMetricMeta;
                     let dMin = Infinity, dMax = -Infinity;
                     for (let k = 0; k < arr.length; k++) {
                         if (arr[k].value < dMin) dMin = arr[k].value;
                         if (arr[k].value > dMax) dMax = arr[k].value;
                     }
-                    if (isFinite(dMin) && isFinite(dMax) && dMax > dMin) {
+                    if (isFinite(dMin) && isFinite(dMax) && dMax > dMin && shouldResetVisuals) {
                         chVisual.bounds = { min: dMin, max: dMax };
                         chVisual.boundsNeedSnap = true;
                     }
-                    chVisual.waveBuffer = [];
-                    chVisual.vizBuffer = [];
-                    chVisual.history = [];
-                    chVisual.acc = { sum: 0, count: 0, min: Infinity, max: -Infinity, lastSec: Date.now() };
-                    const preWarm = Math.min(25, arr.length);
-                    for (let p = 0; p < preWarm; p++) {
-                        const rVal = arr[p].value;
-                        chVisual.waveBuffer.push({ r: rVal, ticks: Math.round(10000000 / (rVal || 1)), evt: 0 });
-                        chVisual.vizBuffer.push(rVal);
-                    }
+                    this.seedChannelWindowAtIndex(ch, 0, shouldResetVisuals);
                 }
             }
 
@@ -3131,7 +3415,9 @@
                 chunkCount: this.nextChunkIndex,
                 schemaVersion: 2,
                 isRecordingActive: !isFinal,
-                preset: this.sessionPreset || this.captureCurrentPreset()
+                preset: (this.recordAutomation && this.sessionPreset)
+                    ? this.sessionPreset
+                    : (this.captureCurrentPreset() || this.sessionPreset)
             };
 
             this.flushQueue = this.flushQueue.then(async () => {
@@ -3231,7 +3517,9 @@
                     chunkCount: this.nextChunkIndex,
                     schemaVersion: 2,
                     isRecordingActive: false,
-                    preset: this.sessionPreset || this.captureCurrentPreset()
+                    preset: (this.recordAutomation && this.sessionPreset)
+                        ? this.sessionPreset
+                        : (this.captureCurrentPreset() || this.sessionPreset)
                 };
 
                 try {
@@ -3249,7 +3537,7 @@
 
                 if (autoArm && window.dataStreamer) {
                     try {
-                        await window.dataStreamer.loadTakeById(takeId);
+                        await window.dataStreamer.loadTakeById(takeId, { preserveVisualFlow: true });
                     } catch(e) {
                         console.warn("Auto-arm player notice:", e);
                     }
@@ -3292,7 +3580,7 @@
             for (let i = 0; i < count; i++) {
                 const rawTicks = ticksArray[i];
                 let rVal = rawTicks > 0 ? (CALIBRATION_FACTOR / rawTicks) : 0;
-                rVal = Math.max(0.1, parseFloat(rVal.toFixed(2)));
+                rVal = Math.max(0.1, parseFloat(rVal.toFixed(5)));
                 this.latestChannelValues[chIdx] = rVal;
 
                 this.totalPointsRecorded = (this.totalPointsRecorded || 0) + 1;
@@ -3335,37 +3623,16 @@
                 durationMs: duration || 260
             });
 
-            // Tag note metadata onto the closest recent raw sample on this channel if within 150ms
-            let tagged = false;
+            // Tag note metadata onto the closest recent raw sample on this channel if within 150ms.
+            // Never push synthetic 50 µS rows into `this.records` during active recording (otherwise a BLE note
+            // arriving in the first 0..99ms before the first 100ms raw batch injects a fake 50 µS spike into the stream!).
             for (let i = this.records.length - 1; i >= 0 && i >= this.records.length - 50; i--) {
                 const rec = this.records[i];
                 if (rec.channel === (chIdx + 1) && Math.abs(rec.timestamp_ms - now) < 150 && (!rec.note || rec.note === '')) {
                     rec.note = note;
                     rec.velocity = velocity || 80;
                     rec.duration = duration || 260;
-                    tagged = true;
                     break;
-                }
-            }
-
-            // Only create a synthetic MIDI-only row if this channel has NEVER received real raw conductance telemetry
-            if (!tagged && !this.hasReceivedRawByCh[chIdx]) {
-                const sensorId = `CH_${chIdx + 1}_MIDI`;
-                this.records.push({
-                    timestamp: new Date(now).toISOString(),
-                    timestamp_ms: now,
-                    sensor_id: sensorId,
-                    channel: chIdx + 1,
-                    conductance_uS: 50,
-                    ticks: 200000,
-                    note: note,
-                    velocity: velocity || 80,
-                    duration: duration || 260,
-                    isMidiOnly: true
-                });
-                this.totalPointsRecorded = (this.totalPointsRecorded || 0) + 1;
-                if (this.records.length >= this.chunkSize) {
-                    this.flushCurrentBuffers(false);
                 }
             }
         }
@@ -3375,7 +3642,31 @@
             const pevs = this.recordAutomation
                 ? (this.paramEvents || []).slice().sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0))
                 : [];
-            const recs = this.records || [];
+            let recs = (this.records || []).slice();
+            if (Array.isArray(this.recordedMidiNotes) && this.recordedMidiNotes.length > 0) {
+                const rawChannels = new Set(recs.map(r => r.channel));
+                const originMs = this.startTimeMs || Date.now();
+                for (let i = 0; i < this.recordedMidiNotes.length; i++) {
+                    const m = this.recordedMidiNotes[i];
+                    const chNum = (m.channel ?? 0) + 1;
+                    if (!rawChannels.has(chNum)) {
+                        const absMs = originMs + (m.timeMs || 0);
+                        recs.push({
+                            timestamp: new Date(absMs).toISOString(),
+                            timestamp_ms: absMs,
+                            sensor_id: `CH_${chNum}_MIDI`,
+                            channel: chNum,
+                            conductance_uS: 50,
+                            ticks: 200000,
+                            note: m.pitch,
+                            velocity: m.velocity || 80,
+                            duration: m.durationMs || 260,
+                            isMidiOnly: true
+                        });
+                    }
+                }
+                recs.sort((a, b) => (a.timestamp_ms || 0) - (b.timestamp_ms || 0));
+            }
             if (recs.length === 0 && pevs.length === 0) return '';
 
             const includeAutoCols = pevs.length > 0;

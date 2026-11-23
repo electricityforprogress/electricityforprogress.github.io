@@ -827,13 +827,22 @@ window.processBiodata = function(payload, source = 'ble') {
         if (!ch.waveBuffer) ch.waveBuffer = [];
         if (!ch.vizBuffer) ch.vizBuffer = [];
         if (!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: Date.now() };
+        const Core = window.BioQuadCore;
         const pConfig = window.synthChannels[chIdx] ? window.synthChannels[chIdx].params : window.defaultParams;
         const CALIBRATION_FACTOR = 10000000;
+        const sampleWindow = Math.max(2, Math.min(2000, Math.round(Number(pConfig.sampleSize) || 40)));
+        const threshold = Number(pConfig.threshold) || 2.0;
+        const sonifyLocally = Boolean(payload._sonifyRawLocally);
 
         const nowMs = Date.now();
-        payload.p.forEach(rawTicks => {
+        let latestRVal = null;
+        let lastStats = null;
+
+        payload.p.forEach((rawTicks, sampleIdx) => {
             if (!rawTicks || rawTicks <= 0) return;
             const rVal = CALIBRATION_FACTOR / rawTicks;
+            latestRVal = rVal;
+
             ch.acc.sum += rVal;
             ch.acc.count++;
             if (rVal < ch.acc.min) ch.acc.min = rVal;
@@ -843,29 +852,64 @@ window.processBiodata = function(payload, source = 'ble') {
             ch.vizBuffer.push(rVal);
 
             while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
-            if (ch.vizBuffer.length > (pConfig.sampleSize || 40)) ch.vizBuffer.shift();
+            while (ch.vizBuffer.length > sampleWindow) ch.vizBuffer.shift();
+
+            if (ch.vizBuffer.length > 1) {
+                const vLen = ch.vizBuffer.length;
+                ch.slew = ch.vizBuffer[vLen - 1] - ch.vizBuffer[vLen - 2];
+            }
+
+            if (sonifyLocally && Core && typeof Core.evaluateBioSampleWindow === 'function') {
+                const stats = Core.evaluateBioSampleWindow(ch.vizBuffer, rVal, threshold, true);
+                lastStats = stats;
+                if (stats.isOverThreshold && ch.vizBuffer.length >= Math.min(10, sampleWindow)) {
+                    const approxSampleMs = nowMs + sampleIdx * 6;
+                    if (!ch._lastLocalRawTriggerMs || (approxSampleMs - ch._lastLocalRawTriggerMs) > 150) {
+                        const density = pConfig.density !== undefined ? pConfig.density : 100;
+                        const mapped = Core.sonifyBioSample(stats, rVal, pConfig, (rawTicks % 127) / 127);
+                        if ((Math.random() * 100) <= density) {
+                            ch._lastLocalRawTriggerMs = approxSampleMs;
+                            window.processBiodata({
+                                type: 'note',
+                                ch: chIdx,
+                                n: mapped.note,
+                                v: mapped.velocity,
+                                d: mapped.duration
+                            }, source);
+                        } else if (typeof window.triggerDensityVisualizer === 'function') {
+                            window.triggerDensityVisualizer(chIdx, 'drop', mapped.note, mapped.velocity, mapped.duration);
+                        }
+                    }
+                }
+            }
         });
 
-        let maxim = 0, minim = 1000000, averg = 0, stdevi = 0;
-        ch.vizBuffer.forEach(v => {
-            if (v > maxim) maxim = v;
-            if (v < minim) minim = v;
-            averg += v;
-        });
-        if (ch.vizBuffer.length > 0) averg /= ch.vizBuffer.length;
+        const finalStats = lastStats || (
+            Core && typeof Core.evaluateBioSampleWindow === 'function'
+                ? Core.evaluateBioSampleWindow(ch.vizBuffer, latestRVal, threshold, true)
+                : null
+        );
 
-        let maxDev = 0;
-        ch.vizBuffer.forEach(v => {
-            stdevi += (v - averg) * (v - averg);
-            const dev = Math.abs(v - averg);
-            if (dev > maxDev) maxDev = dev;
-        });
-
-        const variance = ch.vizBuffer.length > 0 ? (stdevi / ch.vizBuffer.length) : 0;
-
-        ch.lastStdevi = variance > 0 ? Math.sqrt(variance) : 1.0;
-        if (ch.lastStdevi < 0.1) ch.lastStdevi = 1.0;
-        ch.lastMaxDev = maxDev;
+        if (finalStats) {
+            ch.rawStdev = finalStats.rawStdev;
+            ch.lastStdevi = finalStats.meterStdevi;
+            ch.lastMaxDev = finalStats.meterMaxDev;
+        } else {
+            let averg = 0, stdevi = 0, maxDev = 0;
+            ch.vizBuffer.forEach(v => { averg += v; });
+            if (ch.vizBuffer.length > 0) averg /= ch.vizBuffer.length;
+            ch.vizBuffer.forEach(v => {
+                const dev = Math.abs(v - averg);
+                stdevi += dev * dev;
+                if (dev > maxDev) maxDev = dev;
+            });
+            const variance = ch.vizBuffer.length > 0 ? (stdevi / ch.vizBuffer.length) : 0;
+            const rawStdev = variance > 0 ? Math.sqrt(variance) : 0;
+            const minStdDev = Math.max(1e-5, Math.abs(averg) * 0.00005);
+            ch.rawStdev = rawStdev;
+            ch.lastStdevi = rawStdev > minStdDev ? rawStdev : minStdDev;
+            ch.lastMaxDev = rawStdev > minStdDev ? maxDev : 0;
+        }
         ch.lastBlockTime = nowMs;
 
         if (nowMs - ch.acc.lastSec >= 1000) {

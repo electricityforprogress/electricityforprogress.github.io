@@ -38,6 +38,148 @@
     return Math.max(0.1, CALIBRATION_FACTOR / t);
   }
 
+  /**
+   * Resolves a record's exact conductance (µS) or raw numeric value for playback & analysis.
+   * For biodata streams with valid 555-timer `rawTicks`, computes `10,000,000 / rawTicks` directly
+   * so recorded takes and exported CSVs retain full 32-bit hardware precision without `.toFixed(2)` loss.
+   */
+  function resolveBioRecordValue(rawValue, rawTicks = null, isBiodata = true, isMidiOnly = false) {
+    const numVal = Number(rawValue);
+    if (!isBiodata || isMidiOnly) {
+      return isFinite(numVal) ? numVal : 0;
+    }
+
+    if (rawTicks !== null && rawTicks !== undefined && rawTicks !== '') {
+      const t = Number(rawTicks);
+      if (isFinite(t) && t > 0) {
+        return Math.max(0.1, CALIBRATION_FACTOR / t);
+      }
+    }
+
+    if (!isFinite(numVal)) return 0.1;
+    let rVal = Math.abs(numVal);
+    if (rVal < 0.1) rVal = 0.1;
+    if (rVal > 10000) {
+      rVal = Math.max(0.1, CALIBRATION_FACTOR / rVal);
+    }
+    return rVal;
+  }
+
+  /**
+   * Evaluates a rolling window of samples against the current incoming sample (`currentVal`),
+   * matching ESP32 `biodata_quad.ino` (`analyze_and_map`) without artificial `0.015` hard floors
+   * or `< 0.1 -> 1.0` standard-deviation clamping.
+   */
+  function evaluateBioSampleWindow(values, currentVal, threshold = 2.0, isBiodata = true) {
+    if (!Array.isArray(values) || values.length === 0) {
+      return {
+        mean: 0,
+        minim: 0,
+        maxim: 0,
+        rawStdev: 0,
+        minStdDev: 1e-4,
+        sampleDev: 0,
+        maxDev: 0,
+        meterStdevi: 1.0,
+        meterMaxDev: 0,
+        sampleRatio: 0,
+        windowRatio: 0,
+        normPct: 0,
+        isActiveSignal: false,
+        isOverThreshold: false
+      };
+    }
+
+    const len = values.length;
+    let sum = 0;
+    let maxim = -Infinity;
+    let minim = Infinity;
+    for (let i = 0; i < len; i++) {
+      const v = Number(values[i]) || 0;
+      sum += v;
+      if (v > maxim) maxim = v;
+      if (v < minim) minim = v;
+    }
+    const mean = sum / len;
+
+    let sumSq = 0;
+    let maxDev = 0;
+    for (let i = 0; i < len; i++) {
+      const dev = Math.abs((Number(values[i]) || 0) - mean);
+      sumSq += dev * dev;
+      if (dev > maxDev) maxDev = dev;
+    }
+
+    const variance = sumSq / len;
+    const rawStdev = variance > 0 ? Math.sqrt(variance) : 0;
+    const minStdDev = isBiodata
+      ? Math.max(1e-5, Math.abs(mean) * 0.00005)
+      : 1e-6;
+
+    const cur = (currentVal !== undefined && currentVal !== null && isFinite(Number(currentVal)))
+      ? Number(currentVal)
+      : (Number(values[len - 1]) || 0);
+    const sampleDev = Math.abs(cur - mean);
+
+    const safeThresh = Math.max(1.0, Number(threshold) || 2.0);
+    const isActiveSignal = rawStdev > minStdDev;
+    const meterStdevi = isActiveSignal ? rawStdev : minStdDev;
+    const meterMaxDev = isActiveSignal ? maxDev : 0;
+    const sampleRatio = isActiveSignal ? (sampleDev / rawStdev) : 0;
+    const windowRatio = isActiveSignal ? (maxDev / rawStdev) : 0;
+    const isOverThreshold = isActiveSignal && (sampleDev > (safeThresh * rawStdev));
+
+    const normalized = (safeThresh * rawStdev) > 0 ? (sampleDev / (safeThresh * rawStdev)) : 1.0;
+    const normPct = Math.max(1.0, Math.min(2.0, normalized)) - 1.0;
+
+    return {
+      mean,
+      minim,
+      maxim,
+      rawStdev,
+      minStdDev,
+      sampleDev,
+      maxDev,
+      meterStdevi,
+      meterMaxDev,
+      sampleRatio,
+      windowRatio,
+      normPct,
+      isActiveSignal,
+      isOverThreshold
+    };
+  }
+
+  /**
+   * Maps a threshold-crossing sample and its rolling-window stats to `{ note, velocity, duration }`
+   * consistently across recorded file playback, MQTT streams, and virtual botanical feeds.
+   */
+  function sonifyBioSample(stats, currentVal, params = {}, entropyUnit = Math.random()) {
+    const p = params || {};
+    const minN = p.minNote ?? 36;
+    const maxN = p.maxNote ?? 84;
+    const span = stats.maxim - stats.minim;
+    let normPitch = span > 1e-5
+      ? Math.max(0, Math.min(1, (Number(currentVal) - stats.minim) / span))
+      : (stats.normPct ?? 0.5);
+
+    normPitch = applySpreadCurve(normPitch, p.spread ?? 75);
+    const rawNote = Math.round(minN + normPitch * (maxN - minN));
+    const scaled = scaleNote(rawNote, p.scaleType, p.scaleRoot, p.activeScaleBits, minN, maxN);
+    const note = Math.max(0, Math.min(127, Math.round(isFinite(scaled) ? scaled : 60)));
+
+    const velMin = p.velMin ?? 60;
+    const velMax = p.velMax ?? 110;
+    const normPct = Math.max(0, Math.min(1, Number(stats.normPct) || 0));
+    const velocity = Math.max(1, Math.min(127, Math.round(velMin + normPct * (velMax - velMin))));
+
+    const durMult = Number(p.durMult) || 1.0;
+    const ent = Math.max(0, Math.min(1, isFinite(Number(entropyUnit)) ? Number(entropyUnit) : 0.5));
+    const duration = Math.round((160 + ent * 300) * durMult);
+
+    return { note, velocity, duration };
+  }
+
   function computeWindowStats(values, threshold = 2.0) {
     if (!Array.isArray(values) || values.length === 0) {
       return { mean: 0, minim: 0, maxim: 0, stdevi: 1.0, maxDev: 0, ratio: 0, isOverThreshold: false };
@@ -1592,6 +1734,9 @@
     QUANTIZE_BEAT_STEPS,
     HW_BROKER_PRESETS,
     ticksToConductance,
+    resolveBioRecordValue,
+    evaluateBioSampleWindow,
+    sonifyBioSample,
     computeWindowStats,
     mapScale,
     applySpreadCurve,
