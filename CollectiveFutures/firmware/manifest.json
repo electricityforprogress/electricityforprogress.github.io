@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "project": "bioQuad ESP32 Firmware",
+  "builds": [
+    {
+      "id": "bioquad-v011-s3",
+      "name": "bioQuad v011 — Installation Edition",
+      "version": "0.11.0",
+      "chip": "ESP32-S3",
+      "offset": "0x0",
+      "baudrate": 460800,
+      "binUrl": "./firmware/bioquad_esp32s3_v011.bin",
+      "inoUrl": "./firmware/biodata_quad.ino",
+      "releaseNotes": "BLE GATT + USB-C Serial + Headless WiFi/MQTT auto-reconnect + Configurable I2C SHT4x sensor rate (ON CHANGE anti-jitter, 250ms–60s, OFF) persisted in NVS."
+    },
+    {
+      "id": "bioquad-v010-s3",
+      "name": "bioQuad v010 — SHT4x Telemetry",
+      "version": "0.10.0",
+      "chip": "ESP32-S3",
+      "offset": "0x0",
+      "baudrate": 460800,
+      "binUrl": "./firmware/bioquad_esp32s3_v010.bin",
+      "inoUrl": "./firmware/biodata_quad.ino",
+      "releaseNotes": "Added non-blocking I2C SHT4x temperature & humidity telemetry (SDA=8, SCL=9) alongside BLE/USB/MQTT biodata streaming."
+    }
+  ]
+}
