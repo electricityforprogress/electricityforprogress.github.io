@@ -1,0 +1,659 @@
+/* ==========================================================================
+   flasher.css — Self-Contained Scoped Styles for ESP32 Web Serial Uploader
+   Zero external dependencies; safe to drop into any existing dark-mode site.
+   ========================================================================== */
+
+.esp-flasher {
+    --ef-bg: #0d1117;
+    --ef-surface: #121720;
+    --ef-card: #161b22;
+    --ef-border: #30363d;
+    --ef-border-strong: #484f58;
+    --ef-text: #e6edf3;
+    --ef-muted: #8b949e;
+    --ef-cyan: #00f0ff;
+    --ef-green: #39ff14;
+    --ef-amber: #ffd700;
+    --ef-red: #ff4d6d;
+    --ef-radius: 10px;
+    --ef-pill: 999px;
+    --ef-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+    color: var(--ef-text);
+    font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+    font-size: 11.5px;
+    line-height: 1.45;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+}
+
+.esp-flasher *,
+.esp-flasher *::before,
+.esp-flasher *::after {
+    box-sizing: border-box;
+}
+
+.esp-flasher-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+/* --- State Stepper Strip (Idle -> Connected -> Flashing -> Verified) --- */
+.esp-flasher-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 6px;
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+}
+
+.esp-flasher-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 7px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--ef-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background-color 0.2s var(--ef-ease), border-color 0.2s var(--ef-ease), color 0.2s var(--ef-ease);
+}
+
+.esp-flasher-step-num {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid var(--ef-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    flex-shrink: 0;
+}
+
+.esp-flasher-step.is-active {
+    color: var(--ef-cyan);
+    background: rgba(0, 240, 255, 0.1);
+    border-color: rgba(0, 240, 255, 0.45);
+}
+
+.esp-flasher-step.is-active .esp-flasher-step-num {
+    border-color: var(--ef-cyan);
+    background: rgba(0, 240, 255, 0.2);
+    color: var(--ef-cyan);
+}
+
+.esp-flasher-step.is-done {
+    color: var(--ef-green);
+    background: rgba(57, 255, 20, 0.08);
+    border-color: rgba(57, 255, 20, 0.35);
+}
+
+.esp-flasher-step.is-done .esp-flasher-step-num {
+    border-color: var(--ef-green);
+    background: rgba(57, 255, 20, 0.2);
+    color: var(--ef-green);
+}
+
+/* --- Browser Unsupported / Notice Banner --- */
+.esp-flasher-notice {
+    display: none;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--ef-radius);
+    background: rgba(255, 196, 0, 0.08);
+    border: 1px solid rgba(255, 215, 0, 0.45);
+    color: #ffe899;
+    font-size: 11px;
+}
+
+.esp-flasher-notice.is-visible {
+    display: flex;
+}
+
+.esp-flasher-notice.is-error {
+    background: rgba(255, 77, 109, 0.1);
+    border-color: rgba(255, 77, 109, 0.55);
+    color: #ffd0d9;
+}
+
+.esp-flasher-notice.is-success {
+    background: rgba(57, 255, 20, 0.09);
+    border-color: rgba(57, 255, 20, 0.45);
+    color: #d8ffcf;
+}
+
+/* --- Two-Column Workspace Grid --- */
+.esp-flasher-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+    align-items: stretch;
+}
+
+.esp-flasher-card {
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.esp-flasher-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.esp-flasher-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--ef-text);
+    text-transform: uppercase;
+}
+
+/* --- Mode Segmented Switch (Hosted Builds / Custom .bin) --- */
+.esp-flasher-tabs {
+    display: inline-flex;
+    align-items: center;
+    background: var(--ef-surface);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-pill);
+    padding: 2px;
+    gap: 2px;
+    max-width: 100%;
+}
+
+.esp-flasher-tab {
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ef-pill);
+    color: var(--ef-muted);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 10px;
+    min-height: 26px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.16s var(--ef-ease), color 0.16s var(--ef-ease), border-color 0.16s var(--ef-ease);
+}
+
+.esp-flasher-tab:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.esp-flasher-tab.is-selected {
+    color: var(--ef-cyan);
+    background: rgba(0, 240, 255, 0.14);
+    border-color: rgba(0, 240, 255, 0.45);
+}
+
+/* --- Form Controls --- */
+.esp-flasher-field-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ef-muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.3px;
+}
+
+.esp-flasher-select,
+.esp-flasher-input {
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    padding: 4px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--ef-border);
+    background: var(--ef-surface);
+    color: var(--ef-text);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    outline: none;
+    transition: border-color 0.16s ease;
+}
+
+.esp-flasher-select:focus,
+.esp-flasher-input:focus {
+    border-color: var(--ef-cyan);
+}
+
+/* --- Hosted Build Details --- */
+.esp-flasher-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: var(--ef-surface);
+    border: 1px solid #21262d;
+}
+
+.esp-flasher-meta-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10.5px;
+    color: var(--ef-muted);
+}
+
+.esp-flasher-meta-chip {
+    color: var(--ef-cyan);
+    font-weight: 700;
+}
+
+.esp-flasher-notes {
+    font-size: 10.5px;
+    color: #c9d1d9;
+    line-height: 1.45;
+    margin: 0;
+}
+
+/* --- Custom .bin Dropzone --- */
+.esp-flasher-dropzone {
+    border: 1.5px dashed var(--ef-border-strong);
+    border-radius: 8px;
+    padding: 16px 12px;
+    text-align: center;
+    background: rgba(18, 23, 32, 0.7);
+    cursor: pointer;
+    transition: border-color 0.18s var(--ef-ease), background-color 0.18s var(--ef-ease);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 86px;
+}
+
+.esp-flasher-dropzone:hover,
+.esp-flasher-dropzone.is-dragover {
+    border-color: var(--ef-cyan);
+    background: rgba(0, 240, 255, 0.06);
+}
+
+.esp-flasher-dropzone-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.esp-flasher-dropzone-sub {
+    font-size: 10px;
+    color: var(--ef-muted);
+    word-break: break-word;
+}
+
+/* --- Collapsible Advanced Section --- */
+.esp-flasher-details {
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    background: var(--ef-surface);
+    overflow: hidden;
+}
+
+.esp-flasher-details > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 7px 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--ef-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+}
+
+.esp-flasher-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.esp-flasher-details > summary::after {
+    content: '▾';
+    font-size: 11px;
+    transition: transform 0.18s var(--ef-ease);
+}
+
+.esp-flasher-details[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.esp-flasher-details-body {
+    padding: 8px 10px 10px 10px;
+    border-top: 1px solid #21262d;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.esp-flasher-adv-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    align-items: end;
+}
+
+.esp-flasher-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10.5px;
+    color: var(--ef-text);
+    cursor: pointer;
+    user-select: none;
+}
+
+.esp-flasher-checkbox input {
+    accent-color: var(--ef-cyan);
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+/* --- Device Info Readout --- */
+.esp-flasher-device-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.esp-flasher-stat {
+    background: var(--ef-surface);
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 7px 9px;
+    min-width: 0;
+}
+
+.esp-flasher-stat-lbl {
+    font-size: 9px;
+    color: var(--ef-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.esp-flasher-stat-val {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.esp-flasher-stat-val.is-live {
+    color: var(--ef-green);
+}
+
+/* --- Action Buttons --- */
+.esp-flasher-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.esp-flasher-btn {
+    appearance: none;
+    border-radius: var(--ef-pill);
+    border: 1px solid var(--ef-border);
+    background: var(--ef-card);
+    color: var(--ef-text);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    min-height: 36px;
+    padding: 6px 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex: 1 1 130px;
+    transition: background-color 0.16s var(--ef-ease), border-color 0.16s var(--ef-ease), color 0.16s var(--ef-ease), opacity 0.16s ease;
+}
+
+.esp-flasher-btn:hover:not(:disabled) {
+    border-color: var(--ef-cyan);
+    background: #1c232d;
+    color: #fff;
+}
+
+.esp-flasher-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.esp-flasher-btn-primary {
+    background: var(--ef-cyan);
+    border-color: var(--ef-cyan);
+    color: #05080c;
+}
+
+.esp-flasher-btn-primary:hover:not(:disabled) {
+    background: #42f4ff;
+    border-color: #42f4ff;
+    color: #05080c;
+}
+
+.esp-flasher-btn-success {
+    background: rgba(57, 255, 20, 0.16);
+    border-color: var(--ef-green);
+    color: var(--ef-green);
+}
+
+.esp-flasher-btn-danger {
+    background: rgba(255, 77, 109, 0.12);
+    border-color: rgba(255, 77, 109, 0.55);
+    color: #ff8aa0;
+}
+
+.esp-flasher-btn-danger:hover:not(:disabled) {
+    background: var(--ef-red);
+    border-color: var(--ef-red);
+    color: #fff;
+}
+
+/* --- Progress Track --- */
+.esp-flasher-progress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: var(--ef-surface);
+    border: 1px solid #21262d;
+}
+
+.esp-flasher-progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10.5px;
+}
+
+.esp-flasher-progress-label {
+    color: var(--ef-text);
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.esp-flasher-progress-pct {
+    color: var(--ef-cyan);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.esp-flasher-progress-track {
+    width: 100%;
+    height: 8px;
+    border-radius: var(--ef-pill);
+    background: #080b10;
+    border: 1px solid #21262d;
+    overflow: hidden;
+}
+
+.esp-flasher-progress-fill {
+    width: 0%;
+    height: 100%;
+    border-radius: var(--ef-pill);
+    background: linear-gradient(90deg, #00a8c8, var(--ef-cyan));
+    transition: width 0.16s linear, background 0.25s ease;
+}
+
+.esp-flasher[data-state="verified"] .esp-flasher-progress-fill {
+    background: linear-gradient(90deg, #1ebd2b, var(--ef-green));
+}
+
+.esp-flasher[data-state="error"] .esp-flasher-progress-fill {
+    background: var(--ef-red);
+}
+
+.esp-flasher-md5-row {
+    display: none;
+    font-size: 9.5px;
+    color: var(--ef-green);
+    font-variant-numeric: tabular-nums;
+    word-break: break-all;
+}
+
+.esp-flasher-md5-row.is-visible {
+    display: block;
+}
+
+/* --- Collapsible Terminal Drawer --- */
+.esp-flasher-terminal-wrap {
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    background: #090c11;
+    overflow: hidden;
+}
+
+.esp-flasher-terminal-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 10px;
+    background: var(--ef-bg);
+    cursor: pointer;
+    user-select: none;
+}
+
+.esp-flasher-terminal-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--ef-muted);
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.esp-flasher-terminal-toggle:hover {
+    color: #fff;
+    background: transparent;
+}
+
+.esp-flasher-terminal-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.esp-flasher-mini-btn {
+    appearance: none;
+    background: var(--ef-surface);
+    color: var(--ef-muted);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-pill);
+    padding: 2px 8px;
+    min-height: 22px;
+    font-family: inherit;
+    font-size: 9.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.esp-flasher-mini-btn:hover {
+    color: #fff;
+    border-color: var(--ef-cyan);
+    background: #18202c;
+}
+
+.esp-flasher-terminal-log {
+    margin: 0;
+    padding: 10px 12px;
+    max-height: 190px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border-top: 1px solid #1f2630;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    color: #a9b7c6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+}
+
+.esp-flasher-terminal-wrap.is-open .esp-flasher-terminal-log {
+    display: block;
+}
+
+/* --- Mobile Responsiveness --- */
+@media (max-width: 640px) {
+    .esp-flasher-steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .esp-flasher-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .esp-flasher-adv-row,
+    .esp-flasher-device-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .esp-flasher-btn {
+        min-height: 40px;
+        flex: 1 1 100%;
+    }
+}
