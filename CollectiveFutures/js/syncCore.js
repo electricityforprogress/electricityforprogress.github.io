@@ -599,6 +599,97 @@
   }
 
   /**
+   * Unrolls a batched MQTT raw packet (e.g. 10 samples every 100ms, or coalesced TCP bursts)
+   * into evenly spaced per-sample playout timestamps (`dueMs`) so 60fps canvas rendering
+   * advances smoothly on every animation frame instead of jumping 10-20 samples at a time.
+   */
+  function planSmoothRawBatchSchedule(samples, nowPerfMs, delayMs, pacerState = null, options = {}) {
+    if (!Array.isArray(samples) || samples.length === 0) {
+      return { scheduled: [], spanMs: 0, state: pacerState || { lastArrivalPerfMs: 0, interArrivalMs: 100, lastScheduledPerfMs: 0 } };
+    }
+
+    const n = samples.length;
+    const defaultBatchMs = Math.max(16, Math.min(200, n * 10));
+    const st = pacerState || {
+      lastArrivalPerfMs: 0,
+      interArrivalMs: defaultBatchMs,
+      lastScheduledPerfMs: 0
+    };
+
+    if (st.lastArrivalPerfMs > 0) {
+      const rawDt = nowPerfMs - st.lastArrivalPerfMs;
+      if (rawDt > 1200) {
+        // Stream resumed after a pause: reset cadence estimate cleanly
+        st.interArrivalMs = defaultBatchMs;
+        st.lastScheduledPerfMs = 0;
+      } else if (rawDt >= 0) {
+        const clampedDt = Math.max(8, Math.min(300, rawDt));
+        st.interArrivalMs = st.interArrivalMs * 0.8 + clampedDt * 0.2;
+      }
+    } else {
+      st.interArrivalMs = defaultBatchMs;
+    }
+    st.lastArrivalPerfMs = nowPerfMs;
+
+    const minSpanMs = Math.max(12, n * 5);
+    const maxSpanMs = Math.max(32, n * 22);
+    const baseSpanMs = Math.max(minSpanMs, Math.min(maxSpanMs, st.interArrivalMs));
+
+    const safeDelayMs = Math.max(0, Number(delayMs) || 0);
+    const playoutBufferMs = Math.max(40, Number(options.playoutBufferMs) || 180);
+    const maxHorizonMs = Math.max(playoutBufferMs + 240, 380);
+
+    const targetEndMs = nowPerfMs + safeDelayMs;
+    const idealStartMs = Math.max(nowPerfMs, targetEndMs - baseSpanMs);
+    const isContinuousActive = st.lastScheduledPerfMs > 0 && (nowPerfMs - st.lastScheduledPerfMs) <= 600;
+
+    // Initial pre-roll waits for idealStartMs cushion; once streaming is active, anchor seamlessly
+    // at max(nowPerfMs, lastScheduledPerfMs) so jittery arrivals NEVER open mid-stream freeze gaps,
+    // using an elastic PLL (+/-10..18% rate trim) to keep buffer depth locked near targetEndMs.
+    let startMs = isContinuousActive
+      ? Math.max(nowPerfMs, st.lastScheduledPerfMs)
+      : idealStartMs;
+
+    const bufferErrorMs = (startMs + baseSpanMs) - targetEndMs;
+    let effectiveSpanMs = baseSpanMs;
+    if (bufferErrorMs > baseSpanMs) {
+      effectiveSpanMs = baseSpanMs * 0.82;
+    } else if (bufferErrorMs > 24) {
+      effectiveSpanMs = baseSpanMs * 0.90;
+    } else if (bufferErrorMs < -baseSpanMs) {
+      effectiveSpanMs = Math.min(maxSpanMs, baseSpanMs * 1.18);
+    } else if (bufferErrorMs < -24) {
+      effectiveSpanMs = Math.min(maxSpanMs, baseSpanMs * 1.10);
+    }
+
+    const horizonCapMs = nowPerfMs + maxHorizonMs;
+    if (startMs + effectiveSpanMs > horizonCapMs) {
+      startMs = Math.min(startMs, Math.max(nowPerfMs, horizonCapMs - minSpanMs));
+      effectiveSpanMs = Math.max(minSpanMs * 0.5, horizonCapMs - startMs);
+    }
+
+    const stepMs = effectiveSpanMs / n;
+    const scheduled = [];
+    let lastDue = startMs;
+    for (let i = 0; i < n; i++) {
+      const rawTicks = samples[i];
+      if (!rawTicks || rawTicks <= 0) continue;
+      lastDue = startMs + (i + 1) * stepMs;
+      scheduled.push({ dueMs: lastDue, ticks: rawTicks });
+    }
+
+    if (scheduled.length > 0) {
+      st.lastScheduledPerfMs = lastDue;
+    }
+
+    return {
+      scheduled,
+      spanMs: effectiveSpanMs,
+      state: st
+    };
+  }
+
+  /**
    * Pure Vanilla Binary MQTT 3.1.1 Packet Codec (for WebSocket 'mqtt' subprotocol)
    */
   const textEncoder = new TextEncoder();
@@ -1774,6 +1865,7 @@
     formatChannelMetricValue,
     LineStreamParser,
     PlayoutSyncController,
+    planSmoothRawBatchSchedule,
     MqttCodec,
     concatBytes
   };

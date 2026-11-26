@@ -2371,7 +2371,9 @@
                 if (rVal > chVisual.acc.max) chVisual.acc.max = rVal;
 
                 chVisual.waveBuffer.push({ r: rVal, ticks: ticks, evt: 0 });
-                while (chVisual.waveBuffer.length > 120000) chVisual.waveBuffer.shift();
+                if (chVisual.waveBuffer.length > 120000) {
+                    chVisual.waveBuffer.splice(0, chVisual.waveBuffer.length - 108000);
+                }
 
                 // 1-Second Historical Data Rollup
                 if (nowMs - chVisual.acc.lastSec >= 1000) {

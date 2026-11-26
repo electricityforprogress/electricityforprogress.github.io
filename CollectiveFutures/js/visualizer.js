@@ -782,7 +782,9 @@ function renderLoop() {
             if (!ch.history) ch.history = [];
             if (!ch.acc || ch.acc.lastSec === undefined) ch.acc = { sum: 0, count: 0, min: 1000000, max: 0, lastSec: nowMs };
 
-            while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
+            if (ch.waveBuffer.length > 120000) {
+                ch.waveBuffer.splice(0, ch.waveBuffer.length - 108000);
+            }
 
             if (ch.config.freeze) {
                 if (!ch.frozenWaveBuffer) ch.frozenWaveBuffer = [...ch.waveBuffer];

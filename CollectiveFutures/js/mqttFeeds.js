@@ -146,7 +146,8 @@
       this.brokerPass = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('bioquad_mqtt_pass') : '') || '';
       this.clientId = 'bq_' + Math.random().toString(36).slice(2, 10);
       this.ws = null;
-      this.rxRemainder = new Uint8Array(0);
+      this.emptyBytes = new Uint8Array(0);
+      this.rxRemainder = this.emptyBytes;
       this.isConnected = false;
       this.isConnecting = false;
       this.statusText = 'Standby';
@@ -187,10 +188,17 @@
       this.metaAnnounceTimer = null;
       this.patchBroadcastTimers = [null, null, null, null];
 
+      // Per-local-channel smooth raw sample playout queues (eliminates 100-200ms MQTT burst jumps)
+      this.rawSampleQueues = [[], [], [], []];
+      this.rawPacerStates = [null, null, null, null];
+      this.rawPacerRafId = null;
+      this.lastRafDrainMs = 0;
+
       // UTC Virtual Botanical Generator loop
       this.virtualTickTimer = null;
       this.lastProcessedUtcSlot = 0;
       this.virtualWindows = new Map();
+      this.virtualLastTriggerMs = new Map();
       this.startVirtualUtcLoop();
     }
 
@@ -379,7 +387,7 @@
       this.clearedRetainedTopics.clear();
       const targetHost = this.extractHost(this.brokerUrl);
       this.statusText = `Connecting ${targetHost}...`;
-      this.rxRemainder = new Uint8Array(0);
+      this.rxRemainder = this.emptyBytes;
       this.emitUpdate();
 
       try {
@@ -411,9 +419,13 @@
           if (this.ws !== ws) return;
           if (!(evt.data instanceof ArrayBuffer)) return;
           const incoming = new Uint8Array(evt.data);
-          const combined = Core.concatBytes([this.rxRemainder, incoming]);
+          const combined = this.rxRemainder.length > 0
+            ? Core.concatBytes([this.rxRemainder, incoming])
+            : incoming;
           const decoded = Core.MqttCodec.decodePackets(combined);
-          this.rxRemainder = decoded.remaining;
+          this.rxRemainder = decoded.remaining.length > 0
+            ? (combined === incoming ? decoded.remaining.slice() : decoded.remaining)
+            : this.emptyBytes;
 
           for (let i = 0; i < decoded.packets.length; i++) {
             const pkt = decoded.packets[i];
@@ -805,26 +817,42 @@
         if (isRetained) {
           this.clearRetainedTopic(topic);
         }
+        const hadPrev = this.feeds.has(feedId);
         const prev = this.feeds.get(feedId) || {};
+        const nextName = data.name || feedId;
+        const nextLoc = isSelfEcho ? `Loopback · ${this.connectedHost || 'Broker'}` : (data.location || 'Remote Cloud Feed');
+        const nextSpecies = isSelfEcho ? 'Active Broadcast' : (data.species || 'Live Plant Sensor');
+        const nextChannels = data.channels || 4;
         const nextPatches = Array.isArray(data.patches)
           ? data.patches.slice(0, 4)
           : (Array.isArray(prev.patches) ? prev.patches : [null, null, null, null]);
+        const nextPatchSig = Array.isArray(data.patches) ? JSON.stringify(nextPatches) : (prev._patchSig || '');
         const metaEnv = (Core && typeof Core.normalizeEnvSensorPayload === 'function')
           ? Core.normalizeEnvSensorPayload(data)
           : null;
         const nextEnv = metaEnv || prev.env || null;
+
+        const metaChanged = !hadPrev ||
+          prev.name !== nextName ||
+          prev.location !== nextLoc ||
+          prev.species !== nextSpecies ||
+          prev.channels !== nextChannels ||
+          Boolean(prev.isSelfBroadcast) !== isSelfEcho ||
+          prev._patchSig !== nextPatchSig;
+
         this.feeds.set(feedId, {
           feedId,
-          name: data.name || feedId,
-          location: isSelfEcho ? `Loopback · ${this.connectedHost || 'Broker'}` : (data.location || 'Remote Cloud Feed'),
-          species: isSelfEcho ? 'Active Broadcast' : (data.species || 'Live Plant Sensor'),
-          channels: data.channels || 4,
+          name: nextName,
+          location: nextLoc,
+          species: nextSpecies,
+          channels: nextChannels,
           isVirtualUtc: false,
           isSelfBroadcast: isSelfEcho,
           lastSeen: Date.now(),
           msgCount: prev.msgCount || 0,
           chStats: Array.isArray(prev.chStats) && prev.chStats.length === 4 ? prev.chStats : makeEmptyChStats(),
           patches: nextPatches,
+          _patchSig: nextPatchSig,
           env: nextEnv
         });
 
@@ -835,7 +863,7 @@
             if (nextEnv && window.chData && window.chData[localCh] && !window.chData[localCh].mqttEnvSensor) {
               window.chData[localCh].mqttEnvSensor = nextEnv;
             }
-            if (rt.followPatch !== false) {
+            if (rt.followPatch !== false && metaChanged) {
               const pObj = nextPatches[rt.remoteCh || 0];
               if (pObj) {
                 this.applyFeedPatchToLocalChannel(localCh, feedId, rt.remoteCh || 0, pObj, false);
@@ -846,7 +874,11 @@
         if (nextEnv && typeof window.refreshAllSensorHUDs === 'function') {
           window.refreshAllSensorHUDs();
         }
-        this.emitUpdate();
+        if (metaChanged) {
+          this.emitUpdate();
+        } else {
+          this.emitTelemetryTick();
+        }
         return;
       }
 
@@ -920,6 +952,11 @@
         const wasIdleCh = entry.chStats[rCh].msgCount === 0;
         entry.msgCount = (entry.msgCount || 0) + 1;
         entry.chStats[rCh].msgCount += 1;
+        if (data.type === 'raw') {
+          entry.chStats[rCh].rawCount = (entry.chStats[rCh].rawCount || 0) + 1;
+        } else if (data.type === 'note') {
+          entry.chStats[rCh].noteCount = (entry.chStats[rCh].noteCount || 0) + 1;
+        }
         entry.chStats[rCh].lastSeen = entry.lastSeen;
 
         if (isNewFeed || wasIdleCh) {
@@ -934,6 +971,10 @@
     }
 
     resetChannelBuffers(localCh) {
+      if (localCh >= 0 && localCh <= 3) {
+        this.rawSampleQueues[localCh] = [];
+        this.rawPacerStates[localCh] = null;
+      }
       if (window.chData && window.chData[localCh]) {
         window.chData[localCh].waveBuffer = [];
         window.chData[localCh].vizBuffer = [];
@@ -1084,10 +1125,32 @@
       if (sched.dropped) return;
 
       const baseTargetAudioTime = (window.audioCtx ? window.audioCtx.currentTime : 0) + sched.audioTimeOffsetSec;
+      const feedEntry = this.feeds.get(feedId);
+      const chStat = (feedEntry && Array.isArray(feedEntry.chStats)) ? feedEntry.chStats[remoteCh] : null;
+      const hasRawStream = Boolean(
+        (feedEntry && feedEntry.isVirtualUtc) ||
+        (chStat && (chStat.rawCount || 0) > 0)
+      );
+      const isRawOnlyRemote = Boolean(
+        feedEntry &&
+        !feedEntry.isVirtualUtc &&
+        chStat &&
+        (chStat.rawCount || 0) >= 6 &&
+        (chStat.noteCount || 0) === 0
+      );
 
       for (let i = 0; i < matchingLocalChs.length; i++) {
         const targetLocalCh = matchingLocalChs[i];
+        const route = this.channelRoutes[targetLocalCh];
+        const isCustomMode = Boolean(route && route.followPatch === false);
+
         if (packet.type === 'note') {
+          // If listener switched this channel to CUSTOM and the feed provides raw biodata,
+          // let local Threshold/Window/Density/Scale evaluate the raw stream instead of sender's pre-baked notes.
+          if (isCustomMode && hasRawStream) {
+            continue;
+          }
+
           let chAudioTime = baseTargetAudioTime;
           let chDelayMs = Math.max(0, sched.delayMs);
           const synthCh = window.synthChannels ? window.synthChannels[targetLocalCh] : null;
@@ -1110,15 +1173,118 @@
               );
             }
           }, Math.min(4000, Math.round(chDelayMs)));
-        } else if (packet.type === 'raw') {
-          setTimeout(() => {
-            if (this.isLocalChPlayingFileStream(targetLocalCh)) return;
-            if (typeof window.processBiodata === 'function') {
-              window.processBiodata({ ...packet, ch: targetLocalCh }, 'mqtt');
-            }
-          }, Math.max(0, sched.delayMs));
+        } else if (packet.type === 'raw' && Array.isArray(packet.p) && packet.p.length > 0) {
+          const sonifyRawLocally = isCustomMode || isRawOnlyRemote;
+          this.enqueueSmoothRawPacket(targetLocalCh, packet.p, Math.max(0, sched.delayMs), sonifyRawLocally);
         }
       }
+    }
+
+    enqueueSmoothRawPacket(localCh, rawSamples, delayMs, sonifyLocally) {
+      if (localCh < 0 || localCh > 3 || !Array.isArray(rawSamples) || rawSamples.length === 0) return;
+      const nowPerf = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+        ? performance.now()
+        : Date.now();
+
+      let scheduledItems;
+      if (Core && typeof Core.planSmoothRawBatchSchedule === 'function') {
+        const res = Core.planSmoothRawBatchSchedule(
+          rawSamples,
+          nowPerf,
+          delayMs,
+          this.rawPacerStates[localCh],
+          { playoutBufferMs: this.playoutBufferMs }
+        );
+        this.rawPacerStates[localCh] = res.state;
+        scheduledItems = res.scheduled;
+      } else {
+        const step = 96 / rawSamples.length;
+        const start = Math.max(nowPerf, nowPerf + delayMs - 96);
+        scheduledItems = rawSamples
+          .filter(t => t && t > 0)
+          .map((ticks, idx) => ({ dueMs: start + (idx + 1) * step, ticks }));
+      }
+
+      const q = this.rawSampleQueues[localCh];
+      for (let i = 0; i < scheduledItems.length; i++) {
+        q.push({
+          dueMs: scheduledItems[i].dueMs,
+          ticks: scheduledItems[i].ticks,
+          sonifyLocally
+        });
+      }
+
+      // Strictly cap per-channel backlog so memory never grows if OS suspends tab
+      if (q.length > 200) {
+        q.splice(0, q.length - 140);
+      }
+
+      this.ensureRawPacerLoop();
+    }
+
+    ensureRawPacerLoop() {
+      if (this.rawPacerRafId !== null) return;
+      const step = () => {
+        this.rawPacerRafId = null;
+        const nowPerf = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+          ? performance.now()
+          : Date.now();
+        if (this.drainRawSampleQueues(nowPerf)) {
+          this.ensureRawPacerLoop();
+        }
+      };
+      if (typeof window.requestAnimationFrame === 'function') {
+        this.rawPacerRafId = window.requestAnimationFrame(step);
+      } else {
+        this.rawPacerRafId = setTimeout(step, 16);
+      }
+    }
+
+    drainRawSampleQueues(nowPerf) {
+      this.lastRafDrainMs = nowPerf;
+      let hasRemaining = false;
+
+      for (let localCh = 0; localCh < 4; localCh++) {
+        const q = this.rawSampleQueues[localCh];
+        if (!q || q.length === 0) continue;
+
+        if (!this.channelRoutes[localCh] || this.isLocalChPlayingFileStream(localCh)) {
+          q.length = 0;
+          this.rawPacerStates[localCh] = null;
+          continue;
+        }
+
+        if (q[0].dueMs <= nowPerf) {
+          const sonifyFlag = Boolean(q[0].sonifyLocally);
+          const dueTicks = [];
+          const maxDrainPerTick = (typeof document !== 'undefined' && document.hidden) ? 32 : 12;
+          let drainCount = 0;
+          while (
+            drainCount < q.length &&
+            drainCount < maxDrainPerTick &&
+            q[drainCount].dueMs <= nowPerf &&
+            Boolean(q[drainCount].sonifyLocally) === sonifyFlag
+          ) {
+            dueTicks.push(q[drainCount].ticks);
+            drainCount++;
+          }
+          if (drainCount > 0) {
+            q.splice(0, drainCount);
+            if (typeof window.processBiodata === 'function') {
+              window.processBiodata(
+                { type: 'raw', ch: localCh, p: dueTicks, _sonifyRawLocally: sonifyFlag },
+                'mqtt'
+              );
+            }
+          }
+        }
+
+        if (q.length > 0) {
+          hasRemaining = true;
+        }
+      }
+
+      return hasRemaining;
     }
 
     /**
@@ -1129,6 +1295,14 @@
     startVirtualUtcLoop() {
       if (this.virtualTickTimer) clearInterval(this.virtualTickTimer);
       this.virtualTickTimer = setInterval(() => {
+        // Background-tab safety drain when requestAnimationFrame is paused by the browser
+        const nowPerf = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+          ? performance.now()
+          : Date.now();
+        if ((typeof document !== 'undefined' && document.hidden) || (nowPerf - this.lastRafDrainMs > 75)) {
+          this.drainRawSampleQueues(nowPerf);
+        }
+
         const routedUtcFeedIds = new Set();
         for (let ch = 0; ch < 4; ch++) {
           const r = this.channelRoutes[ch];
@@ -1181,59 +1355,51 @@
               p: pulseSamples
             });
 
-            // Deterministic UTC note generation so every device listening to the same UTC feed
-            // hears identical notes at the same synchronized playout timestamp
+            // Deterministic UTC note generation using the exact same sample-by-sample rolling window
+            // & 150ms refractory math as ESP32 hardware and DataStreamer playback!
             const winKey = `${vf.feedId}:${rCh}`;
             if (!this.virtualWindows.has(winKey)) this.virtualWindows.set(winKey, []);
             const win = this.virtualWindows.get(winKey);
-            const latestR = 10000000 / pulseSamples[pulseSamples.length - 1];
-            win.push(latestR);
-            if (win.length > 40) win.shift();
+            const localTarget = this.channelRoutes.findIndex(r => r && r.feedId === vf.feedId && r.remoteCh === rCh);
+            const synthParams = (localTarget >= 0 && window.synthChannels && window.synthChannels[localTarget])
+              ? window.synthChannels[localTarget].params
+              : window.defaultParams;
+            const sampleWindow = Math.max(2, Math.min(2000, Math.round(Number(synthParams?.sampleSize) || 40)));
+            const thresh = synthParams ? (synthParams.threshold || 2.0) : 2.0;
 
-            if (win.length >= 15 && Core) {
-              // Find the first local channel routed to this feed to respect its musical scale
-              const localTarget = this.channelRoutes.findIndex(r => r && r.feedId === vf.feedId && r.remoteCh === rCh);
-              const synthParams = (localTarget >= 0 && window.synthChannels && window.synthChannels[localTarget])
-                ? window.synthChannels[localTarget].params
-                : window.defaultParams;
+            for (let s = 0; s < pulseSamples.length; s++) {
+              const rVal = 10000000 / pulseSamples[s];
+              win.push(rVal);
+              while (win.length > sampleWindow) win.shift();
 
-              const thresh = synthParams ? (synthParams.threshold || 2.0) : 2.0;
-              const stats = Core.computeWindowStats(win, thresh);
-              if (stats.isOverThreshold && (slot % 2 === 0)) {
-                const minN = synthParams?.minNote ?? 48;
-                const maxN = synthParams?.maxNote ?? 84;
-                const span = Math.max(0.5, stats.maxim - stats.minim);
-                let normP = Math.max(0, Math.min(1, (latestR - stats.minim) / span));
-                normP = Core.applySpreadCurve(normP, synthParams?.spread ?? 75);
-                const rawN = Math.round(minN + normP * (maxN - minN));
-                const note = Core.scaleNote(
-                  rawN,
-                  synthParams?.scaleType,
-                  synthParams?.scaleRoot,
-                  synthParams?.activeScaleBits,
-                  minN,
-                  maxN
-                );
-                const velMin = synthParams?.velMin ?? 60;
-                const velMax = synthParams?.velMax ?? 110;
-                const vel = Math.min(127, Math.max(1, Math.round(velMin + hash32((slot + 333) ^ chSeed) * (velMax - velMin))));
-                const dur = Math.round((220 + hash32((slot + 777) ^ chSeed) * 480) * (synthParams?.durMult ?? 1.0));
-
-                const densityPass = (hash32((slot + 999) ^ chSeed) * 100) <= (synthParams?.density ?? 100);
-                if (densityPass) {
-                  this.dispatchSyncedFeedPacket(vf.feedId, {
-                    type: 'note',
-                    ch: rCh,
-                    ts: slotTimestampMs,
-                    n: note,
-                    v: vel,
-                    d: dur
-                  });
-                } else if (typeof window.triggerDensityVisualizer === 'function') {
-                  for (let lCh = 0; lCh < 4; lCh++) {
-                    const rt = this.channelRoutes[lCh];
-                    if (rt && rt.feedId === vf.feedId && rt.remoteCh === rCh && !this.isLocalChPlayingFileStream(lCh)) {
-                      window.triggerDensityVisualizer(lCh, 'drop', note, vel, dur);
+              if (win.length >= Math.min(10, sampleWindow) && Core && typeof Core.evaluateBioSampleWindow === 'function') {
+                const stats = Core.evaluateBioSampleWindow(win, rVal, thresh, true);
+                const sampleTs = slotTimestampMs - 80 + (s + 1) * 16;
+                const lastTrig = this.virtualLastTriggerMs.get(winKey) || 0;
+                if (stats.isOverThreshold && (sampleTs - lastTrig > 150)) {
+                  const mapped = Core.sonifyBioSample(
+                    stats,
+                    rVal,
+                    synthParams,
+                    hash32((slot * 8 + s + 777) ^ chSeed)
+                  );
+                  const densityPass = (hash32((slot * 8 + s + 999) ^ chSeed) * 100) <= (synthParams?.density ?? 100);
+                  if (densityPass) {
+                    this.virtualLastTriggerMs.set(winKey, sampleTs);
+                    this.dispatchSyncedFeedPacket(vf.feedId, {
+                      type: 'note',
+                      ch: rCh,
+                      ts: sampleTs,
+                      n: mapped.note,
+                      v: mapped.velocity,
+                      d: mapped.duration
+                    });
+                  } else if (typeof window.triggerDensityVisualizer === 'function') {
+                    for (let lCh = 0; lCh < 4; lCh++) {
+                      const rt = this.channelRoutes[lCh];
+                      if (rt && rt.feedId === vf.feedId && rt.remoteCh === rCh && rt.followPatch !== false && !this.isLocalChPlayingFileStream(lCh)) {
+                        window.triggerDensityVisualizer(lCh, 'drop', mapped.note, mapped.velocity, mapped.duration);
+                      }
                     }
                   }
                 }
@@ -1301,11 +1467,15 @@
       };
     }
 
+    getFeedById(feedId) {
+      return feedId ? (this.feeds.get(feedId) || null) : null;
+    }
+
     emitTelemetryTick(forceImmediate = false) {
       const now = Date.now();
-      if (!forceImmediate && now - this.lastTelemetryEmitMs < 100) return;
+      if (!forceImmediate && now - this.lastTelemetryEmitMs < 250) return;
       this.lastTelemetryEmitMs = now;
-      window.dispatchEvent(new CustomEvent('bioquad_mqtt_telemetry', { detail: this.getState() }));
+      window.dispatchEvent(new CustomEvent('bioquad_mqtt_telemetry'));
     }
 
     emitUpdate() {

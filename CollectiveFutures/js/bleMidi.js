@@ -717,23 +717,17 @@ window.processBiodata = function(payload, source = 'ble') {
 
     // 2. Isolate channels actively routed to an incoming MQTT stream (e.g., CH 3 <- Stream 1, CH 4 <- Stream 2)
     // from floating hardware pins or stray local events, unless intentionally self-looping the exact same channel.
-    if (source !== 'mqtt' && source !== 'stream' && window.bioquadFeeds && window.bioquadFeeds.channelRoutes) {
-        const activeRoute = window.bioquadFeeds.channelRoutes[chIdx];
-        if (activeRoute) {
-            const isSameChSelfLoop = Boolean(
-                window.bioquadFeeds.isPublishing &&
-                activeRoute.feedId === window.bioquadFeeds.publishFeedId &&
-                activeRoute.remoteCh === chIdx
-            );
-            if (!isSameChSelfLoop) {
-                return;
-            }
-        }
-    }
-
     // Forward local live telemetry (USB, BLE, MIDI, or local File Stream) to Cloud MQTT if user enabled Broadcast
     if (source !== 'mqtt' && window.bioquadFeeds && window.bioquadFeeds.isPublishing && (payload.type === 'raw' || payload.type === 'note')) {
         window.bioquadFeeds.broadcastTelemetryEvent(payload);
+    }
+
+    // If this local channel is routed to a Cloud/UTC stream (including a SELF loopback route),
+    // let only the synced MQTT playout feed drive this channel's visualizer & synth.
+    if (source !== 'mqtt' && source !== 'stream' && window.bioquadFeeds && window.bioquadFeeds.channelRoutes) {
+        if (window.bioquadFeeds.channelRoutes[chIdx]) {
+            return;
+        }
     }
 
     // Record live biodata if recorder is active and not currently playing back a saved file stream
@@ -851,7 +845,9 @@ window.processBiodata = function(payload, source = 'ble') {
             ch.waveBuffer.push({ r: rVal, ticks: rawTicks, evt: 0 });
             ch.vizBuffer.push(rVal);
 
-            while (ch.waveBuffer.length > 120000) ch.waveBuffer.shift();
+            if (ch.waveBuffer.length > 120000) {
+                ch.waveBuffer.splice(0, ch.waveBuffer.length - 108000);
+            }
             while (ch.vizBuffer.length > sampleWindow) ch.vizBuffer.shift();
 
             if (ch.vizBuffer.length > 1) {

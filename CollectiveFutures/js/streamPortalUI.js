@@ -199,53 +199,64 @@
       }
     }
 
-    // Sync Cloud Feeds Toolbar Pill & Channel Feed Badges
+    // Sync Cloud Feeds Toolbar Pill & Channel Feed Badges (zero-allocation O(1) reads)
     const feedsMgr = window.bioquadFeeds;
     if (feedsMgr) {
-      const fState = feedsMgr.getState();
+      const activeRouteCount = typeof feedsMgr.getActiveRouteCount === 'function'
+        ? feedsMgr.getActiveRouteCount()
+        : (feedsMgr.channelRoutes ? feedsMgr.channelRoutes.filter(Boolean).length : 0);
+      const routes = feedsMgr.channelRoutes || [];
       const fDot = $('feeds-toolbar-dot');
       const fLbl = $('feeds-toolbar-label');
       if (fDot) {
-        const live = fState.activeRouteCount > 0 || fState.isConnected || fState.isPublishing;
-        fDot.className = live ? 'status-online' : 'status-offline';
+        const live = activeRouteCount > 0 || feedsMgr.isConnected || feedsMgr.isPublishing;
+        const nextCls = live ? 'status-online' : 'status-offline';
+        if (fDot.className !== nextCls) fDot.className = nextCls;
       }
       if (fLbl) {
-        fLbl.textContent = fState.activeRouteCount > 0 ? `STREAM (${fState.activeRouteCount})` : 'STREAM';
+        const nextLbl = activeRouteCount > 0 ? `STREAM (${activeRouteCount})` : 'STREAM';
+        if (fLbl.textContent !== nextLbl) fLbl.textContent = nextLbl;
       }
 
       for (let ch = 0; ch < 4; ch++) {
         const badge = $(`ch-feed-badge-${ch}`);
-        const route = fState.channelRoutes[ch];
+        const route = routes[ch];
         if (badge) {
           if (route && route.feedId) {
-            const meta = fState.feeds.find(f => f.feedId === route.feedId);
+            const meta = typeof feedsMgr.getFeedById === 'function'
+              ? feedsMgr.getFeedById(route.feedId)
+              : (feedsMgr.feeds ? feedsMgr.feeds.get(route.feedId) : null);
             const shortName = meta ? meta.name : route.feedId;
             const streamNum = (route.remoteCh || 0) + 1;
             const modeTag = route.followPatch === false ? 'CUSTOM' : 'AUTO';
-            badge.textContent = `${shortName} · S${streamNum} · ${modeTag}`;
-            badge.style.display = 'inline-flex';
-          } else {
+            const nextBadge = `${shortName} · S${streamNum} · ${modeTag}`;
+            if (badge.textContent !== nextBadge) badge.textContent = nextBadge;
+            if (badge.style.display !== 'inline-flex') badge.style.display = 'inline-flex';
+          } else if (badge.style.display !== 'none') {
             badge.style.display = 'none';
           }
         }
       }
-      updateSynthFeedAutoBar(fState);
+      updateSynthFeedAutoBar();
     }
   }
 
   function updateSynthFeedAutoBar(fStateOverride = null) {
     const bar = $('synth-feed-auto-bar');
-    if (!bar || !window.bioquadFeeds) return;
-    const fState = fStateOverride || window.bioquadFeeds.getState();
+    const feedsMgr = window.bioquadFeeds;
+    if (!bar || !feedsMgr) return;
     const activeCh = typeof window.activeSynthIndex === 'number' ? window.activeSynthIndex : 0;
-    const route = fState.channelRoutes[activeCh];
+    const routes = fStateOverride ? fStateOverride.channelRoutes : (feedsMgr.channelRoutes || []);
+    const route = routes[activeCh];
 
     if (!route || !route.feedId) {
-      bar.style.display = 'none';
+      if (bar.style.display !== 'none') bar.style.display = 'none';
       return;
     }
 
-    const feed = fState.feeds.find(f => f.feedId === route.feedId);
+    const feed = fStateOverride
+      ? fStateOverride.feeds.find(f => f.feedId === route.feedId)
+      : (typeof feedsMgr.getFeedById === 'function' ? feedsMgr.getFeedById(route.feedId) : null);
     const feedName = feed ? (feed.name || feed.feedId) : route.feedId;
     const streamNum = (route.remoteCh || 0) + 1;
     const isAuto = route.followPatch !== false;
@@ -254,22 +265,27 @@
       ? window.BioQuadCore.summarizePatch(patchObj)
       : (patchObj && patchObj.patchName ? patchObj.patchName : '');
 
-    bar.style.display = 'flex';
+    if (bar.style.display !== 'flex') bar.style.display = 'flex';
     const srcEl = $('synth-feed-source-label');
-    if (srcEl) srcEl.textContent = `CH ${activeCh + 1} ← ${feedName} · S${streamNum}`;
+    const nextSrcText = `CH ${activeCh + 1} ← ${feedName} · S${streamNum}`;
+    if (srcEl && srcEl.textContent !== nextSrcText) srcEl.textContent = nextSrcText;
 
     const patchEl = $('synth-feed-patch-label');
-    if (patchEl) {
-      patchEl.textContent = patchSummary ? `(${patchSummary})` : '';
+    const nextPatchText = patchSummary ? `(${patchSummary})` : '';
+    if (patchEl && patchEl.textContent !== nextPatchText) {
+      patchEl.textContent = nextPatchText;
     }
 
     const btn = $('btn-synth-feed-auto');
     if (btn) {
-      btn.textContent = isAuto ? 'AUTO' : 'CUSTOM';
-      btn.setAttribute('aria-pressed', isAuto ? 'true' : 'false');
-      btn.style.borderColor = isAuto ? 'var(--green)' : 'var(--yellow)';
-      btn.style.color = isAuto ? 'var(--green)' : 'var(--yellow)';
-      btn.style.background = isAuto ? 'rgba(57,255,20,0.12)' : 'rgba(255,215,0,0.12)';
+      const nextBtnText = isAuto ? 'AUTO' : 'CUSTOM';
+      if (btn.textContent !== nextBtnText) {
+        btn.textContent = nextBtnText;
+        btn.setAttribute('aria-pressed', isAuto ? 'true' : 'false');
+        btn.style.borderColor = isAuto ? 'var(--green)' : 'var(--yellow)';
+        btn.style.color = isAuto ? 'var(--green)' : 'var(--yellow)';
+        btn.style.background = isAuto ? 'rgba(57,255,20,0.12)' : 'rgba(255,215,0,0.12)';
+      }
     }
   }
 
@@ -528,14 +544,15 @@
     const speedVal = $('stream-speed-val');
     if (speedVal) speedVal.textContent = `${(streamState.playbackRate || 1.0).toFixed(1)}x`;
 
-    // 6. Channel status cards (shows file stream OR active Cloud Feed route)
-    const feedsState = window.bioquadFeeds ? window.bioquadFeeds.getState() : null;
+    // 6. Channel status cards (shows file stream OR active Cloud Feed route via O(1) lookup)
+    const feedsMgr = window.bioquadFeeds;
+    const mqttRoutes = feedsMgr && feedsMgr.channelRoutes ? feedsMgr.channelRoutes : null;
     for (let ch = 0; ch < 4; ch++) {
       const feed = streamState.activeChannels && streamState.activeChannels[ch];
       const hasFileData = feed && feed.active;
-      const mqttRoute = feedsState ? feedsState.channelRoutes[ch] : null;
-      const mqttMeta = (mqttRoute && feedsState)
-        ? feedsState.feeds.find(f => f.feedId === mqttRoute.feedId)
+      const mqttRoute = mqttRoutes ? mqttRoutes[ch] : null;
+      const mqttMeta = (mqttRoute && feedsMgr)
+        ? (typeof feedsMgr.getFeedById === 'function' ? feedsMgr.getFeedById(mqttRoute.feedId) : null)
         : null;
 
       const labelEl = $(`stream-ch-label-${ch}`);
@@ -544,14 +561,15 @@
 
       if (labelEl) {
         if (hasFileData) {
-          labelEl.textContent = feed.label;
+          if (labelEl.textContent !== feed.label) labelEl.textContent = feed.label;
           labelEl.style.color = '#c9d1d9';
         } else if (mqttRoute) {
           const streamNum = (mqttRoute.remoteCh || 0) + 1;
-          labelEl.textContent = `${mqttMeta ? mqttMeta.name : mqttRoute.feedId} · S${streamNum}`;
+          const nextRouteLbl = `${mqttMeta ? mqttMeta.name : mqttRoute.feedId} · S${streamNum}`;
+          if (labelEl.textContent !== nextRouteLbl) labelEl.textContent = nextRouteLbl;
           labelEl.style.color = 'var(--cyan)';
         } else {
-          labelEl.textContent = 'Empty';
+          if (labelEl.textContent !== 'Empty') labelEl.textContent = 'Empty';
           labelEl.style.color = '#6e7681';
         }
       }
@@ -577,9 +595,6 @@
     }
 
     updateToolbarIndicator();
-    if (isFeedsModalOpen) {
-      updateFeedsSyncTelemetryOnly();
-    }
   }
 
   // --- 4. FILE INGESTION & MAPPING ---
@@ -990,14 +1005,16 @@
       $('btn-mqtt-clear-stale').style.display = idleRemoteCount > 0 ? 'inline-flex' : 'none';
     }
 
-    // 3. In-place packet counter updates for rendered live stream rows (zero DOM flicker)
+    // 3. In-place packet counter updates for rendered live stream rows (O(1) Map lookup, zero DOM flicker)
     document.querySelectorAll('[data-stream-pkt-key]').forEach(el => {
       const key = el.getAttribute('data-stream-pkt-key') || '';
       const parsed = window.BioQuadCore && window.BioQuadCore.parseStreamSelectValue
         ? window.BioQuadCore.parseStreamSelectValue(key)
         : null;
       if (!parsed) return;
-      const f = st.feeds.find(item => item.feedId === parsed.feedId);
+      const f = typeof mgr.getFeedById === 'function'
+        ? mgr.getFeedById(parsed.feedId)
+        : st.feeds.find(item => item.feedId === parsed.feedId);
       if (!f || f.isVirtualUtc) return;
       const rxPkts = Array.isArray(f.chStats) && f.chStats[parsed.remoteCh]
         ? f.chStats[parsed.remoteCh].msgCount
@@ -1006,7 +1023,8 @@
         ? st.txChStats[parsed.remoteCh].msgCount
         : 0;
       const count = Math.max(rxPkts, txPkts);
-      el.textContent = count > 0 ? `${count.toLocaleString()} pkts` : 'Idle';
+      const nextPktTxt = count > 0 ? `${count.toLocaleString()} pkts` : 'Idle';
+      if (el.textContent !== nextPktTxt) el.textContent = nextPktTxt;
       el.style.color = count > 0 ? 'var(--green)' : '#6e7681';
     });
   }
@@ -2017,7 +2035,14 @@
       if (isFeedsModalOpen) updateFeedsSyncTelemetryOnly();
     });
 
-    setInterval(updateTransportDeck, 100);
+    setInterval(() => {
+      if (isBoxVisible || (window.dataStreamer && window.dataStreamer.isPlaying) || (window.biodataRecorder && window.biodataRecorder.isRecording)) {
+        updateTransportDeck();
+      } else {
+        updateToolbarIndicator();
+      }
+    }, 250);
+    updateTransportDeck();
     renderSavedTakes();
   });
 
