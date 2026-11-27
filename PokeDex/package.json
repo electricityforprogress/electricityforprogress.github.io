@@ -1,0 +1,16 @@
+{
+  "name": "gen1-pokedex-sram-builder",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node -e \"import('node:http').then(async({default:http})=>{const fs=await import('node:fs');const path=await import('node:path');const m={'.html':'text/html;charset=utf-8','.css':'text/css;charset=utf-8','.js':'application/javascript;charset=utf-8','.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon'};http.createServer((q,r)=>{let u=decodeURIComponent((q.url||'/').split('?')[0]);if(u==='/')u='/index.html';let p=path.resolve('.'+u);if(!p.startsWith(path.resolve('.'))){r.writeHead(403);return r.end();}fs.readFile(p,(e,d)=>{if(e){r.writeHead(404);return r.end('Not found');}r.writeHead(200,{'Content-Type':m[path.extname(p)]||'application/octet-stream','Cache-Control':'no-store'});r.end(d);});}).listen(Number(process.env.PORT)||3000,'0.0.0.0');})\"",
+    "start": "node -e \"import('node:http').then(async({default:http})=>{const fs=await import('node:fs');const path=await import('node:path');const m={'.html':'text/html;charset=utf-8','.css':'text/css;charset=utf-8','.js':'application/javascript;charset=utf-8','.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon'};http.createServer((q,r)=>{let u=decodeURIComponent((q.url||'/').split('?')[0]);if(u==='/')u='/index.html';let p=path.resolve('.'+u);if(!p.startsWith(path.resolve('.'))){r.writeHead(403);return r.end();}fs.readFile(p,(e,d)=>{if(e){r.writeHead(404);return r.end('Not found');}r.writeHead(200,{'Content-Type':m[path.extname(p)]||'application/octet-stream','Cache-Control':'no-store'});r.end(d);});}).listen(Number(process.env.PORT)||3000,'0.0.0.0');})\"",
+    "build": "node --check app.js && rm -rf dist && mkdir -p dist && cp index.html style.css app.js dist/",
+    "clean": "rm -rf dist",
+    "lint": "node --check app.js && node --test tests/sram.test.mjs",
+    "test": "node --test tests/sram.test.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

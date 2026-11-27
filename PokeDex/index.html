@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gen 1 Pokémon SRAM Builder</title>
+    <meta name="description" content="Standalone Generation 1 (Red/Blue/Yellow) Pokédex team and 12-box PC storage builder (up to 246 Pokémon) with 32KB .sav export for Pokémon Stadium 64 and SummerCart64." />
+    <meta property="og:title" content="Gen 1 Pokémon SRAM Builder" />
+    <meta property="og:description" content="Standalone Generation 1 (Red/Blue/Yellow) Pokédex team and 12-box PC storage builder (up to 246 Pokémon) with 32KB .sav export for Pokémon Stadium 64 and SummerCart64." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main id="top" class="app-shell">
+      <section class="pokedex-hardware" aria-label="Pokédex Generation 1 Save File Studio">
+        <div class="pokedex-left-shell">
+          <div class="pokedex-leaf pokedex-left-leaf">
+            <div class="sensor-bar">
+              <svg class="left-angle-trim" viewBox="0 0 560 84" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M 0,78 L 210,78 L 284,24 L 560,24" fill="none" stroke="#7d0f14" stroke-width="4" />
+                <path d="M 0,81 L 211,81 L 285,27 L 560,27" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" />
+              </svg>
+
+              <div class="sensor-cluster">
+                <div class="camera-lens" aria-hidden="true"></div>
+                <div class="led-trio" aria-hidden="true">
+                  <span class="dome-led red"></span>
+                  <span class="dome-led amber"></span>
+                  <span class="dome-led green"></span>
+                </div>
+              </div>
+
+              <div class="dex-header-meta">
+                <div id="dexModelBadge">POKÉDEX</div>
+                <div id="dexCountBadge" class="tabular">30 / 246 SAVED</div>
+              </div>
+            </div>
+
+            <div class="cream-bezel">
+              <div class="bezel-top-pins" aria-hidden="true">
+                <span class="bezel-pin"></span>
+                <span class="bezel-pin"></span>
+              </div>
+
+              <div class="tft-screen">
+                <div id="left-pane-pokedex" class="dex-pane is-active">
+                  <div class="tft-subtabs" role="tablist" aria-label="Selected Pokémon detail screens">
+                    <button type="button" class="tft-tab-btn is-active" data-subtab="stats">Stats</button>
+                    <button type="button" class="tft-tab-btn" data-subtab="moves">Moves</button>
+                    <button type="button" class="tft-tab-btn" data-subtab="dvs">DVs / EVs</button>
+                    <button type="button" class="tft-tab-btn" data-subtab="art">Info</button>
+                  </div>
+
+                  <div class="tft-body">
+                    <div class="portrait-column">
+                      <div class="portrait-frame" id="portraitFrameBox" role="button" tabindex="0" aria-label="Swap high-resolution artwork and 8-bit sprite" title="Click to swap main and 8-bit Pokémon view">
+                        <img id="selectedMonImg" src="" alt="" referrerpolicy="no-referrer" />
+                        <div class="portrait-pip-box" aria-hidden="true">
+                          <img id="selectedMonPipImg" src="" alt="" referrerpolicy="no-referrer" />
+                        </div>
+                        <div id="portraitFallback" class="portrait-fallback">
+                          <span id="fallbackDexCode">#007</span>
+                          <span id="fallbackMonName">SQUIRTLE</span>
+                        </div>
+                      </div>
+                      <div class="portrait-caption">
+                        <span class="portrait-dex-num" id="portraitDexNum">#007 · 0xB1</span>
+                        <h2 class="portrait-mon-name" id="portraitMonName">SQUIRTLE</h2>
+                        <span class="portrait-submeta" id="portraitSubMeta">Lv. 100 · Party #1</span>
+                        <a id="artOfPkmLink" class="art-link" href="https://www.artofpkm.com/pokemon" target="_blank" rel="noopener noreferrer">ArtOfPKM Ref ↗</a>
+                      </div>
+                    </div>
+
+                    <div class="tft-detail-pane" id="tftDetailPane"></div>
+                  </div>
+                </div>
+
+                <div id="left-pane-boxes" class="dex-pane" aria-label="Party and 12 PC Storage Boxes">
+                  <div class="tft-pane-header">
+                    <h2 class="tft-pane-title">BILL'S PC (246)</h2>
+                    <div class="tft-header-actions">
+                      <select id="boxesAddSpeciesSelect" class="boxes-add-select" aria-label="Choose Pokémon species to add"></select>
+                      <button type="button" class="tft-mini-btn" id="boxesAddMonBtn">+ Add</button>
+                      <button type="button" class="tft-mini-btn" id="boxesLoad151Btn">All 151</button>
+                    </div>
+                  </div>
+                  <div class="boxes-selector-bar" id="boxesFilterBar"></div>
+                  <div class="storage-cards-grid" id="boxesCardsGrid"></div>
+                </div>
+
+                <div id="left-pane-sram" class="dex-pane" aria-label="Global SRAM and Trainer Settings">
+                  <div class="tft-pane-header">
+                    <h2 class="tft-pane-title">CARTRIDGE &amp; TRAINER SETTINGS</h2>
+                    <div class="tft-header-actions">
+                      <button type="button" class="tft-mini-btn" id="importSavBtn">Import .SAV</button>
+                      <input type="file" id="importSavInput" accept=".sav,application/octet-stream" class="sr-only" tabindex="-1" aria-hidden="true" />
+                      <button type="button" class="tft-mini-btn" id="resetDefaultRosterBtn">Reset 30</button>
+                    </div>
+                  </div>
+
+                  <div class="tft-settings-grid">
+                    <div>
+                      <label class="tft-field-label" for="trainerNameInput"><span>TRAINER NAME</span><span class="tabular">0x2598</span></label>
+                      <input type="text" id="trainerNameInput" value="PLAYER" maxlength="7" autocomplete="off" spellcheck="false" />
+                    </div>
+                    <div>
+                      <label class="tft-field-label" for="trainerIdInput"><span>TRAINER ID</span><span class="tabular">16-bit BE</span></label>
+                      <input type="number" id="trainerIdInput" value="4919" min="0" max="65535" class="tabular" />
+                    </div>
+                    <div>
+                      <label class="tft-field-label" for="fileNameInput"><span>OUTPUT FILENAME</span><span class="tabular">.sav</span></label>
+                      <input type="text" id="fileNameInput" value="POKEMON.sav" maxlength="64" autocomplete="off" spellcheck="false" />
+                    </div>
+                    <div>
+                      <label class="tft-field-label" for="offsetModeSelect"><span>PARTY OFFSET MAP</span><span class="tabular" id="offsetModeHint">0x303C</span></label>
+                      <select id="offsetModeSelect">
+                        <option value="retail" selected>Retail + 12 Boxes (0x303C)</option>
+                        <option value="spec">Spec Party Map (0x302A)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="tft-note-box">
+                    32,768-byte Game Boy Battery SRAM · Flag <strong>0x284C = 0x80</strong> initializes all 12 PC Storage Boxes for Pokémon Stadium 64. Live Bank 1, 2 &amp; 3 hex bytes are shown on the right Pokédex screen.
+                  </div>
+                </div>
+
+                <div id="left-pane-guide" class="dex-pane" aria-label="Pokémon Stadium 64 Setup Guide">
+                  <div class="tft-pane-header">
+                    <h2 class="tft-pane-title">STADIUM 64 &amp; MULTI-BOX GUIDE</h2>
+                  </div>
+                  <div class="tft-guide-scroll">
+                    <article class="dex-guide-block">
+                      <h3>01. 246 Pokémon in One 32KB Save</h3>
+                      <p>
+                        Bank 1 stores 6 Party Pokémon (44B @ <code>0x2F34</code>) plus Current Box 1 (<code>0x30C0</code>). Bank 2 (<code>0x4000</code>) holds Boxes 1–6 and Bank 3 (<code>0x6000</code>) holds Boxes 7–12 (20 × 33B each).
+                      </p>
+                      <code class="guide-code">6 Party + (12 Boxes × 20) = 246 Pokémon</code>
+                    </article>
+
+                    <article class="dex-guide-block">
+                      <h3>02. Selecting PC Boxes in Stadium 64</h3>
+                      <p>
+                        On the N64 team registration screen (Anything Goes, Poké Cup, Petit Cup, or Gym Leader Castle), press <strong>R</strong> or <strong>C-Right</strong> to flip through Party and Boxes 1–12!
+                      </p>
+                      <code class="guide-code">0x284C = 0x80 (Boxes Initialized Flag)</code>
+                    </article>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bezel-bottom-row">
+                <button type="button" class="bezel-red-btn" id="toggleArtStyleBtn" aria-label="Switch between Sugimori Artwork and Gen 1 Game Boy Sprite" title="Toggle Artwork / Gen 1 Sprite"></button>
+                <div class="speaker-vents" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="left-lower-deck">
+              <button type="button" class="thumb-knob" id="knobSwapLocationBtn" title="Move selected Pokémon between Party and PC Box">SWAP</button>
+
+              <div class="lcd-and-pills">
+                <div class="pill-switches">
+                  <button type="button" class="hw-pill-btn crimson" id="deleteSelectedBtn">DELETE</button>
+                  <button type="button" class="hw-pill-btn lime" id="cloneSelectedBtn">CLONE</button>
+                </div>
+                <div class="green-status-lcd" id="greenStatusLcd" role="status" aria-live="polite">
+                  <span class="lcd-line">TRAINER: PLAYER (ID 04919)</span>
+                  <span class="lcd-line">PARTY: 6/6 · PC BOXES: 24/240</span>
+                  <span class="lcd-line">BANK1 CHK: 0x00 · READY</span>
+                </div>
+              </div>
+
+              <div class="dpad-wrap" role="group" aria-label="Pokédex Directional Pad">
+                <button type="button" class="dpad-btn dpad-up" id="dpadUpBtn" aria-label="Previous Saved Pokémon">▲</button>
+                <button type="button" class="dpad-btn dpad-left" id="dpadLeftBtn" aria-label="Previous Detail Tab">◀</button>
+                <div class="dpad-btn dpad-center" aria-hidden="true">●</div>
+                <button type="button" class="dpad-btn dpad-right" id="dpadRightBtn" aria-label="Next Detail Tab">▶</button>
+                <button type="button" class="dpad-btn dpad-down" id="dpadDownBtn" aria-label="Next Saved Pokémon">▼</button>
+              </div>
+            </div>
+
+            <nav class="dex-red-tabs" role="tablist" aria-label="Pokédex Workspace Views">
+              <button type="button" role="tab" aria-selected="true" class="dex-red-tab is-active" data-tab="pokedex">Pokédex</button>
+              <button type="button" role="tab" aria-selected="false" class="dex-red-tab" data-tab="boxes" id="boxesTabBtn">Boxes (30)</button>
+              <button type="button" role="tab" aria-selected="false" class="dex-red-tab" data-tab="sram">Settings</button>
+              <button type="button" role="tab" aria-selected="false" class="dex-red-tab" data-tab="guide">Guide</button>
+            </nav>
+          </div>
+        </div>
+
+        <div class="pokedex-hinge" aria-hidden="true">
+          <div class="hinge-ring"></div>
+          <div class="hinge-ring"></div>
+        </div>
+
+        <div class="pokedex-right-shell">
+          <div class="pokedex-leaf pokedex-right-leaf">
+            <svg class="right-angle-trim" viewBox="0 0 520 74" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M 14,28 L 112,28 L 178,66 L 504,66" fill="none" stroke="#7d0f14" stroke-width="3" />
+              <path d="M 14,31 L 111,31 L 177,69 L 504,69" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
+            </svg>
+
+            <div class="right-oled-screen">
+              <div id="right-pane-roster" class="dex-pane is-active">
+                <div class="dex-flavor-box" id="dexFlavorText">
+                  Shoots water at prey while in the water. Withdraws into its shell when in danger.
+                </div>
+
+                <div class="roster-toolbar">
+                  <input type="text" id="rosterSearchInput" placeholder="Search name or #Dex..." aria-label="Search saved Pokémon" />
+                  <select id="rosterFilterSelect" aria-label="Filter saved Pokémon by storage location">
+                    <option value="all">All Saved</option>
+                    <option value="party">Party (1–6)</option>
+                    <option value="box">PC Boxes</option>
+                  </select>
+                  <select id="rosterSortSelect" aria-label="Sort saved Pokémon list">
+                    <option value="slot" selected>Sort: Box/Party</option>
+                    <option value="dex">Sort: #Dex ID</option>
+                    <option value="name">Sort: Name A–Z</option>
+                  </select>
+                </div>
+
+                <div class="roster-scroll" id="savedRosterList" role="listbox" aria-label="Saved Pokémon Roster"></div>
+              </div>
+
+              <div id="right-pane-sram" class="dex-pane">
+                <div class="oled-pane-title">LIVE 32KB SRAM HEX &amp; CHECKSUMS</div>
+                <div class="oled-scroll-area">
+                  <table class="inspector-table">
+                    <thead>
+                      <tr>
+                        <th>Offset</th>
+                        <th>Region</th>
+                        <th>Hex</th>
+                      </tr>
+                    </thead>
+                    <tbody id="inspectorTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div id="right-pane-guide" class="dex-pane">
+                <div class="oled-pane-title">SUMMERCART64 &amp; EMULATOR DEPLOYMENT</div>
+                <div class="oled-scroll-area">
+                  <article class="oled-guide-block">
+                    <h3>03. Exact ROM &amp; .SAV Filename Match</h3>
+                    <p>
+                      Rename your exported <code>.sav</code> file to match the exact case-sensitive base filename of your Red, Blue, or Yellow ROM on your SummerCart64 microSD card or N64 Transfer Pak plugin folder.
+                    </p>
+                    <code class="guide-code">Pokemon - Red Version (USA, Europe).gb<br />Pokemon - Red Version (USA, Europe).sav</code>
+                  </article>
+                  <article class="oled-guide-block">
+                    <h3>04. Stadium Cup Level Presets</h3>
+                    <p>
+                      Use the blue keypad below to switch your entire roster between <strong>All Lv. 100</strong> (Anything Goes) and <strong>All Lv. 50</strong> (Poké Cup), then press <strong>EXPORT .SAV</strong>!
+                    </p>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+            <div class="blue-keypad-grid" role="group" aria-label="Pokédex Quick Function Keypad">
+              <button type="button" class="cyan-key-btn" data-key-action="add-mon">+ New Slot</button>
+              <button type="button" class="cyan-key-btn" data-key-action="clone-mon">Duplicate</button>
+              <button type="button" class="cyan-key-btn" data-key-action="swap-party-box">Party ⇄ Box</button>
+              <button type="button" class="cyan-key-btn" data-key-action="all-lv100">All Lv. 100</button>
+              <button type="button" class="cyan-key-btn" data-key-action="all-lv50">All Lv. 50 Cup</button>
+              <button type="button" class="cyan-key-btn" data-key-action="preset-kids30">30 Kid Pack</button>
+              <button type="button" class="cyan-key-btn" data-key-action="preset-all151">All 151 Dex</button>
+              <button type="button" class="cyan-key-btn" data-key-action="preset-ou6">6 Tourney OU</button>
+              <button type="button" class="cyan-key-btn" data-key-action="max-all-dvs">Max All Stats</button>
+              <button type="button" class="cyan-key-btn" data-key-action="meta-moves">Meta Moveset</button>
+            </div>
+
+            <div class="right-mid-controls">
+              <div class="white-key-pair">
+                <button type="button" class="white-square-btn" id="prevMonWhiteBtn">◀ PREV</button>
+                <button type="button" class="white-square-btn" id="nextMonWhiteBtn">NEXT ▶</button>
+              </div>
+              <div class="export-cluster">
+                <div class="mini-trim-leds" aria-hidden="true">
+                  <span class="trim-red"></span>
+                  <span class="trim-lime"></span>
+                </div>
+                <button type="button" class="amber-export-btn" id="exportSavBtn">EXPORT .SAV</button>
+              </div>
+            </div>
+
+            <div class="dual-mini-oleds">
+              <div class="mini-oled" id="miniOledType">WATER</div>
+              <div class="mini-oled" id="miniOledSlot">PARTY · #01</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

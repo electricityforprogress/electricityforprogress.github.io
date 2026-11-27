@@ -1,0 +1,6 @@
+{
+  "name": "Gen 1 Pokémon SRAM Builder",
+  "description": "Standalone Generation 1 (Red/Blue/Yellow) Pokémon team builder and 32KB Game Boy battery save (.sav) compiler for emulators, flashcarts, and N64 Transfer Pak.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
